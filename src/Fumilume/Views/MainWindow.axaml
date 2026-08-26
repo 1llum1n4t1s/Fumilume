@@ -1,0 +1,342 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Fumilume.ViewModels"
+        xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+        x:Class="Fumilume.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding WindowTitle}"
+        Icon="/icon/app_icon_crystal_warm.png"
+        Width="1180" Height="760"
+        MinWidth="720" MinHeight="460"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="32"
+        WindowDecorations="BorderOnly"
+        TransparencyLevelHint="AcrylicBlur"
+        Background="Transparent"
+        UseLayoutRounding="True">
+
+    <Window.Resources>
+        <StreamGeometry x:Key="MinimizeIconGeometry">M 0,5.4 L 12,5.4 L 12,6.6 L 0,6.6 Z</StreamGeometry>
+        <StreamGeometry x:Key="MaximizeIconGeometry">M 0,0 L 12,0 L 12,1.2 L 0,1.2 Z M 0,10.8 L 12,10.8 L 12,12 L 0,12 Z M 0,0 L 1.2,0 L 1.2,12 L 0,12 Z M 10.8,0 L 12,0 L 12,12 L 10.8,12 Z</StreamGeometry>
+        <StreamGeometry x:Key="RestoreIconGeometry">M 3,0 L 12,0 L 12,1.2 L 3,1.2 Z M 3,0 L 4.2,0 L 4.2,3 L 3,3 Z M 10.8,0 L 12,0 L 12,9 L 10.8,9 Z M 9,7.8 L 12,7.8 L 12,9 L 9,9 Z M 0,3 L 9,3 L 9,4.2 L 0,4.2 Z M 0,10.8 L 9,10.8 L 9,12 L 0,12 Z M 0,3 L 1.2,3 L 1.2,12 L 0,12 Z M 7.8,3 L 9,3 L 9,12 L 7.8,12 Z</StreamGeometry>
+        <StreamGeometry x:Key="CloseIconGeometry">M 1.2,0 L 6,4.8 L 10.8,0 L 12,1.2 L 7.2,6 L 12,10.8 L 10.8,12 L 6,7.2 L 1.2,12 L 0,10.8 L 4.8,6 L 0,1.2 Z</StreamGeometry>
+
+        <ControlTheme x:Key="VerticalTabItemTheme" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="10,2" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="42" />
+            <Setter Property="Background" Value="{DynamicResource TabIdleBg}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="10"
+                            ClipToBounds="True">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource TabHoverBg}" />
+            </Style>
+            <Style Selector="^:selected">
+                <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Ctrl+N" Command="{Binding NewDocumentCommand}" />
+        <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenCommand}" />
+        <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveAsCommand}" />
+        <KeyBinding Gesture="Ctrl+W" Command="{Binding CloseDocumentCommand}" CommandParameter="{Binding SelectedDocument}" />
+        <KeyBinding Gesture="Ctrl+G" Command="{Binding GoToLineCommand}" />
+    </Window.KeyBindings>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.icon">
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.caption">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.caption:pointerover">
+            <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        </Style>
+        <Style Selector="Button.caption.close:pointerover">
+            <Setter Property="Background" Value="#C42B1C" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="ListBox.verticaltabs">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.tabclose">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.tabclose:pointerover">
+            <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        </Style>
+        <Style Selector="Button.command">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style Selector="Button.command:pointerover">
+            <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        </Style>
+        <Style Selector="ToggleButton.command">
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+        <Style Selector="ToggleButton.command:pointerover">
+            <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        </Style>
+        <Style Selector="ToggleButton.command:checked">
+            <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
+        </Style>
+        <Style Selector="ae|TextEditor.editor">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="LineNumbersForeground" Value="{DynamicResource TextSecondary}" />
+            <Setter Property="LineNumbersMargin" Value="12,0,10,0" />
+        </Style>
+    </Window.Styles>
+
+    <Panel>
+        <Border x:Name="FallbackLayer" Background="{DynamicResource FallbackWindowBg}" />
+        <ExperimentalAcrylicBorder x:Name="AcrylicLayer" IsHitTestVisible="False">
+            <ExperimentalAcrylicBorder.Material>
+                <ExperimentalAcrylicMaterial BackgroundSource="Digger"
+                                             TintColor="{DynamicResource AcrylicTintColor}" />
+            </ExperimentalAcrylicBorder.Material>
+        </ExperimentalAcrylicBorder>
+        <Border x:Name="AcrylicScrim" Background="{DynamicResource AcrylicScrimBrush}" IsHitTestVisible="False" />
+
+        <Grid RowDefinitions="32,*" ColumnDefinitions="190,*">
+            <Grid Grid.Row="0" Grid.ColumnSpan="2" ColumnDefinitions="Auto,*,Auto"
+                  PointerPressed="TitleBar_PointerPressed"
+                  DoubleTapped="TitleBar_DoubleTapped">
+                <Grid Grid.Column="0" Width="190" Margin="16,0,10,0" ColumnDefinitions="Auto,Auto,*"
+                      IsHitTestVisible="False">
+                    <TextBlock Grid.Column="0" Text="Fumilume" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
+                    <Border Grid.Column="1" Width="1" Height="16" Margin="10,0"
+                            Background="{DynamicResource Divider}" />
+                    <TextBlock Grid.Column="2" Text="{Binding SelectedDocument.DisplayName}"
+                               FontSize="12.5" Foreground="{DynamicResource TextSecondary}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </Grid>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Classes="caption" Click="Minimize_Click" AutomationProperties.Name="最小化">
+                        <PathIcon Width="12" Height="12" Data="{StaticResource MinimizeIconGeometry}" />
+                    </Button>
+                    <Button Classes="caption" Click="MaximizeRestore_Click"
+                            AutomationProperties.Name="最大化または元に戻す">
+                        <Grid Width="12" Height="12">
+                            <PathIcon x:Name="MaximizeIcon" Width="12" Height="12"
+                                      Data="{StaticResource MaximizeIconGeometry}" />
+                            <PathIcon x:Name="RestoreIcon" Width="12" Height="12" IsVisible="False"
+                                      Data="{StaticResource RestoreIconGeometry}" />
+                        </Grid>
+                    </Button>
+                    <Button Classes="caption close" Click="Close_Click" AutomationProperties.Name="閉じる">
+                        <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="*,Auto">
+                <ListBox Grid.Row="0" Classes="verticaltabs"
+                         ItemContainerTheme="{StaticResource VerticalTabItemTheme}"
+                         ItemsSource="{Binding Documents}"
+                         SelectedItem="{Binding SelectedDocument}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.Name="文書タブ">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:DocumentViewModel">
+                            <Grid Height="42" ColumnDefinitions="32,*,36" Background="Transparent">
+                                <TextBlock Grid.Column="0" Classes="icon" Text="&#xE8A5;"
+                                           HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
+                                <TextBlock Grid.Column="1" Text="{Binding DisplayTitle}" FontSize="12.5"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource TextPrimary}"
+                                           ToolTip.Tip="{Binding PathDisplay}" />
+                                <Button Grid.Column="2" Classes="tabclose" Command="{Binding CloseCommand}"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        AutomationProperties.Name="文書を閉じる">
+                                    <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10,6,10,12" Spacing="4">
+                    <Button Classes="tabclose" Content="&#xE710;" Command="{Binding NewDocumentCommand}"
+                            AutomationProperties.Name="新しい文書" ToolTip.Tip="新しい文書 (Ctrl+N)" />
+                    <Button Classes="tabclose" Content="&#xE8E5;" Command="{Binding OpenCommand}"
+                            AutomationProperties.Name="ファイルを開く" ToolTip.Tip="ファイルを開く (Ctrl+O)" />
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="1" Grid.Column="1" Margin="0,0,6,6"
+                    Background="{DynamicResource ContentBg}"
+                    BorderBrush="{DynamicResource Divider}" BorderThickness="1"
+                    CornerRadius="14" ClipToBounds="True">
+                <Grid RowDefinitions="48,*,36">
+                    <Border Grid.Row="0" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,4">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                                <Button Classes="command" Command="{Binding NewDocumentCommand}" ToolTip.Tip="新規 (Ctrl+N)">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="icon" Text="&#xE710;" />
+                                        <TextBlock Text="新規" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="command" Command="{Binding OpenCommand}" ToolTip.Tip="開く (Ctrl+O)">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="icon" Text="&#xE8E5;" />
+                                        <TextBlock Text="開く" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="command" Command="{Binding SaveCommand}" ToolTip.Tip="保存 (Ctrl+S)">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="icon" Text="&#xE74E;" />
+                                        <TextBlock Text="保存" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="command" Command="{Binding SaveAsCommand}"
+                                        AutomationProperties.Name="名前を付けて保存"
+                                        ToolTip.Tip="名前を付けて保存 (Ctrl+Shift+S)">
+                                    <TextBlock Classes="icon" Text="&#xE792;" />
+                                </Button>
+                                <Border Width="1" Height="24" Margin="6,0" Background="{DynamicResource Divider}" />
+                                <Button Classes="command" Command="{Binding UndoCommand}"
+                                        AutomationProperties.Name="元に戻す" ToolTip.Tip="元に戻す (Ctrl+Z)">
+                                    <TextBlock Classes="icon" Text="&#xE7A7;" />
+                                </Button>
+                                <Button Classes="command" Command="{Binding RedoCommand}"
+                                        AutomationProperties.Name="やり直す" ToolTip.Tip="やり直す (Ctrl+Y)">
+                                    <TextBlock Classes="icon" Text="&#xE7A6;" />
+                                </Button>
+                                <Button Classes="command" Click="Find_Click"
+                                        AutomationProperties.Name="検索" ToolTip.Tip="検索 (Ctrl+F)">
+                                    <TextBlock Classes="icon" Text="&#xE721;" />
+                                </Button>
+                                <Button Classes="command" Click="Replace_Click"
+                                        AutomationProperties.Name="置換" ToolTip.Tip="置換 (Ctrl+H)">
+                                    <TextBlock Classes="icon" Text="&#xE8AB;" />
+                                </Button>
+                                <Button Classes="command" Command="{Binding GoToLineCommand}"
+                                        AutomationProperties.Name="指定行へ移動" ToolTip.Tip="指定行へ移動 (Ctrl+G)">
+                                    <TextBlock Classes="icon" Text="&#xE8A7;" />
+                                </Button>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                                <Border Width="1" Height="24" Margin="4,0,6,0" Background="{DynamicResource Divider}" />
+                                <Button Classes="command" AutomationProperties.Name="オプション" ToolTip.Tip="エディタのオプション">
+                                    <TextBlock Classes="icon" Text="&#xE713;" />
+                                    <Button.Flyout>
+                                        <Flyout>
+                                            <Border Padding="14,12" MinWidth="220"
+                                                    Background="{DynamicResource ContentBg}"
+                                                    BorderBrush="{DynamicResource Divider}" BorderThickness="1"
+                                                    CornerRadius="10">
+                                                <StackPanel Spacing="8">
+                                                    <TextBlock Text="表示オプション" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource TextPrimary}" />
+                                                    <CheckBox Content="行番号を表示"
+                                                              IsChecked="{Binding ShowLineNumbers, Mode=TwoWay}" />
+                                                    <CheckBox Content="右端で折り返す"
+                                                              IsChecked="{Binding WordWrap, Mode=TwoWay}" />
+                                                    <CheckBox Content="空白・タブ・改行を表示"
+                                                              IsChecked="{Binding ShowWhitespace, Mode=TwoWay}" />
+                                                    <Border Height="1" Margin="0,4"
+                                                            Background="{DynamicResource Divider}" />
+                                                    <TextBlock Text="ファイル" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource TextPrimary}" />
+                                                    <Button Content="ファイルの関連付け..."
+                                                            HorizontalContentAlignment="Left"
+                                                            Command="{Binding ConfigureFileAssociationsCommand}" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+                                <Button Classes="command" Command="{Binding CheckForUpdatesCommand}" ToolTip.Tip="更新の確認">
+                                    <TextBlock Classes="icon" Text="&#xE895;" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="1" Background="{DynamicResource EditorBg}">
+                        <ae:TextEditor x:Name="Editor" Classes="editor"
+                                       ShowLineNumbers="True"
+                                       WordWrap="False"
+                                       HorizontalScrollBarVisibility="Auto"
+                                       VerticalScrollBarVisibility="Auto"
+                                       FontFamily="Cascadia Mono, Consolas, monospace"
+                                       FontSize="15"
+                                       Padding="14,12"
+                                       AutomationProperties.Name="テキスト編集領域" />
+                    </Border>
+
+                    <Border Grid.Row="2" Background="{DynamicResource ContentBg}"
+                            BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0">
+                        <Grid ColumnDefinitions="*,Auto" Margin="16,0,10,0">
+                            <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" FontSize="12"
+                                       Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
+                                <TextBlock Text="{Binding SelectedDocument.LineColumnText}" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" />
+                                <TextBlock Text="{Binding SelectedDocument.StatisticsText}" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" />
+                                <TextBlock Text="{Binding SelectedDocument.EncodingLabel}" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" />
+                                <TextBlock Text="{Binding SelectedDocument.NewLineLabel}" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Panel>
+</Window>

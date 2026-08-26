@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget Condition="'$(PlatformTarget)' == ''">x64</PlatformTarget>
+    <Platforms>x64;ARM64</Platforms>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <AssemblyTitle>Fumilume</AssemblyTitle>
+    <AssemblyDescription>垂直タブ型テキストエディタ</AssemblyDescription>
+    <Company>Kagayoi</Company>
+    <AssemblyProduct>Fumilume</AssemblyProduct>
+    <Copyright>Copyright © 2026 Kagayoi</Copyright>
+    <Title>Fumilume</Title>
+    <Authors>Kagayoi</Authors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+</Project>

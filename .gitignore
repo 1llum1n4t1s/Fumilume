@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+artifacts/
+local-release/
+.release-tools/
+.vs/
+*.user
+*.suo

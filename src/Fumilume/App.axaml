@@ -1,0 +1,47 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Fumilume.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="TabStripBg" Color="#DEE1E6" />
+                    <SolidColorBrush x:Key="TabIdleBg" Color="#E8EBEF" />
+                    <SolidColorBrush x:Key="TabHoverBg" Color="#F1F3F5" />
+                    <SolidColorBrush x:Key="TabSelectedBg" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="ContentBg" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="EditorBg" Color="#FBFBFC" />
+                    <SolidColorBrush x:Key="OmniboxBg" Color="#F1F3F4" />
+                    <SolidColorBrush x:Key="TextPrimary" Color="#202124" />
+                    <SolidColorBrush x:Key="TextSecondary" Color="#5F6368" />
+                    <SolidColorBrush x:Key="Divider" Color="#DADCE0" />
+                    <SolidColorBrush x:Key="HoverBg" Color="#E8EAED" />
+                    <SolidColorBrush x:Key="FallbackWindowBg" Color="#DEE1E6" />
+                    <SolidColorBrush x:Key="AcrylicScrimBrush" Color="#D9DEE1E6" />
+                    <Color x:Key="AcrylicTintColor">#DEE1E6</Color>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="TabStripBg" Color="#202124" />
+                    <SolidColorBrush x:Key="TabIdleBg" Color="#3C4043" />
+                    <SolidColorBrush x:Key="TabHoverBg" Color="#343639" />
+                    <SolidColorBrush x:Key="TabSelectedBg" Color="#56595D" />
+                    <SolidColorBrush x:Key="ContentBg" Color="#2B2C2F" />
+                    <SolidColorBrush x:Key="EditorBg" Color="#242528" />
+                    <SolidColorBrush x:Key="OmniboxBg" Color="#2B2C2F" />
+                    <SolidColorBrush x:Key="TextPrimary" Color="#E8EAED" />
+                    <SolidColorBrush x:Key="TextSecondary" Color="#9AA0A6" />
+                    <SolidColorBrush x:Key="Divider" Color="#3C4043" />
+                    <SolidColorBrush x:Key="HoverBg" Color="#3C4043" />
+                    <SolidColorBrush x:Key="FallbackWindowBg" Color="#202124" />
+                    <SolidColorBrush x:Key="AcrylicScrimBrush" Color="#D9202124" />
+                    <Color x:Key="AcrylicTintColor">#202124</Color>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+        <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    </Application.Styles>
+</Application>
