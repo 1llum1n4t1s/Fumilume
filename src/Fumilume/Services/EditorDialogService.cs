@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
+using Fumilume.Views;
 
 namespace Fumilume.Services;
 
@@ -14,6 +15,11 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
             .Select(type => $"*{type.Extension}")
             .ToArray(),
     };
+
+    /// <summary>ダイアログの地は設定のアクリル可否に合わせる（本体だけ透けてダイアログが浮くのを防ぐ）。
+    /// 所有ウィンドウの DataContext はこのサービスより後に決まるため、生成時ではなく都度読む。</summary>
+    private bool UseAcrylic
+        => (owner.DataContext as ViewModels.MainWindowViewModel)?.Options.UseAcrylic ?? true;
 
     public async Task<IReadOnlyList<string>> PickOpenPathsAsync()
     {
@@ -45,135 +51,44 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
 
     public async Task<UnsavedDocumentDecision> ConfirmUnsavedAsync(string documentName)
     {
-        var dialog = CreateDialog($"{documentName} の変更を保存しますか？", out var buttons);
+        var decision = UnsavedDocumentDecision.Cancel;
         var save = new Button { Content = "保存", IsDefault = true, MinWidth = 88 };
         var discard = new Button { Content = "保存しない", MinWidth = 104 };
         var cancel = new Button { Content = "キャンセル", IsCancel = true, MinWidth = 88 };
-        buttons.Children.Add(save);
-        buttons.Children.Add(discard);
-        buttons.Children.Add(cancel);
+        var dialog = new AppDialogWindow(
+            "変更の保存",
+            UseAcrylic,
+            CreateMessage($"{documentName} の変更を保存しますか？"),
+            save,
+            discard,
+            cancel);
 
-        save.Click += (_, _) => dialog.Close(UnsavedDocumentDecision.Save);
-        discard.Click += (_, _) => dialog.Close(UnsavedDocumentDecision.Discard);
-        cancel.Click += (_, _) => dialog.Close(UnsavedDocumentDecision.Cancel);
+        save.Click += (_, _) =>
+        {
+            decision = UnsavedDocumentDecision.Save;
+            dialog.Close();
+        };
+        discard.Click += (_, _) =>
+        {
+            decision = UnsavedDocumentDecision.Discard;
+            dialog.Close();
+        };
+        cancel.Click += (_, _) => dialog.Close();
 
-        return await dialog.ShowDialog<UnsavedDocumentDecision>(owner);
+        await dialog.ShowDialog(owner);
+        return decision;
     }
 
     public async Task ShowErrorAsync(string title, string message)
     {
-        var dialog = CreateDialog(message, out var buttons);
-        dialog.Title = title;
         var close = new Button { Content = "閉じる", IsDefault = true, IsCancel = true, MinWidth = 88 };
-        buttons.Children.Add(close);
+        var dialog = new AppDialogWindow(title, UseAcrylic, CreateMessage(message), close);
         close.Click += (_, _) => dialog.Close();
         await dialog.ShowDialog(owner);
     }
 
     public Task CheckForUpdatesAsync(bool manually)
         => UpdateService.CheckAsync(owner, manually);
-
-    public async Task ConfigureFileAssociationsAsync()
-    {
-        var status = FileAssociationService.GetCurrentAssociationStatus();
-        var checkBoxes = new Dictionary<string, CheckBox>(StringComparer.OrdinalIgnoreCase);
-        var associationList = new StackPanel { Spacing = 2 };
-
-        foreach (var type in FileAssociationService.SupportedTypes)
-        {
-            var checkBox = new CheckBox
-            {
-                Content = type.Description,
-                IsChecked = status.GetValueOrDefault(type.Extension),
-                Padding = new Avalonia.Thickness(8, 5),
-            };
-            checkBoxes[type.Extension] = checkBox;
-            associationList.Children.Add(checkBox);
-        }
-
-        var selectAll = new Button { Content = "すべて選択", MinWidth = 96 };
-        var clearAll = new Button { Content = "すべて解除", MinWidth = 96 };
-        var apply = new Button { Content = "適用", IsDefault = true, MinWidth = 88 };
-        var cancel = new Button { Content = "キャンセル", IsCancel = true, MinWidth = 88 };
-        var selectionButtons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            Children = { selectAll, clearAll },
-        };
-        var actionButtons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Spacing = 8,
-            Children = { apply, cancel },
-        };
-        var dialog = new Window
-        {
-            Title = "ファイルの関連付け",
-            Width = 500,
-            Height = 650,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new StackPanel
-            {
-                Margin = new Avalonia.Thickness(24),
-                Spacing = 14,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = "Fumilumeで開く拡張子を選択してください。変更は現在のユーザーにだけ適用されます。",
-                        TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                    },
-                    selectionButtons,
-                    new Border
-                    {
-                        BorderBrush = Avalonia.Media.Brushes.Gray,
-                        BorderThickness = new Avalonia.Thickness(1),
-                        CornerRadius = new Avalonia.CornerRadius(8),
-                        Padding = new Avalonia.Thickness(8),
-                        Child = new ScrollViewer
-                        {
-                            Height = 430,
-                            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-                            Content = associationList,
-                        },
-                    },
-                    actionButtons,
-                },
-            },
-        };
-
-        selectAll.Click += (_, _) => SetCheckedState(true);
-        clearAll.Click += (_, _) => SetCheckedState(false);
-        apply.Click += (_, _) => dialog.Close(true);
-        cancel.Click += (_, _) => dialog.Close(false);
-
-        if (!await dialog.ShowDialog<bool>(owner))
-        {
-            return;
-        }
-
-        var selectedExtensions = checkBoxes
-            .Where(pair => pair.Value.IsChecked == true)
-            .Select(pair => pair.Key);
-        var failures = FileAssociationService.ApplyAssociations(selectedExtensions);
-        if (failures.Count > 0)
-        {
-            await ShowErrorAsync(
-                "ファイルの関連付けを変更できません",
-                $"次の拡張子を変更できませんでした。\n\n{string.Join(", ", failures)}");
-        }
-
-        void SetCheckedState(bool isChecked)
-        {
-            foreach (var checkBox in checkBoxes.Values)
-            {
-                checkBox.IsChecked = isChecked;
-            }
-        }
-    }
 
     public async Task<int?> PickLineNumberAsync(int currentLine, int maximumLine)
     {
@@ -185,45 +100,38 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
         };
         var move = new Button { Content = "移動", IsDefault = true, MinWidth = 88 };
         var cancel = new Button { Content = "キャンセル", IsCancel = true, MinWidth = 88 };
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Spacing = 8,
-            Children = { move, cancel },
-        };
-        var dialog = new Window
-        {
-            Title = "指定行へ移動",
-            Width = 360,
-            SizeToContent = SizeToContent.Height,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new StackPanel
+        var dialog = new AppDialogWindow(
+            "指定行へ移動",
+            UseAcrylic,
+            new StackPanel
             {
-                Margin = new Avalonia.Thickness(24),
                 Spacing = 14,
                 Children =
                 {
                     new TextBlock { Text = $"行番号を入力してください（1～{maximumLine:N0}）" },
                     input,
-                    buttons,
                 },
             },
+            move,
+            cancel)
+        {
+            Width = 380,
         };
 
         void UpdateMoveState()
             => move.IsEnabled = int.TryParse(input.Text, out var value) && value >= 1 && value <= maximumLine;
 
+        int? selectedLine = null;
         input.TextChanged += (_, _) => UpdateMoveState();
         move.Click += (_, _) =>
         {
             if (int.TryParse(input.Text, out var value) && value >= 1 && value <= maximumLine)
             {
-                dialog.Close((int?)value);
+                selectedLine = value;
+                dialog.Close();
             }
         };
-        cancel.Click += (_, _) => dialog.Close((int?)null);
+        cancel.Click += (_, _) => dialog.Close();
         dialog.AddHandler(
             InputElement.KeyDownEvent,
             (_, args) =>
@@ -231,7 +139,7 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
                 if (args.Key == Key.Escape)
                 {
                     args.Handled = true;
-                    dialog.Close((int?)null);
+                    dialog.Close();
                 }
             },
             RoutingStrategies.Tunnel);
@@ -242,40 +150,83 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
         };
         UpdateMoveState();
 
-        return await dialog.ShowDialog<int?>(owner);
+        await dialog.ShowDialog(owner);
+        return selectedLine;
     }
 
-    private static Window CreateDialog(string message, out StackPanel buttons)
+    public async Task<string?> PromptTextAsync(string title, string message, string initialText)
     {
-        buttons = new StackPanel
+        var input = new TextBox { Text = initialText, MinWidth = 300 };
+        var ok = new Button { Content = "OK", IsDefault = true, MinWidth = 88 };
+        var cancel = new Button { Content = "キャンセル", IsCancel = true, MinWidth = 88 };
+        var dialog = new AppDialogWindow(
+            title,
+            UseAcrylic,
+            new StackPanel
+            {
+                Spacing = 14,
+                Children = { CreateMessage(message), input },
+            },
+            ok,
+            cancel)
         {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Spacing = 8,
+            Width = 440,
         };
 
-        return new Window
+        string? result = null;
+        ok.Click += (_, _) =>
         {
-            Title = "Fumilume",
-            Width = 460,
-            SizeToContent = SizeToContent.Height,
-            CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new StackPanel
-            {
-                Margin = new Avalonia.Thickness(24),
-                Spacing = 22,
-                Children =
-                {
-                    new TextBlock
-                    {
-                        Text = message,
-                        TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                        FontSize = 14,
-                    },
-                    buttons,
-                },
-            },
+            result = input.Text ?? string.Empty;
+            dialog.Close();
         };
+        cancel.Click += (_, _) => dialog.Close();
+        dialog.AddHandler(
+            InputElement.KeyDownEvent,
+            (_, args) =>
+            {
+                if (args.Key == Key.Escape)
+                {
+                    args.Handled = true;
+                    dialog.Close();
+                }
+            },
+            RoutingStrategies.Tunnel);
+        dialog.Opened += (_, _) =>
+        {
+            input.SelectAll();
+            input.Focus();
+        };
+
+        await dialog.ShowDialog(owner);
+        return result;
     }
+
+    public async Task<bool> ConfirmAsync(string title, string message)
+    {
+        var yes = new Button { Content = "はい", IsDefault = true, MinWidth = 88 };
+        var no = new Button { Content = "いいえ", IsCancel = true, MinWidth = 88 };
+        var dialog = new AppDialogWindow(title, UseAcrylic, CreateMessage(message), yes, no)
+        {
+            Width = 440,
+        };
+
+        var accepted = false;
+        yes.Click += (_, _) =>
+        {
+            accepted = true;
+            dialog.Close();
+        };
+        no.Click += (_, _) => dialog.Close();
+
+        await dialog.ShowDialog(owner);
+        return accepted;
+    }
+
+    private static TextBlock CreateMessage(string message)
+        => new()
+        {
+            Text = message,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            FontSize = 14,
+        };
 }

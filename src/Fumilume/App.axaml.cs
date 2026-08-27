@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Fumilume.Services;
 using Fumilume.Views;
 
 namespace Fumilume;
@@ -13,7 +14,11 @@ public sealed class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow();
+            // 設定はここで一度だけ読み、テーマへ反映してからウィンドウを作る。
+            // ウィンドウ生成後にテーマを変えると、初回描画で既定テーマが一瞬見える。
+            var settings = SettingsService.Load();
+            ThemeService.Initialize(this, settings);
+            desktop.MainWindow = new MainWindow(settings);
         }
 
         base.OnFrameworkInitializationCompleted();

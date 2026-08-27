@@ -19,7 +19,11 @@ public interface IEditorDialogService
 
     Task<int?> PickLineNumberAsync(int currentLine, int maximumLine);
 
-    Task ConfigureFileAssociationsAsync();
+    /// <summary>1 行ぶんの文字列を尋ねる。取り消したときは <see langword="null"/>。</summary>
+    Task<string?> PromptTextAsync(string title, string message, string initialText);
+
+    /// <summary>はい / いいえを尋ねる。</summary>
+    Task<bool> ConfirmAsync(string title, string message);
 
     Task CheckForUpdatesAsync(bool manually);
 }

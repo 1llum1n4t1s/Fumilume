@@ -1,0 +1,128 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- ===== 設定タブ（Kiriha の現行 MainWindowStyles.axaml と同じ構成・同じ数値） =====
+         サイドバーは 180px・Padding 6・CornerRadius 14 の浮遊カード、項目は角丸 6・Padding 10,6・MinHeight 28。
+         選択状態は背景色だけで示す（アクセントの縦棒やパイプは出さない）。
+         本文側のカードは CornerRadius 14・Padding 16・影なしで、ページ先頭の見出しはカードに載せず素のテキストで置く。 -->
+
+    <Style Selector="TabControl.settingsnav">
+        <Setter Property="TabStripPlacement" Value="Left" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate TargetType="TabControl">
+                <Grid ColumnDefinitions="180,*">
+                    <Border Grid.Column="0" Margin="0,0,12,0" Padding="6"
+                            Background="{DynamicResource SettingsNavBg}"
+                            BorderBrush="{DynamicResource SettingsCardBorder}" BorderThickness="1"
+                            BoxShadow="0 8 24 0 #18000000, 0 2 6 0 #10000000, inset 0 1 0 0 #30FFFFFF"
+                            CornerRadius="14">
+                        <ItemsPresenter Name="PART_ItemsPresenter">
+                            <ItemsPresenter.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel HorizontalAlignment="Stretch" />
+                                </ItemsPanelTemplate>
+                            </ItemsPresenter.ItemsPanel>
+                        </ItemsPresenter>
+                    </Border>
+                    <!-- MaxWidth はウィンドウを広げたときに本文が横へ間延びしないための頭打ち
+                         （各タブ側で MaxWidth を指定しないで済む）。 -->
+                    <ContentPresenter Name="PART_SelectedContentHost" Grid.Column="1"
+                                      MaxWidth="960"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                      Content="{TemplateBinding SelectedContent}"
+                                      ContentTemplate="{TemplateBinding SelectedContentTemplate}" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="TabControl.settingsnav &gt; TabItem">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="TabControl.settingsnav &gt; TabItem /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <Style Selector="TabControl.settingsnav &gt; TabItem /template/ Border#PART_LayoutRoot">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <!-- FluentTheme の選択インジケーター（縦棒）は使わない -->
+    <Style Selector="TabControl.settingsnav &gt; TabItem /template/ Border#PART_SelectedPipe">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="TabControl.settingsnav &gt; TabItem:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+    </Style>
+    <Style Selector="TabControl.settingsnav &gt; TabItem:selected">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="MinHeight" Value="28" />
+    </Style>
+    <Style Selector="TabControl.settingsnav &gt; TabItem:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource SettingsNavSelected}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+
+    <!-- 見出し・カード・補足文。タブ本文の先頭見出しはカードに載せず素のテキストで置く。 -->
+    <Style Selector="TextBlock.settingsh1">
+        <Setter Property="FontSize" Value="20" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="TextBlock.settingssubtitle">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="Margin" Value="0,4,0,12" />
+    </Style>
+    <!-- 小見出し付きカード。設定項目のまとまりはすべてこれで囲う。 -->
+    <Style Selector="HeaderedContentControl.settingscard">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Margin="0,0,0,12" Padding="16"
+                        Background="{DynamicResource SettingsCardBg}"
+                        BorderBrush="{DynamicResource SettingsCardBorder}" BorderThickness="1" CornerRadius="14">
+                    <StackPanel>
+                        <TextBlock Margin="0,0,0,10" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextSecondary}"
+                                   Text="{TemplateBinding Header}" />
+                        <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <!-- チェックボックスの下へ潜り込ませる補足文（インデント 28 は既定のチェック枠幅に合わせてある）。 -->
+    <Style Selector="TextBlock.settingscaption">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="Margin" Value="28,-4,0,0" />
+    </Style>
+    <Style Selector="StackPanel.settingsfields > CheckBox">
+        <Setter Property="Margin" Value="0,4" />
+    </Style>
+    <Style Selector="TextBox.settingsfield, ComboBox.settingsfield">
+        <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style Selector="TabControl.settingsnav Button.cmd">
+        <Setter Property="Background" Value="{DynamicResource SettingsButtonBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="14,8" />
+    </Style>
+</Styles>

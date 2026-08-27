@@ -1,0 +1,90 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit">
+    <!-- メインウィンドウの見た目。MainWindow.axaml には構造だけを残し、体裁はここへ集約する。 -->
+
+    <Styles.Resources>
+        <!-- タブ 1 行の厚み。設定「タブの厚み」から MainWindow のコードビハインドが書き換える。
+             項目テンプレート側（MainWindow.axaml）の Grid.Height と、この ControlTheme の
+             MinHeight の両方に効かせる必要があるため、値を 1 つのリソースへ寄せてある。 -->
+        <x:Double x:Key="TabItemHeight">42</x:Double>
+
+        <!-- 縦タブ 1 行分の見た目。ListBoxItem の既定テンプレートは選択枠を自前で描くため、
+             角丸と塗り分けだけを持つテンプレートへ差し替える。 -->
+        <ControlTheme x:Key="VerticalTabItemTheme" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="10,2" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="{DynamicResource TabItemHeight}" />
+            <Setter Property="Background" Value="{DynamicResource TabIdleBg}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="10"
+                            ClipToBounds="True">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource TabHoverBg}" />
+            </Style>
+            <Style Selector="^:selected">
+                <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <Style Selector="ListBox.verticaltabs">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- タブの閉じるボタンと、タブ一覧下の丸いアイコンボタン。 -->
+    <Style Selector="Button.tabclose">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.tabclose:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+    </Style>
+
+    <!-- コマンドバーのボタン。アイコンのみ・アイコン＋文言のどちらでも高さが揃うようにする。 -->
+    <Style Selector="Button.command">
+        <Setter Property="Height" Value="38" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="Button.command:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+    </Style>
+    <Style Selector="Button.command:disabled">
+        <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <Style Selector="ae|TextEditor.editor">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="LineNumbersForeground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="LineNumbersMargin" Value="12,0,10,0" />
+    </Style>
+</Styles>

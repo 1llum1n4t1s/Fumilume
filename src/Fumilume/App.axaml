@@ -1,6 +1,8 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Fumilume.App">
+    <!-- 色とアイコン形状の正本はここ。ウィンドウ側の Resources には置かない
+         （ダイアログや設定タブなど複数のルートから同じキーを引くため）。 -->
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
@@ -19,6 +21,19 @@
                     <SolidColorBrush x:Key="FallbackWindowBg" Color="#DEE1E6" />
                     <SolidColorBrush x:Key="AcrylicScrimBrush" Color="#D9DEE1E6" />
                     <Color x:Key="AcrylicTintColor">#DEE1E6</Color>
+
+                    <!-- 設定タブ。地色をコンテンツ面より一段沈めてカードを浮かせる。 -->
+                    <SolidColorBrush x:Key="SettingsPageBg" Color="#F3F6FA" />
+                    <SolidColorBrush x:Key="SettingsNavBg" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="SettingsNavSelected" Color="#E4EDF9" />
+                    <SolidColorBrush x:Key="SettingsCardBg" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="SettingsCardBorder" Color="#D9E0E8" />
+                    <SolidColorBrush x:Key="CommandPaletteScrim" Color="#40202124" />
+                    <SolidColorBrush x:Key="BookmarkTint" Color="#140F6CBD" />
+                    <SolidColorBrush x:Key="SettingsButtonBg" Color="#E8EDF3" />
+
+                    <!-- ThemeService が OS のアクセントカラーで上書きするまでの初期値。 -->
+                    <SolidColorBrush x:Key="AccentBrush" Color="#0F6CBD" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="TabStripBg" Color="#202124" />
@@ -35,13 +50,33 @@
                     <SolidColorBrush x:Key="FallbackWindowBg" Color="#202124" />
                     <SolidColorBrush x:Key="AcrylicScrimBrush" Color="#D9202124" />
                     <Color x:Key="AcrylicTintColor">#202124</Color>
+
+                    <SolidColorBrush x:Key="SettingsPageBg" Color="#202124" />
+                    <SolidColorBrush x:Key="SettingsNavBg" Color="#2B2C2F" />
+                    <SolidColorBrush x:Key="SettingsNavSelected" Color="#3C4043" />
+                    <SolidColorBrush x:Key="SettingsCardBg" Color="#2B2C2F" />
+                    <SolidColorBrush x:Key="SettingsCardBorder" Color="#3C4043" />
+                    <SolidColorBrush x:Key="CommandPaletteScrim" Color="#66000000" />
+                    <SolidColorBrush x:Key="BookmarkTint" Color="#204CA3F0" />
+                    <SolidColorBrush x:Key="SettingsButtonBg" Color="#2B2C2F" />
+
+                    <SolidColorBrush x:Key="AccentBrush" Color="#4CA3F0" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+
+            <!-- キャプションボタンのアイコン形状。ライト/ダークで変わらないのでテーマ辞書の外に置く。 -->
+            <StreamGeometry x:Key="CloseIconGeometry">M 1.2,0 L 6,4.8 L 10.8,0 L 12,1.2 L 7.2,6 L 12,10.8 L 10.8,12 L 6,7.2 L 1.2,12 L 0,10.8 L 4.8,6 L 0,1.2 Z</StreamGeometry>
+            <StreamGeometry x:Key="MinimizeIconGeometry">M 0,5.4 L 12,5.4 L 12,6.6 L 0,6.6 Z</StreamGeometry>
+            <StreamGeometry x:Key="MaximizeIconGeometry">M 0,0 L 12,0 L 12,1.2 L 0,1.2 Z M 0,10.8 L 12,10.8 L 12,12 L 0,12 Z M 0,0 L 1.2,0 L 1.2,12 L 0,12 Z M 10.8,0 L 12,0 L 12,12 L 10.8,12 Z</StreamGeometry>
+            <StreamGeometry x:Key="RestoreIconGeometry">M 3,0 L 12,0 L 12,1.2 L 3,1.2 Z M 3,0 L 4.2,0 L 4.2,3 L 3,3 Z M 10.8,0 L 12,0 L 12,9 L 10.8,9 Z M 9,7.8 L 12,7.8 L 12,9 L 9,9 Z M 0,3 L 9,3 L 9,4.2 L 0,4.2 Z M 0,10.8 L 9,10.8 L 9,12 L 0,12 Z M 0,3 L 1.2,3 L 1.2,12 L 0,12 Z M 7.8,3 L 9,3 L 9,12 L 7.8,12 Z</StreamGeometry>
         </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+        <StyleInclude Source="/Styles/CommonStyles.axaml" />
+        <StyleInclude Source="/Styles/MainWindowStyles.axaml" />
+        <StyleInclude Source="/Styles/SettingsStyles.axaml" />
     </Application.Styles>
 </Application>

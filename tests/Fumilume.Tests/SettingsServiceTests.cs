@@ -1,0 +1,132 @@
+using Fumilume.Services;
+
+namespace Fumilume.Tests;
+
+public sealed class SettingsServiceTests
+{
+    [Fact]
+    public void SavedSettingsAreReadBack()
+    {
+        using var storage = new TemporaryStorage();
+
+        SettingsService.Save(new AppSettings
+        {
+            ShowLineNumbers = false,
+            WordWrap = true,
+            FontFamily = "Consolas",
+            FontSize = 18,
+            ThemeMode = "Dark",
+            WindowWidth = 1000,
+            WindowHeight = 700,
+        });
+        var loaded = SettingsService.Load();
+
+        Assert.False(loaded.ShowLineNumbers);
+        Assert.True(loaded.WordWrap);
+        Assert.Equal("Consolas", loaded.FontFamily);
+        Assert.Equal(18, loaded.FontSize);
+        Assert.Equal("Dark", loaded.ThemeMode);
+        Assert.Equal(1000, loaded.WindowWidth);
+        Assert.Equal(700, loaded.WindowHeight);
+    }
+
+    [Fact]
+    public void MissingFileFallsBackToDefaults()
+    {
+        using var storage = new TemporaryStorage();
+
+        var loaded = SettingsService.Load();
+
+        Assert.True(loaded.ShowLineNumbers);
+        Assert.Equal("System", loaded.ThemeMode);
+        Assert.True(loaded.UseAcrylic);
+    }
+
+    [Fact]
+    public void CorruptFileFallsBackToDefaultsInsteadOfThrowing()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(Path.Combine(storage.Path, "settings.json"), "{ これは JSON ではない");
+
+        var loaded = SettingsService.Load();
+
+        Assert.Equal("System", loaded.ThemeMode);
+        Assert.Equal(15, loaded.FontSize);
+    }
+
+    [Fact]
+    public void OutOfRangeValuesAreClampedOnLoad()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "settings.json"),
+            """{"FontSize":900,"IndentationSize":0,"ThemeMode":"Rainbow","FontFamily":"  "}""");
+
+        var loaded = SettingsService.Load();
+
+        Assert.Equal(48, loaded.FontSize);
+        Assert.Equal(1, loaded.IndentationSize);
+        Assert.Equal("System", loaded.ThemeMode);
+        Assert.Equal("Cascadia Mono", loaded.FontFamily);
+    }
+
+    /// <summary>設定項目を増やしたぶん、範囲外の値もそれぞれ丸められる必要がある。</summary>
+    [Fact]
+    public void NewNumericSettingsAreClampedOnLoad()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "settings.json"),
+            """{"ColumnRulerPosition":9999,"LineHeightFactor":0.1,"LargeFileThresholdMegabytes":0}""");
+
+        var loaded = SettingsService.Load();
+
+        Assert.Equal(512, loaded.ColumnRulerPosition);
+        Assert.Equal(0.8, loaded.LineHeightFactor);
+        Assert.Equal(1, loaded.LargeFileThresholdMegabytes);
+    }
+
+    /// <summary>覚えたカーソル位置が青天井に増えて settings.json を太らせないこと。</summary>
+    [Fact]
+    public void RememberedCaretPositionsAreCapped()
+    {
+        using var storage = new TemporaryStorage();
+        var settings = new AppSettings();
+        for (var index = 0; index < 260; index++)
+        {
+            settings.CaretPositions[$@"C:\tmp\file{index}.txt"] = index;
+        }
+
+        SettingsService.Save(settings);
+        var loaded = SettingsService.Load();
+
+        Assert.Equal(200, loaded.CaretPositions.Count);
+        // 捨てるのは古いほうなので、最後に入れたものは残る。
+        Assert.True(loaded.CaretPositions.ContainsKey(@"C:\tmp\file259.txt"));
+    }
+
+    [Fact]
+    public void CaretPositionsRoundTrip()
+    {
+        using var storage = new TemporaryStorage();
+
+        SettingsService.Save(new AppSettings
+        {
+            CaretPositions = { [@"C:\tmp\a.txt"] = 42 },
+        });
+
+        Assert.Equal(42, SettingsService.Load().CaretPositions[@"C:\tmp\a.txt"]);
+    }
+
+    [Fact]
+    public void SavingDoesNotLeaveTemporaryFilesBehind()
+    {
+        using var storage = new TemporaryStorage();
+
+        SettingsService.Save(new AppSettings());
+        SettingsService.Save(new AppSettings { WordWrap = true });
+
+        Assert.Empty(Directory.GetFiles(storage.Path, "*.tmp"));
+        Assert.True(File.Exists(Path.Combine(storage.Path, "settings.json")));
+    }
+}

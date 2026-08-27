@@ -2,6 +2,17 @@
   "version": 1,
   "dependencies": {
     "net10.0-windows10.0.26100": {
+      "Avalonia.Headless": {
+        "type": "Direct",
+        "requested": "[12.1.1, )",
+        "resolved": "12.1.1",
+        "contentHash": "+iIeqFnh3/Z91hrQjlhpR6I72fV7q6zjAksQvenPblqgHvsF2PY63eXfBz7H7bmk0WHtuROiFQKLxx//AHInJQ==",
+        "dependencies": {
+          "Avalonia": "12.1.1",
+          "Avalonia.Fonts.Inter": "12.1.1",
+          "Avalonia.HarfBuzz": "12.1.1"
+        }
+      },
       "Microsoft.NET.Test.Sdk": {
         "type": "Direct",
         "requested": "[18.8.1, )",
@@ -207,51 +218,6 @@
         "resolved": "18.8.1",
         "contentHash": "Eclse/ZZjr4lmWzZFNN9h/OluhKL+SK/QbUyKUewgX139aGeyMEO/DkMPwuFs2MixvanTnz6891rF8UHDg+W4Q=="
       },
-      "Microsoft.Extensions.DependencyInjection": {
-        "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "ANyvsgkNBRvcJh2XLgn8veGmajf+8m0AbKK+HPWdRL1yraSNVVSmQhFntLtdz/C795jxqqup+k05cs/3jZQPOA==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10"
-        }
-      },
-      "Microsoft.Extensions.DependencyInjection.Abstractions": {
-        "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "z/2xXlFw2aLGjHyEm6E0tQ+In6VfzQzTrtArbQ2c0TQE16ZbyDCMGPvaUT9I0s8rgy9sRWlU2P9waW37qV04qA=="
-      },
-      "Microsoft.Extensions.Logging": {
-        "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "Tf6z5HsL0VDYRTfvsoNrTGHGheCwkTsZBA2FFh5ATJUbkAwug+FFNISJK2gjpUNemlAOoWllAK52HOWCjto3EQ==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection": "10.0.10",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.10",
-          "Microsoft.Extensions.Options": "10.0.10"
-        }
-      },
-      "Microsoft.Extensions.Logging.Abstractions": {
-        "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "zkFxGYUvdxAvIKTyXHrmW+Sux53D4SezD9dMyZ6hrwwzPQJNuwCRy1f5W7AvYTqacEGhWF2XderRQG1OvbV8og==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10"
-        }
-      },
-      "Microsoft.Extensions.Options": {
-        "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "srnhnk7nE8krBiIXp71LvBmKBtraBONWSRzdjJgRv1Ko9Mp8IVNqv4vIS9hGeVteBig8aQkva9ZG+sC+o5sVcA==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10",
-          "Microsoft.Extensions.Primitives": "10.0.10"
-        }
-      },
-      "Microsoft.Extensions.Primitives": {
-        "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "5wu/GrYVd8mG2DVUw3vFJzF+O336TyTGg/Kmcgw9bfwYhCoFiV5lR5QeEmKecJyrW4W54nMfD3p3589E8a7czQ=="
-      },
       "Microsoft.Testing.Extensions.Telemetry": {
         "type": "Transitive",
         "resolved": "1.9.1",
@@ -323,16 +289,6 @@
         "resolved": "3.119.4",
         "contentHash": "XOpbx/4CReO2wYsq2s6rbvdauc6dntG4Zv499sHGTJ87bwZaFXszFkwql3+FIZMc8kUPeaj3Mx2ezIJmo8a1Kg=="
       },
-      "SuperLightLogger": {
-        "type": "Transitive",
-        "resolved": "1.0.12",
-        "contentHash": "f7h7z7tVUipTKYPQoZL5aMNXEqfEvqKd1mzv67cIvFj2lzsoMvIohHVSe67xQrFmPd6F+mNTPDdsW6bX+lUtqg==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.10",
-          "Microsoft.Extensions.Logging": "10.0.10",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.10"
-        }
-      },
       "Tmds.DBus.Protocol": {
         "type": "Transitive",
         "resolved": "0.94.1",
@@ -342,17 +298,6 @@
         "type": "Transitive",
         "resolved": "1.2.0",
         "contentHash": "Rz67gJL619fSBS6omaSINUxyDuwhIxkm5mmubf7uLd5Qgi6LLKaKCha+QFP6n+Bw/UjA0vutnH4JQfYzn6ANtw=="
-      },
-      "VelopackUpdateDialog.Avalonia": {
-        "type": "Transitive",
-        "resolved": "1.0.14",
-        "contentHash": "T2Xbqxpfz7jzmYUGpxfyGRiVXZ0JG5Ts7jI9qY1KYZUmP7eA5OG/aahf2Eyot2oUTRZOpue6GkdIEVgKHAPOww==",
-        "dependencies": {
-          "Avalonia": "12.1.1",
-          "CommunityToolkit.Mvvm": "8.4.2",
-          "SuperLightLogger": "1.0.12",
-          "Velopack": "1.2.0"
-        }
       },
       "xunit.analyzers": {
         "type": "Transitive",
@@ -430,7 +375,7 @@
           "Avalonia.Fonts.Inter": "[12.1.1, )",
           "Avalonia.Themes.Fluent": "[12.1.1, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )",
-          "VelopackUpdateDialog.Avalonia": "[1.0.14, )"
+          "Velopack": "[1.2.0, )"
         }
       }
     },
