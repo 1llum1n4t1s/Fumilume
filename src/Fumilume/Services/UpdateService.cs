@@ -1,7 +1,8 @@
 using Avalonia.Controls;
-using Fumilume.Views;
+using Avalonia.Media;
 using Velopack;
 using Velopack.Sources;
+using VelopackUpdateDialog;
 
 namespace Fumilume.Services;
 
@@ -21,35 +22,16 @@ public static class UpdateService
         try
         {
             var manager = new UpdateManager(new SimpleWebSource(CanonicalUpdateBaseUrl));
-            if (!manager.IsInstalled)
-            {
-                if (manually && owner is not null)
-                {
-                    await ShowMessageAsync(owner, "開発実行中は更新を確認できません。");
-                }
-
-                return;
-            }
-
-            if (owner is null)
-            {
-                return;
-            }
-
             using var timeout = manually ? null : new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var update = await manager.CheckForUpdatesAsync()
-                .WaitAsync(timeout?.Token ?? CancellationToken.None);
-            if (update is null)
-            {
-                if (manually)
-                {
-                    await ShowMessageAsync(owner, "Fumilumeは最新です。");
-                }
+            var options = CreateOptions(owner);
+            options.ErrorOccurred += LogUpdateError;
 
-                return;
-            }
-
-            await ShowUpdateAsync(owner, manager, update);
+            await UpdateDialogWindow.ShowAsync(
+                owner,
+                manager,
+                options,
+                manualCheck: manually,
+                cancellationToken: timeout?.Token ?? CancellationToken.None);
         }
         catch (OperationCanceledException) when (!manually)
         {
@@ -57,9 +39,12 @@ public static class UpdateService
         }
         catch (Exception ex)
         {
+            LogUpdateError(ex);
             if (manually && owner is not null)
             {
-                await ShowMessageAsync(owner, $"更新を確認できませんでした。\n{ex.Message}");
+                await new EditorDialogService(owner).ShowErrorAsync(
+                    "更新の確認",
+                    $"更新を確認できませんでした。\n{ex.Message}");
             }
         }
         finally
@@ -68,90 +53,46 @@ public static class UpdateService
         }
     }
 
-    private static async Task ShowUpdateAsync(Window owner, UpdateManager manager, UpdateInfo update)
+    private static UpdateDialogOptions CreateOptions(Window? owner)
     {
-        var status = new TextBlock
+        IBrush? accentBrush = null;
+        if (owner?.TryFindResource("AccentBrush", out var resource) == true)
         {
-            Text = $"Fumilume {update.TargetFullRelease.Version} を利用できます。",
-            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-            FontSize = 14,
-        };
-        var progress = new ProgressBar
-        {
-            Minimum = 0,
-            Maximum = 100,
-            Height = 6,
-            IsVisible = false,
-        };
-        var updateNow = new Button { Content = "更新して再起動", IsDefault = true, MinWidth = 128 };
-        var later = new Button { Content = "後で", IsCancel = true, MinWidth = 88 };
-        var content = new StackPanel
-        {
-            Spacing = 14,
-            Children = { status, progress },
-        };
-        var dialog = new AppDialogWindow("更新の確認", content, updateNow, later)
-        {
-            Width = 460,
-        };
-        using var cancellation = new CancellationTokenSource();
-        Task? updateTask = null;
-
-        updateNow.Click += (_, _) => updateTask ??= DownloadAndApplyAsync();
-        later.Click += (_, _) => dialog.Close();
-        dialog.Closed += (_, _) => cancellation.Cancel();
-
-        await dialog.ShowDialog(owner);
-        if (updateTask is not null)
-        {
-            await updateTask;
+            accentBrush = resource as IBrush;
         }
 
-        async Task DownloadAndApplyAsync()
+        return new UpdateDialogOptions
         {
-            updateNow.IsEnabled = false;
-            later.IsEnabled = false;
-            progress.IsVisible = true;
-            status.Text = "更新をダウンロードしています…";
-
-            try
-            {
-                IProgress<int> progressReporter = new Progress<int>(value => progress.Value = value);
-                await manager.DownloadUpdatesAsync(update, progressReporter.Report, cancellation.Token);
-                status.Text = "更新を適用して再起動します…";
-                manager.ApplyUpdatesAndRestart(update.TargetFullRelease);
-            }
-            catch (OperationCanceledException)
-            {
-                // ダイアログを閉じた場合は更新を中止する。
-            }
-            catch (Exception ex)
-            {
-                status.Text = $"更新を適用できませんでした。\n{ex.Message}";
-                progress.IsVisible = false;
-                updateNow.IsEnabled = true;
-                later.IsEnabled = true;
-                updateTask = null;
-            }
-        }
+            Strings = FumilumeUpdateDialogStrings.Instance,
+            ChromeMode = WindowChromeMode.Custom,
+            ResizeMode = WindowResizeMode.Fixed,
+            AccentBrush = accentBrush,
+            AllowIgnoreVersion = false,
+            SuppressUpToDateOnAutoCheck = true,
+        };
     }
 
-    private static async Task ShowMessageAsync(Window owner, string message)
+    private static void LogUpdateError(Exception exception)
+        => AppLogger.For("Fumilume.UpdateService").Error("Fumilume の更新確認に失敗しました。", exception);
+
+    private sealed class FumilumeUpdateDialogStrings : IUpdateDialogStrings
     {
-        var close = new Button { Content = "閉じる", IsDefault = true, IsCancel = true, MinWidth = 88 };
-        var dialog = new AppDialogWindow(
-            "更新の確認",
-            new TextBlock
-            {
-                Text = message,
-                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                FontSize = 14,
-            },
-            close)
-        {
-            Width = 440,
-        };
-        close.Click += (_, _) => dialog.Close();
-        await dialog.ShowDialog(owner);
+        public static readonly FumilumeUpdateDialogStrings Instance = new();
+
+        public string Title => "Fumilume の更新";
+
+        public string AvailableHeader => "新しいバージョンがあります";
+
+        public string DownloadAndInstall => "更新して再起動";
+
+        public string IgnoreThisVersion => "このバージョンを無視";
+
+        public string UpToDateMessage => "Fumilume は最新です。";
+
+        public string ErrorHeader => "更新を確認できませんでした";
+
+        public string Close => "閉じる";
+
+        public string CheckingMessage => "更新を確認しています…";
     }
 }

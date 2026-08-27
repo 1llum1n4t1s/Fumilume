@@ -1,7 +1,9 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:media="using:Avalonia.Media"
              xmlns:vm="using:Fumilume.ViewModels"
              x:Class="Fumilume.Views.SettingsView"
+             x:Name="SettingsRoot"
              x:DataType="vm:SettingsTabViewModel">
     <!-- 設定タブの中身。DataContext は SettingsTabViewModel で閉じており、
          $parent[Window] を辿って MainWindowViewModel を掘り返さない
@@ -90,21 +92,64 @@
                             </StackPanel>
                         </HeaderedContentControl>
 
-                        <HeaderedContentControl Classes="settingscard" Header="フォント">
+                        <HeaderedContentControl Classes="settingscard" Header="UIフォント">
                             <StackPanel Spacing="8">
-                                <TextBlock Classes="settingscaption" Margin="0" Text="フォント" />
-                                <ComboBox Classes="settingsfield" MinWidth="240" HorizontalAlignment="Left"
-                                          ItemsSource="{Binding Options.FontFamilyOptions}"
-                                          SelectedItem="{Binding Options.FontFamily, Mode=TwoWay}" />
+                                <TextBlock Classes="settingscaption" Margin="0" Text="メニュー・タブ・設定画面" />
+                                <ComboBox x:Name="UiFontFamilyPicker"
+                                          Classes="settingsfield" MinWidth="400" HorizontalAlignment="Left"
+                                          IsEditable="True" MaxDropDownHeight="320"
+                                          PlaceholderText="Inter"
+                                          ItemsSource="{Binding #SettingsRoot.FontFamilies}"
+                                          Text="{Binding Options.UiFontFamily, Mode=TwoWay}"
+                                          TextSearch.TextBinding="{Binding Name, x:DataType=media:FontFamily}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="media:FontFamily">
+                                            <TextBlock FontFamily="{Binding}" FontSize="16" Text="{Binding Name}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                           Text="一覧の名前は、実際のフォントでプレビューされます。名前を直接入力することもできます。" />
                                 <TextBlock Classes="settingscaption" Margin="0,8,0,0" Text="サイズ" />
                                 <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
                                     <Slider Width="300" VerticalAlignment="Center"
                                             Minimum="8" Maximum="48" TickFrequency="1"
                                             IsSnapToTickEnabled="True"
-                                            Value="{Binding Options.FontSize, Mode=TwoWay}" />
+                                            Value="{Binding Options.UiFontSize, Mode=TwoWay}" />
                                     <TextBlock VerticalAlignment="Center" FontSize="13"
                                                Foreground="{DynamicResource TextPrimary}"
-                                               Text="{Binding Options.FontSize, StringFormat={}{0:N0} pt}" />
+                                               Text="{Binding Options.UiFontSize, StringFormat={}{0:N0} pt}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </HeaderedContentControl>
+
+                        <HeaderedContentControl Classes="settingscard" Header="エディタフォント">
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="settingscaption" Margin="0" Text="本文・行番号" />
+                                <ComboBox x:Name="EditorFontFamilyPicker"
+                                          Classes="settingsfield" MinWidth="400" HorizontalAlignment="Left"
+                                          IsEditable="True" MaxDropDownHeight="320"
+                                          PlaceholderText="'Cascadia Code', Consolas, monospace"
+                                          ItemsSource="{Binding #SettingsRoot.EditorFontFamilies}"
+                                          Text="{Binding Options.EditorFontFamily, Mode=TwoWay}"
+                                          TextSearch.TextBinding="{Binding Name, x:DataType=media:FontFamily}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="media:FontFamily">
+                                            <TextBlock FontFamily="{Binding}" FontSize="16" Text="{Binding Name}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                           Text="一覧には等幅フォントだけを表示します。直接入力では、VS Code と同じ形式で複数のフォントをカンマ区切りにできます。" />
+                                <TextBlock Classes="settingscaption" Margin="0,8,0,0" Text="サイズ" />
+                                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
+                                    <Slider Width="300" VerticalAlignment="Center"
+                                            Minimum="8" Maximum="48" TickFrequency="1"
+                                            IsSnapToTickEnabled="True"
+                                            Value="{Binding Options.EditorFontSize, Mode=TwoWay}" />
+                                    <TextBlock VerticalAlignment="Center" FontSize="13"
+                                               Foreground="{DynamicResource TextPrimary}"
+                                               Text="{Binding Options.EditorFontSize, StringFormat={}{0:N0} pt}" />
                                 </StackPanel>
                             </StackPanel>
                         </HeaderedContentControl>
@@ -252,18 +297,17 @@
 
                         <HeaderedContentControl Classes="settingscard" Header="タブ一覧">
                             <StackPanel Spacing="8">
-                                <TextBlock Classes="settingscaption" Margin="0" Text="タブの厚み" />
+                                <TextBlock Classes="settingscaption" Margin="0" Text="タブの高さ" />
                                 <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
-                                    <Slider Width="280" VerticalAlignment="Center"
-                                            Minimum="28" Maximum="72" TickFrequency="1"
-                                            IsSnapToTickEnabled="True"
-                                            Value="{Binding Options.TabHeight, Mode=TwoWay}" />
+                                    <NumericUpDown Classes="settingsfield" Width="140"
+                                                   Minimum="26" Maximum="60" Increment="2"
+                                                   FormatString="0"
+                                                   Value="{Binding Options.TabHeight, Mode=TwoWay}" />
                                     <TextBlock VerticalAlignment="Center" FontSize="13"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               Text="{Binding Options.TabHeight, StringFormat={}{0:N0} px}" />
+                                               Foreground="{DynamicResource TextSecondary}" Text="px" />
                                 </StackPanel>
                                 <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="左に並ぶタブ 1 行分の高さです。細くすると一度に見えるタブが増えます。" />
+                                           Text="Kiriha と同じ 26～60 px・2 px刻みです。既定は 34 px です。" />
                             </StackPanel>
                         </HeaderedContentControl>
                     </StackPanel>

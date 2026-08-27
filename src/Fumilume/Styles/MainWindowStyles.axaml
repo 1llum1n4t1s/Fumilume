@@ -1,13 +1,14 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit">
+        xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+        xmlns:aer="clr-namespace:AvaloniaEdit.Rendering;assembly=AvaloniaEdit">
     <!-- メインウィンドウの見た目。MainWindow.axaml には構造だけを残し、体裁はここへ集約する。 -->
 
     <Styles.Resources>
         <!-- タブ 1 行の厚み。設定「タブの厚み」から MainWindow のコードビハインドが書き換える。
              項目テンプレート側（MainWindow.axaml）の Grid.Height と、この ControlTheme の
              MinHeight の両方に効かせる必要があるため、値を 1 つのリソースへ寄せてある。 -->
-        <x:Double x:Key="TabItemHeight">42</x:Double>
+        <x:Double x:Key="TabItemHeight">34</x:Double>
 
         <!-- 縦タブ 1 行分の見た目。ListBoxItem の既定テンプレートは選択枠を自前で描くため、
              角丸と塗り分けだけを持つテンプレートへ差し替える。 -->
@@ -86,5 +87,12 @@
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
         <Setter Property="LineNumbersForeground" Value="{DynamicResource TextSecondary}" />
         <Setter Property="LineNumbersMargin" Value="12,0,10,0" />
+    </Style>
+
+    <!-- AvaloniaEdit の既定リンク色 Brushes.Blue はダーク背景で読めない。
+         TextView の公式プロパティへテーマ色を渡し、リンクらしい下線も維持する。 -->
+    <Style Selector="aer|TextView">
+        <Setter Property="LinkTextForegroundBrush" Value="{DynamicResource EditorLinkForeground}" />
+        <Setter Property="LinkTextUnderline" Value="True" />
     </Style>
 </Styles>

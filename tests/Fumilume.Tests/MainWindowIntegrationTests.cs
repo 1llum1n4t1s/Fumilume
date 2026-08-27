@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
@@ -88,14 +90,90 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 
         scope.ViewModel.Options.ShowLineNumbers = false;
         scope.ViewModel.Options.WordWrap = true;
-        scope.ViewModel.Options.FontSize = 20;
+        scope.ViewModel.Options.UiFontFamily = "Arial";
+        scope.ViewModel.Options.UiFontSize = 17;
+        scope.ViewModel.Options.EditorFontSize = 20;
+        scope.ViewModel.Options.EditorFontFamily = "'Cascadia Code', Consolas, monospace";
         scope.ViewModel.Options.IndentationSize = 8;
         Dispatcher.UIThread.RunJobs();
 
         Assert.False(editor.ShowLineNumbers);
         Assert.True(editor.WordWrap);
+        Assert.Contains("Arial", scope.Window.FontFamily.ToString(), StringComparison.Ordinal);
+        Assert.Equal(17, scope.Window.FontSize);
         Assert.Equal(20, editor.FontSize);
+        Assert.Contains("Cascadia Code", editor.FontFamily.ToString(), StringComparison.Ordinal);
         Assert.Equal(8, editor.Options.IndentationSize);
+    });
+
+    [Fact]
+    public void FontPickersPreviewEachInstalledFont() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        scope.ViewModel.OpenSettingsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var settings = scope.Window.GetVisualDescendants().OfType<SettingsView>().Single();
+        var uiPicker = settings.FindControl<ComboBox>("UiFontFamilyPicker");
+        var editorPicker = settings.FindControl<ComboBox>("EditorFontFamilyPicker");
+        Assert.NotNull(uiPicker);
+        Assert.NotNull(editorPicker);
+        Assert.True(uiPicker.IsEditable);
+        Assert.True(editorPicker.IsEditable);
+
+        var font = Assert.IsType<FontFamily>(uiPicker.ItemsSource!.Cast<object>().First());
+        var preview = Assert.IsType<TextBlock>(uiPicker.ItemTemplate!.Build(font));
+        preview.DataContext = font;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(font.Name, preview.Text);
+        Assert.Equal(font, preview.FontFamily);
+
+        var editorFonts = editorPicker.ItemsSource!.Cast<FontFamily>().ToArray();
+        Assert.NotEmpty(editorFonts);
+        Assert.NotSame(uiPicker.ItemsSource, editorPicker.ItemsSource);
+        Assert.All(editorFonts, fontFamily => Assert.True(SettingsView.IsMonospaced(fontFamily)));
+
+        uiPicker.Text = "Arial";
+        editorPicker.Text = "Consolas";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("Arial", scope.ViewModel.Options.UiFontFamily);
+        Assert.Equal("Consolas", scope.ViewModel.Options.EditorFontFamily);
+    });
+
+    [Fact]
+    public void CurrentLineHighlightUsesABlueThemeColor() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var editor = scope.Window.FindControl<TextEditor>("Editor");
+        Assert.NotNull(editor);
+
+        var brush = Assert.IsAssignableFrom<ISolidColorBrush>(editor.TextArea.TextView.CurrentLineBackground);
+        Assert.True(brush.Color.B > brush.Color.G);
+        Assert.True(brush.Color.B > brush.Color.R);
+    });
+
+    [Fact]
+    public void HyperlinksHaveReadableThemeColors() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var editor = scope.Window.FindControl<TextEditor>("Editor");
+        Assert.NotNull(editor);
+
+        AssertLinkContrast(ThemeVariant.Light, Color.Parse("#FBFBFC"), 4.5);
+        AssertLinkContrast(ThemeVariant.Dark, Color.Parse("#242528"), 4.5);
+
+        void AssertLinkContrast(ThemeVariant theme, Color background, double minimumRatio)
+        {
+            scope.Window.RequestedThemeVariant = theme;
+            Dispatcher.UIThread.RunJobs();
+
+            var link = Assert.IsAssignableFrom<ISolidColorBrush>(
+                editor.TextArea.TextView.LinkTextForegroundBrush);
+            Assert.True(editor.TextArea.TextView.LinkTextUnderline);
+            Assert.True(
+                ContrastRatio(link.Color, background) >= minimumRatio,
+                $"{theme} のリンク色 {link.Color} は背景 {background} に対して十分なコントラストがありません。");
+        }
     });
 
     /// <summary>
@@ -331,5 +409,23 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
             Window.Close();
             _storage.Dispose();
         }
+    }
+
+    private static double ContrastRatio(Color first, Color second)
+    {
+        var lighter = Math.Max(RelativeLuminance(first), RelativeLuminance(second));
+        var darker = Math.Min(RelativeLuminance(first), RelativeLuminance(second));
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    private static double RelativeLuminance(Color color)
+        => (0.2126 * Linearize(color.R)) + (0.7152 * Linearize(color.G)) + (0.0722 * Linearize(color.B));
+
+    private static double Linearize(byte channel)
+    {
+        var value = channel / 255.0;
+        return value <= 0.04045
+            ? value / 12.92
+            : Math.Pow((value + 0.055) / 1.055, 2.4);
     }
 }

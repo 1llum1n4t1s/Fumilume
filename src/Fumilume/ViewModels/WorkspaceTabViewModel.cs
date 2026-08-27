@@ -30,8 +30,11 @@ public abstract partial class WorkspaceTabViewModel : ObservableObject
     /// <summary>設定タブかどうか。コンテンツ領域の出し分けに使う。</summary>
     public virtual bool IsSettingsTab => false;
 
-    /// <summary>文書タブかどうか（XAML から否定を書けないので明示的に持つ）。</summary>
-    public bool IsDocumentTab => !IsSettingsTab;
+    /// <summary>編集可能なテキスト文書タブかどうか。</summary>
+    public virtual bool IsDocumentTab => false;
+
+    /// <summary>PDF 表示タブかどうか。</summary>
+    public virtual bool IsPdfTab => false;
 
     [RelayCommand]
     private Task CloseTabAsync() => _closeAsync(this);

@@ -35,6 +35,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(SelectedDocument))]
     [NotifyPropertyChangedFor(nameof(IsDocumentSelected))]
     [NotifyPropertyChangedFor(nameof(IsSettingsSelected))]
+    [NotifyPropertyChangedFor(nameof(SelectedPdf))]
+    [NotifyPropertyChangedFor(nameof(IsPdfSelected))]
     private WorkspaceTabViewModel? _selectedTab;
 
     [ObservableProperty]
@@ -52,6 +54,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public bool IsSettingsSelected => SelectedTab is SettingsTabViewModel;
 
+    public PdfDocumentViewModel? SelectedPdf => SelectedTab as PdfDocumentViewModel;
+
+    public bool IsPdfSelected => SelectedTab is PdfDocumentViewModel;
+
     /// <summary>開いている文書だけを取り出す（未保存確認や重複オープンの判定に使う）。</summary>
     public IEnumerable<DocumentViewModel> Documents => Tabs.OfType<DocumentViewModel>();
 
@@ -61,7 +67,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public string WindowTitle => $"{SelectedTab?.TabTitle ?? "Fumilume"} - Fumilume";
 
-    public string CurrentPath => SelectedDocument?.PathDisplay ?? "新しいテキスト文書";
+    public string CurrentPath => SelectedDocument?.PathDisplay ?? SelectedPdf?.FilePath ?? "新しいテキスト文書";
 
     public async Task InitializeAsync(IEnumerable<string> startupArgs)
     {
@@ -110,7 +116,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var name = _untitledSequence == 1 ? "無題" : $"無題 {_untitledSequence}";
         var document = new DocumentViewModel(name, CloseTabCoreAsync);
         document.PropertyChanged += OnDocumentPropertyChanged;
-        InsertDocumentTab(document);
+        InsertContentTab(document);
         SelectedTab = document;
         StatusMessage = "新しい文書を作成しました";
     }
@@ -131,8 +137,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var fullPath = Path.GetFullPath(path);
-            var existing = Documents.FirstOrDefault(document =>
-                string.Equals(document.FilePath, fullPath, StringComparison.OrdinalIgnoreCase));
+            var existing = Tabs.FirstOrDefault(tab => tab switch
+            {
+                DocumentViewModel document => string.Equals(document.FilePath, fullPath, StringComparison.OrdinalIgnoreCase),
+                PdfDocumentViewModel pdf => string.Equals(pdf.FilePath, fullPath, StringComparison.OrdinalIgnoreCase),
+                _ => false,
+            });
             if (existing is not null)
             {
                 SelectedTab = existing;
@@ -146,17 +156,27 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
             try
             {
+                if (string.Equals(Path.GetExtension(fullPath), ".pdf", StringComparison.OrdinalIgnoreCase))
+                {
+                    var pdf = await PdfDocumentViewModel.OpenAsync(fullPath, CloseTabCoreAsync);
+                    InsertContentTab(pdf);
+                    SelectedTab = pdf;
+                    StatusMessage = $"{Path.GetFileName(fullPath)} を開きました（{pdf.PageCount:N0} ページ）";
+                    continue;
+                }
+
                 var content = await _files.ReadAsync(fullPath);
                 var document = new DocumentViewModel(Path.GetFileName(fullPath), CloseTabCoreAsync);
                 document.Load(fullPath, content);
                 RestoreCaretPosition(document, fullPath);
                 document.PropertyChanged += OnDocumentPropertyChanged;
-                InsertDocumentTab(document);
+                InsertContentTab(document);
                 SelectedTab = document;
                 StatusMessage = $"{Path.GetFileName(fullPath)} を開きました";
             }
             catch (Exception ex)
             {
+                AppLogger.For<MainWindowViewModel>().Error($"ファイルを開けませんでした: {fullPath}", ex);
                 await _dialogs.ShowErrorAsync(
                     "ファイルを開けません",
                     $"{fullPath}\n\n{ex.Message}");
@@ -173,6 +193,72 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(IsDocumentSelected))]
     private Task SaveAsAsync()
         => SelectedDocument is null ? Task.CompletedTask : SaveDocumentAsync(SelectedDocument, saveAs: true);
+
+    private bool CanSaveAll() => Documents.Any(document => document.IsModified);
+
+    /// <summary>sakura の F_FILESAVEALL 相当。未保存文書の保存先選択を含めて順番に保存する。</summary>
+    [RelayCommand(CanExecute = nameof(CanSaveAll))]
+    private async Task SaveAllAsync()
+    {
+        var targets = Documents.Where(document => document.IsModified).ToArray();
+        var saved = 0;
+        foreach (var document in targets)
+        {
+            if (!await SaveDocumentAsync(document, saveAs: false))
+            {
+                StatusMessage = $"{saved:N0} 件を保存し、残りを中止しました";
+                return;
+            }
+
+            saved++;
+        }
+
+        StatusMessage = $"{saved:N0} 件の文書を保存しました";
+    }
+
+    private bool CanReload() => SelectedDocument?.FilePath is not null;
+
+    /// <summary>sakura の F_FILE_REOPEN 相当。現在と同じ文字コード判定でディスクから読み直す。</summary>
+    [RelayCommand(CanExecute = nameof(CanReload))]
+    private async Task ReloadAsync()
+    {
+        if (SelectedDocument is not { FilePath: { } path } document)
+        {
+            return;
+        }
+
+        if (document.IsModified && !await _dialogs.ConfirmAsync(
+                "ファイルを開き直す",
+                $"{document.DisplayName} の未保存の変更を破棄して、ディスクから開き直しますか？"))
+        {
+            return;
+        }
+
+        var caret = document.CaretIndex;
+        try
+        {
+            var content = await _files.ReadAsync(path);
+            document.Load(path, content);
+            document.CaretIndex = Math.Clamp(caret, 0, document.EditorDocument.TextLength);
+            StatusMessage = $"{document.DisplayName} を開き直しました";
+        }
+        catch (Exception ex)
+        {
+            AppLogger.For<MainWindowViewModel>().Error($"ファイルを開き直せませんでした: {path}", ex);
+            await _dialogs.ShowErrorAsync("ファイルを開き直せません", $"{path}\n\n{ex.Message}");
+        }
+    }
+
+    private bool CanToggleMarkdownPreview() => SelectedDocument?.CanShowMarkdownPreview == true;
+
+    [RelayCommand(CanExecute = nameof(CanToggleMarkdownPreview))]
+    private void ToggleMarkdownPreview()
+    {
+        SelectedDocument?.ToggleMarkdownPreview();
+        StatusMessage = SelectedDocument?.IsMarkdownPreview == true
+            ? "Markdown プレビューを表示しました"
+            : "Markdown の編集表示へ戻しました";
+    }
 
     [RelayCommand]
     private Task CloseTabAsync(WorkspaceTabViewModel? tab)
@@ -210,7 +296,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>設定タブは常に一覧の末尾に置き、文書タブはその手前へ追加する。</summary>
-    private void InsertDocumentTab(DocumentViewModel document)
+    private void InsertContentTab(WorkspaceTabViewModel document)
     {
         var settingsIndex = IndexOfSettingsTab();
         if (settingsIndex < 0)
@@ -266,6 +352,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             RememberCaretPosition(document);
             document.PropertyChanged -= OnDocumentPropertyChanged;
         }
+        else if (tab is PdfDocumentViewModel pdf)
+        {
+            pdf.Dispose();
+        }
         else if (tab is SettingsTabViewModel)
         {
             SettingsTab = null;
@@ -274,8 +364,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var closingIndex = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
 
-        // 文書が 1 つも無い状態は作らない（設定タブだけが残るとエディタが空になる）。
-        if (!Documents.Any())
+        // 表示できるタブが 1 つも無い状態は作らない（設定タブだけになったら空文書を用意する）。
+        if (!Tabs.Any(item => item is DocumentViewModel or PdfDocumentViewModel))
         {
             NewDocument();
             return;
@@ -323,6 +413,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            AppLogger.For<MainWindowViewModel>().Error($"ファイルを保存できませんでした: {path}", ex);
             await _dialogs.ShowErrorAsync(
                 "ファイルを保存できません",
                 $"{path}\n\n{ex.Message}");
@@ -407,6 +498,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void OnDocumentPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(DocumentViewModel.IsModified))
+        {
+            SaveAllCommand.NotifyCanExecuteChanged();
+        }
+
         if (!ReferenceEquals(sender, SelectedDocument))
         {
             return;
@@ -418,6 +514,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(WindowTitle));
             OnPropertyChanged(nameof(CurrentPath));
+            ReloadCommand.NotifyCanExecuteChanged();
+            ToggleMarkdownPreviewCommand.NotifyCanExecuteChanged();
         }
 
         if (args.PropertyName == nameof(DocumentViewModel.CanUndo))
@@ -439,6 +537,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         RedoCommand.NotifyCanExecuteChanged();
         SaveCommand.NotifyCanExecuteChanged();
         SaveAsCommand.NotifyCanExecuteChanged();
+        SaveAllCommand.NotifyCanExecuteChanged();
+        ReloadCommand.NotifyCanExecuteChanged();
+        ToggleMarkdownPreviewCommand.NotifyCanExecuteChanged();
         GoToLineCommand.NotifyCanExecuteChanged();
     }
 

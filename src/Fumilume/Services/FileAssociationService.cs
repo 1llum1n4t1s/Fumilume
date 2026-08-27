@@ -4,7 +4,7 @@ using System.Runtime.Versioning;
 
 namespace Fumilume.Services;
 
-public sealed record SupportedFileType(string Extension, string Description);
+public sealed record SupportedFileType(string Extension, string Description, bool IsEditable = true);
 
 /// <summary>
 /// 現在のWindowsユーザーに対するファイル関連付けを管理します。
@@ -21,6 +21,7 @@ public static class FileAssociationService
     [
         new(".txt", "テキスト文書 (.txt)"),
         new(".md", "Markdown文書 (.md)"),
+        new(".pdf", "PDF文書 (.pdf)", IsEditable: false),
         new(".log", "ログファイル (.log)"),
         new(".csv", "CSVファイル (.csv)"),
         new(".json", "JSONファイル (.json)"),

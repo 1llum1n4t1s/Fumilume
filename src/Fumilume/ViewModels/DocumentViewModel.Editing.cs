@@ -110,6 +110,13 @@ public sealed partial class DocumentViewModel
         SetSelection(Math.Min(offset, EditorDocument.TextLength), 0);
     }
 
+    /// <summary>カーソル行を選択する（sakura の F_SELECTLINE 相当）。</summary>
+    public void SelectCurrentLine()
+    {
+        var (offset, length) = GetLineRange();
+        SetSelection(offset, length);
+    }
+
     /// <summary>各行の先頭へ字下げを差し込む（sakura の F_INDENT_TAB / F_INDENT_SPACE 相当）。</summary>
     public void IndentLines(string indent)
         => TransformSelectedLines(text => MapLines(text, line => indent + line));

@@ -35,6 +35,12 @@ public sealed class AppSettings
     public bool ShowControlCharacters { get; set; } = true;
 
     // ===== フォント =====
+    /// <summary>メニューや設定画面など、UI 全体で使うフォント。</summary>
+    public string UiFontFamily { get; set; } = AppSettingsDefaults.UiFontFamily;
+
+    public double UiFontSize { get; set; } = AppSettingsDefaults.UiFontSize;
+
+    /// <summary>エディタで使うフォント。既存 settings.json との互換性を保つためプロパティ名は維持する。</summary>
     public string FontFamily { get; set; } = AppSettingsDefaults.FontFamily;
 
     public double FontSize { get; set; } = AppSettingsDefaults.FontSize;
@@ -136,14 +142,16 @@ public sealed class AppSettings
 /// 正規化で同じ値を参照するために切り出してある。</summary>
 internal static class AppSettingsDefaults
 {
-    public const string FontFamily = "Cascadia Mono";
+    public const string UiFontFamily = "Inter";
+    public const double UiFontSize = 14;
+    public const string FontFamily = "'Cascadia Mono', Consolas, monospace";
     public const double FontSize = 15;
     public const int IndentationSize = 4;
     public const string ThemeMode = "System";
     public const int ColumnRulerPosition = 80;
     public const double LineHeightFactor = 1.0;
     public const int LargeFileThresholdMegabytes = 32;
-    public const double TabHeight = 42;
+    public const double TabHeight = 34;
 
     public const double MinimumFontSize = 8;
     public const double MaximumFontSize = 48;
@@ -156,9 +164,9 @@ internal static class AppSettingsDefaults
     public const int MinimumLargeFileThresholdMegabytes = 1;
     public const int MaximumLargeFileThresholdMegabytes = 4096;
 
-    /// <summary>タブの厚みの下限は、閉じるボタン（24px）とアイコンが潰れない高さで決めてある。</summary>
-    public const double MinimumTabHeight = 28;
-    public const double MaximumTabHeight = 72;
+    /// <summary>Kiriha と同じ縦タブ高さの契約。</summary>
+    public const double MinimumTabHeight = 26;
+    public const double MaximumTabHeight = 60;
 
     /// <summary>覚えておくカーソル位置の件数。無制限だと settings.json が延々と太る。</summary>
     public const int MaximumCaretPositions = 200;
@@ -201,6 +209,7 @@ public static class SettingsService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             // 設定が保存できないのは機能低下であって停止理由ではない。次回は既定値で起動する。
+            AppLogger.For("Fumilume.SettingsService").Warn("設定を保存できませんでした。", ex);
         }
     }
 
@@ -222,6 +231,7 @@ public static class SettingsService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             // 壊れた JSON は既定値で起動して上書きさせる（起動できないほうが困る）。
+            AppLogger.For("Fumilume.SettingsService").Warn($"設定ファイルを読み込めませんでした: {path}", ex);
         }
 
         settings = new AppSettings();
@@ -231,6 +241,10 @@ public static class SettingsService
     /// <summary>範囲外の値を安全な値へ丸める。手書き編集や旧バージョンの値がそのまま UI へ届かないようにする。</summary>
     private static AppSettings Normalize(AppSettings settings)
     {
+        settings.UiFontSize = Math.Clamp(
+            settings.UiFontSize,
+            AppSettingsDefaults.MinimumFontSize,
+            AppSettingsDefaults.MaximumFontSize);
         settings.FontSize = Math.Clamp(
             settings.FontSize,
             AppSettingsDefaults.MinimumFontSize,
@@ -252,7 +266,7 @@ public static class SettingsService
             AppSettingsDefaults.MinimumLargeFileThresholdMegabytes,
             AppSettingsDefaults.MaximumLargeFileThresholdMegabytes);
         settings.TabHeight = Math.Clamp(
-            settings.TabHeight,
+            Math.Round(settings.TabHeight),
             AppSettingsDefaults.MinimumTabHeight,
             AppSettingsDefaults.MaximumTabHeight);
 
@@ -264,6 +278,11 @@ public static class SettingsService
             {
                 settings.CaretPositions.Remove(key);
             }
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.UiFontFamily))
+        {
+            settings.UiFontFamily = AppSettingsDefaults.UiFontFamily;
         }
 
         if (string.IsNullOrWhiteSpace(settings.FontFamily))

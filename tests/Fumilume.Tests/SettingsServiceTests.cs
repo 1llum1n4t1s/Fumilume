@@ -13,6 +13,8 @@ public sealed class SettingsServiceTests
         {
             ShowLineNumbers = false,
             WordWrap = true,
+            UiFontFamily = "Yu Gothic UI",
+            UiFontSize = 16,
             FontFamily = "Consolas",
             FontSize = 18,
             ThemeMode = "Dark",
@@ -23,6 +25,8 @@ public sealed class SettingsServiceTests
 
         Assert.False(loaded.ShowLineNumbers);
         Assert.True(loaded.WordWrap);
+        Assert.Equal("Yu Gothic UI", loaded.UiFontFamily);
+        Assert.Equal(16, loaded.UiFontSize);
         Assert.Equal("Consolas", loaded.FontFamily);
         Assert.Equal(18, loaded.FontSize);
         Assert.Equal("Dark", loaded.ThemeMode);
@@ -40,6 +44,24 @@ public sealed class SettingsServiceTests
         Assert.True(loaded.ShowLineNumbers);
         Assert.Equal("System", loaded.ThemeMode);
         Assert.True(loaded.UseAcrylic);
+        Assert.Equal("Inter", loaded.UiFontFamily);
+        Assert.Equal(14, loaded.UiFontSize);
+    }
+
+    [Fact]
+    public void ExistingEditorFontSettingsGainUiFontDefaults()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "settings.json"),
+            """{"FontFamily":"Consolas","FontSize":18}""");
+
+        var loaded = SettingsService.Load();
+
+        Assert.Equal("Consolas", loaded.FontFamily);
+        Assert.Equal(18, loaded.FontSize);
+        Assert.Equal("Inter", loaded.UiFontFamily);
+        Assert.Equal(14, loaded.UiFontSize);
     }
 
     [Fact]
@@ -60,14 +82,16 @@ public sealed class SettingsServiceTests
         using var storage = new TemporaryStorage();
         File.WriteAllText(
             Path.Combine(storage.Path, "settings.json"),
-            """{"FontSize":900,"IndentationSize":0,"ThemeMode":"Rainbow","FontFamily":"  "}""");
+            """{"UiFontFamily":"  ","UiFontSize":1,"FontSize":900,"IndentationSize":0,"ThemeMode":"Rainbow","FontFamily":"  "}""");
 
         var loaded = SettingsService.Load();
 
         Assert.Equal(48, loaded.FontSize);
+        Assert.Equal("Inter", loaded.UiFontFamily);
+        Assert.Equal(8, loaded.UiFontSize);
         Assert.Equal(1, loaded.IndentationSize);
         Assert.Equal("System", loaded.ThemeMode);
-        Assert.Equal("Cascadia Mono", loaded.FontFamily);
+        Assert.Equal("'Cascadia Mono', Consolas, monospace", loaded.FontFamily);
     }
 
     /// <summary>設定項目を増やしたぶん、範囲外の値もそれぞれ丸められる必要がある。</summary>

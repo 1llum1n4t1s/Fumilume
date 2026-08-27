@@ -23,7 +23,9 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="SuperLightLogger" Version="1.0.13" />
     <PackageReference Include="Velopack" Version="1.2.0" />
+    <PackageReference Include="VelopackUpdateDialog.Avalonia" Version="1.0.14" />
   </ItemGroup>
 
   <ItemGroup>

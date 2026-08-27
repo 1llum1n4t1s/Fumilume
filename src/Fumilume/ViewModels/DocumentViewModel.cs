@@ -28,6 +28,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
     public override string TabTooltip => PathDisplay;
 
+    public override bool IsDocumentTab => true;
+
     public TextDocument EditorDocument { get; } = new();
 
     [ObservableProperty]
@@ -36,12 +38,18 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     [NotifyPropertyChangedFor(nameof(PathDisplay))]
     [NotifyPropertyChangedFor(nameof(TabTitle))]
     [NotifyPropertyChangedFor(nameof(TabTooltip))]
+    [NotifyPropertyChangedFor(nameof(IsMarkdown))]
+    [NotifyPropertyChangedFor(nameof(CanShowMarkdownPreview))]
     private string? _filePath;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayTitle))]
     [NotifyPropertyChangedFor(nameof(TabTitle))]
     private bool _isModified;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEditorVisible))]
+    private bool _isMarkdownPreview;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LineColumnText))]
@@ -68,6 +76,12 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     public string DisplayTitle => IsModified ? $"{DisplayName} ●" : DisplayName;
 
     public string PathDisplay => FilePath ?? "新しいテキスト文書";
+
+    public bool IsMarkdown => string.Equals(Path.GetExtension(FilePath), ".md", StringComparison.OrdinalIgnoreCase);
+
+    public bool CanShowMarkdownPreview => IsMarkdown;
+
+    public bool IsEditorVisible => !IsMarkdownPreview;
 
     public string EncodingLabel => Encoding switch
     {
@@ -154,6 +168,22 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         FilePath = Path.GetFullPath(path);
         EditorDocument.UndoStack.MarkAsOriginalFile();
         IsModified = false;
+    }
+
+    public void ToggleMarkdownPreview()
+    {
+        if (CanShowMarkdownPreview)
+        {
+            IsMarkdownPreview = !IsMarkdownPreview;
+        }
+    }
+
+    partial void OnFilePathChanged(string? value)
+    {
+        if (!IsMarkdown)
+        {
+            IsMarkdownPreview = false;
+        }
     }
 
     public int GetLineStartOffset(int lineNumber)

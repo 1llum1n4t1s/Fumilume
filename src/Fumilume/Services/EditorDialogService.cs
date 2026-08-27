@@ -9,9 +9,17 @@ namespace Fumilume.Services;
 
 public sealed class EditorDialogService(Window owner) : IEditorDialogService
 {
-    private static readonly FilePickerFileType TextFileType = new("テキストファイル")
+    private static readonly FilePickerFileType SupportedFileType = new("対応ファイル")
     {
         Patterns = FileAssociationService.SupportedTypes
+            .Select(type => $"*{type.Extension}")
+            .ToArray(),
+    };
+
+    private static readonly FilePickerFileType EditableFileType = new("テキスト・Markdownファイル")
+    {
+        Patterns = FileAssociationService.SupportedTypes
+            .Where(type => type.IsEditable)
             .Select(type => $"*{type.Extension}")
             .ToArray(),
     };
@@ -25,9 +33,9 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
     {
         var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "テキストファイルを開く",
+            Title = "ファイルを開く",
             AllowMultiple = true,
-            FileTypeFilter = [TextFileType, FilePickerFileTypes.All],
+            FileTypeFilter = [SupportedFileType, FilePickerFileTypes.All],
         });
 
         return files
@@ -44,7 +52,7 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
             Title = "名前を付けて保存",
             SuggestedFileName = suggestedFileName,
             DefaultExtension = "txt",
-            FileTypeChoices = [TextFileType, FilePickerFileTypes.All],
+            FileTypeChoices = [EditableFileType, FilePickerFileTypes.All],
         });
         return file?.TryGetLocalPath();
     }

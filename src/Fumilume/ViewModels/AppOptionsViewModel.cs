@@ -1,5 +1,4 @@
 using Avalonia;
-using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Fumilume.Services;
 
@@ -16,7 +15,6 @@ namespace Fumilume.ViewModels;
 public sealed class AppOptionsViewModel : ObservableObject
 {
     private readonly AppSettings _settings;
-    private IReadOnlyList<string>? _fontFamilyOptions;
 
     public AppOptionsViewModel(AppSettings settings) => _settings = settings;
 
@@ -107,13 +105,40 @@ public sealed class AppOptionsViewModel : ObservableObject
 
     // ===== フォント =====
 
-    public string FontFamily
+    public string UiFontFamily
     {
-        get => _settings.FontFamily;
-        set => SetOption(_settings.FontFamily, value, v => _settings.FontFamily = v);
+        get => _settings.UiFontFamily;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value)
+                ? AppSettingsDefaults.UiFontFamily
+                : value.Trim();
+            SetOption(_settings.UiFontFamily, normalized, v => _settings.UiFontFamily = v);
+        }
     }
 
-    public double FontSize
+    public double UiFontSize
+    {
+        get => _settings.UiFontSize;
+        set => SetOption(
+            _settings.UiFontSize,
+            Math.Clamp(value, AppSettingsDefaults.MinimumFontSize, AppSettingsDefaults.MaximumFontSize),
+            v => _settings.UiFontSize = v);
+    }
+
+    public string EditorFontFamily
+    {
+        get => _settings.FontFamily;
+        set
+        {
+            var normalized = string.IsNullOrWhiteSpace(value)
+                ? AppSettingsDefaults.FontFamily
+                : value.Trim();
+            SetOption(_settings.FontFamily, normalized, v => _settings.FontFamily = v);
+        }
+    }
+
+    public double EditorFontSize
     {
         get => _settings.FontSize;
         set => SetOption(
@@ -121,10 +146,6 @@ public sealed class AppOptionsViewModel : ObservableObject
             Math.Clamp(value, AppSettingsDefaults.MinimumFontSize, AppSettingsDefaults.MaximumFontSize),
             v => _settings.FontSize = v);
     }
-
-    /// <summary>フォント一覧はインストール済みフォントの列挙が要るため、実際に開かれるまで作らない
-    /// （ビューモデル単体のテストが Avalonia の初期化を必要としないようにする）。</summary>
-    public IReadOnlyList<string> FontFamilyOptions => _fontFamilyOptions ??= BuildFontFamilyOptions();
 
     // ===== 編集 =====
 
@@ -291,7 +312,7 @@ public sealed class AppOptionsViewModel : ObservableObject
         get => _settings.TabHeight;
         set => SetOption(
             _settings.TabHeight,
-            Math.Clamp(value, AppSettingsDefaults.MinimumTabHeight, AppSettingsDefaults.MaximumTabHeight),
+            Math.Clamp(Math.Round(value), AppSettingsDefaults.MinimumTabHeight, AppSettingsDefaults.MaximumTabHeight),
             v => _settings.TabHeight = v);
     }
 
@@ -325,36 +346,4 @@ public sealed class AppOptionsViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>等幅フォントの候補のうち、実際にインストールされているものだけを出す。
-    /// 現在値は未インストールでも消さない（別 PC で作った設定を勝手に書き換えないため）。</summary>
-    private IReadOnlyList<string> BuildFontFamilyOptions()
-    {
-        string[] candidates =
-        [
-            "Cascadia Mono", "Cascadia Code", "Consolas", "Courier New",
-            "MS Gothic", "Meiryo", "BIZ UDGothic", "Yu Gothic UI",
-            "Segoe UI", "Lucida Console", "DejaVu Sans Mono",
-        ];
-
-        HashSet<string> installed;
-        try
-        {
-            installed = FontManager.Current.SystemFonts
-                .Select(family => family.Name)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or PlatformNotSupportedException)
-        {
-            // フォント一覧を取れない環境では候補を絞り込まずそのまま出す。
-            installed = [.. candidates];
-        }
-
-        var options = candidates.Where(installed.Contains).ToList();
-        if (!options.Contains(FontFamily, StringComparer.OrdinalIgnoreCase))
-        {
-            options.Insert(0, FontFamily);
-        }
-
-        return options;
-    }
 }

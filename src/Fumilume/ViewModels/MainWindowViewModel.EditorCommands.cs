@@ -185,6 +185,10 @@ public sealed partial class MainWindowViewModel
                 document.DeleteLines();
                 StatusMessage = "行を削除しました";
                 break;
+            case EditorCommandId.SelectLine:
+                document.SelectCurrentLine();
+                StatusMessage = "カーソル行を選択しました";
+                break;
             case EditorCommandId.DeleteToLineStart:
                 document.DeleteToLineStart();
                 StatusMessage = "行頭まで削除しました";

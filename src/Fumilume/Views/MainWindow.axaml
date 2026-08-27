@@ -24,6 +24,9 @@
         <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenCommand}" />
         <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveAsCommand}" />
+        <KeyBinding Gesture="Ctrl+Alt+S" Command="{Binding SaveAllCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+R" Command="{Binding ReloadCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+M" Command="{Binding ToggleMarkdownPreviewCommand}" />
         <KeyBinding Gesture="Ctrl+W" Command="{Binding CloseTabCommand}" CommandParameter="{Binding SelectedTab}" />
         <KeyBinding Gesture="Ctrl+G" Command="{Binding GoToLineCommand}" />
         <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding OpenSettingsCommand}" />
@@ -188,6 +191,14 @@
                                             ToolTip.Tip="名前を付けて保存 (Ctrl+Shift+S)">
                                         <TextBlock Classes="icon" Text="&#xE792;" />
                                     </Button>
+                                    <Button Classes="command" Command="{Binding SaveAllCommand}"
+                                            AutomationProperties.Name="すべて保存" ToolTip.Tip="すべて保存 (Ctrl+Alt+S)">
+                                        <TextBlock Classes="icon" Text="&#xEA35;" />
+                                    </Button>
+                                    <Button Classes="command" Command="{Binding ReloadCommand}"
+                                            AutomationProperties.Name="ディスクから開き直す" ToolTip.Tip="開き直す (Ctrl+Shift+R)">
+                                        <TextBlock Classes="icon" Text="&#xE72C;" />
+                                    </Button>
                                     <Border Width="1" Height="24" Margin="6,0" Background="{DynamicResource Divider}" />
                                     <Button Classes="command" Command="{Binding UndoCommand}"
                                             AutomationProperties.Name="元に戻す" ToolTip.Tip="元に戻す (Ctrl+Z)">
@@ -238,6 +249,12 @@
                                             ToolTip.Tip="コマンドパレット (Ctrl+Shift+P)">
                                         <TextBlock Classes="icon" Text="&#xE712;" />
                                     </Button>
+                                    <Button Classes="command" Command="{Binding ToggleMarkdownPreviewCommand}"
+                                            IsVisible="{Binding SelectedDocument.CanShowMarkdownPreview}"
+                                            AutomationProperties.Name="Markdown プレビュー切り替え"
+                                            ToolTip.Tip="Markdown プレビュー (Ctrl+Shift+M)">
+                                        <TextBlock Classes="icon" Text="&#xE8A7;" />
+                                    </Button>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
                                     <Border Width="1" Height="24" Margin="4,0,6,0" Background="{DynamicResource Divider}" />
@@ -251,11 +268,17 @@
                         </Border>
 
                         <Border Grid.Row="1" Background="{DynamicResource EditorBg}">
-                            <ae:TextEditor x:Name="Editor" Classes="editor"
-                                           HorizontalScrollBarVisibility="Auto"
-                                           VerticalScrollBarVisibility="Auto"
-                                           Padding="14,12"
-                                           AutomationProperties.Name="テキスト編集領域" />
+                            <Panel>
+                                <ae:TextEditor x:Name="Editor" Classes="editor"
+                                               IsVisible="{Binding SelectedDocument.IsEditorVisible}"
+                                               HorizontalScrollBarVisibility="Auto"
+                                               VerticalScrollBarVisibility="Auto"
+                                               Padding="14,12"
+                                               AutomationProperties.Name="テキスト編集領域" />
+                                <v:MarkdownPreview Markdown="{Binding SelectedDocument.Text}"
+                                                   IsVisible="{Binding SelectedDocument.IsMarkdownPreview}"
+                                                   AutomationProperties.Name="Markdown プレビュー" />
+                            </Panel>
                         </Border>
 
                         <Border Grid.Row="2" Background="{DynamicResource ContentBg}"
@@ -278,6 +301,71 @@
                         </Border>
                     </Grid>
 
+                    <!-- PDF は Windows 標準レンダラーで 1 ページずつ表示する。全ページを画像化しないため、
+                         ページ数の多い文書でもメモリ使用量がページ数に比例しない。 -->
+                    <Grid RowDefinitions="48,*,36" IsVisible="{Binding IsPdfSelected}">
+                        <Border Grid.Row="0" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,4">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                                    <Button Classes="command" Command="{Binding SelectedPdf.PreviousPageCommand}"
+                                            AutomationProperties.Name="前のページ" ToolTip.Tip="前のページ">
+                                        <TextBlock Classes="icon" Text="&#xE76B;" />
+                                    </Button>
+                                    <TextBlock Margin="10,0" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextPrimary}"
+                                               Text="{Binding SelectedPdf.PageStatus}" />
+                                    <Button Classes="command" Command="{Binding SelectedPdf.NextPageCommand}"
+                                            AutomationProperties.Name="次のページ" ToolTip.Tip="次のページ">
+                                        <TextBlock Classes="icon" Text="&#xE76C;" />
+                                    </Button>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           Text="{Binding SelectedPdf.TabTitle}" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                                    <Button Classes="command" Command="{Binding SelectedPdf.ZoomOutCommand}"
+                                            AutomationProperties.Name="縮小" ToolTip.Tip="縮小">
+                                        <TextBlock Classes="icon" Text="&#xE71F;" />
+                                    </Button>
+                                    <Button Classes="command" Command="{Binding SelectedPdf.ActualSizeCommand}"
+                                            ToolTip.Tip="100% に戻す">
+                                        <TextBlock MinWidth="48" HorizontalAlignment="Center"
+                                                   Text="{Binding SelectedPdf.ZoomText}" />
+                                    </Button>
+                                    <Button Classes="command" Command="{Binding SelectedPdf.ZoomInCommand}"
+                                            AutomationProperties.Name="拡大" ToolTip.Tip="拡大">
+                                        <TextBlock Classes="icon" Text="&#xE8A3;" />
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto" Background="{DynamicResource SettingsPageBg}">
+                            <Grid Margin="24">
+                                <Border HorizontalAlignment="Center" VerticalAlignment="Top"
+                                        Background="White" BoxShadow="0 4 18 0 #40000000">
+                                    <Image Source="{Binding SelectedPdf.PageImage}" Stretch="None" />
+                                </Border>
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           IsVisible="{Binding SelectedPdf.IsLoading}"
+                                           Foreground="{DynamicResource TextSecondary}" Text="PDF を描画しています…" />
+                                <TextBlock MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           IsVisible="{Binding SelectedPdf.ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           Foreground="IndianRed" TextWrapping="Wrap"
+                                           Text="{Binding SelectedPdf.ErrorMessage}" />
+                            </Grid>
+                        </ScrollViewer>
+                        <Border Grid.Row="2" Background="{DynamicResource ContentBg}"
+                                BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0">
+                            <Grid Margin="16,0,10,0" ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Windows 標準 PDF レンダラー" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+
                     <!-- ===== コマンドパレット =====
                          sakura のメニューバーは Fumilume には置けない（タイトルバーを掴んで動かす作りと
                          両立しない）。機能が 400 件規模まで増えても入り口が変わらないよう、
@@ -294,7 +382,7 @@
                             <Grid RowDefinitions="Auto,*" Margin="8">
                                 <TextBox x:Name="CommandPaletteInput" Grid.Row="0"
                                          Classes="settingsfield" Margin="4,4,4,8"
-                                         Watermark="コマンド名で絞り込み"
+                                         PlaceholderText="コマンド名で絞り込み"
                                          Text="{Binding CommandPaletteQuery, Mode=TwoWay}"
                                          KeyDown="CommandPalette_KeyDown"
                                          AutomationProperties.Name="コマンドの絞り込み" />

@@ -13,6 +13,10 @@
                     <SolidColorBrush x:Key="TabSelectedBg" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="ContentBg" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="EditorBg" Color="#FBFBFC" />
+                    <!-- 白背景でも本文との差が分かり、WCAG AA の 4.5:1 を超えるリンク色。 -->
+                    <SolidColorBrush x:Key="EditorLinkForeground" Color="#005FB8" />
+                    <SolidColorBrush x:Key="EditorCurrentLineBg" Color="#140F6CBD" />
+                    <SolidColorBrush x:Key="EditorCurrentLineBorder" Color="#401A73C7" />
                     <SolidColorBrush x:Key="OmniboxBg" Color="#F1F3F4" />
                     <SolidColorBrush x:Key="TextPrimary" Color="#202124" />
                     <SolidColorBrush x:Key="TextSecondary" Color="#5F6368" />
@@ -42,6 +46,10 @@
                     <SolidColorBrush x:Key="TabSelectedBg" Color="#56595D" />
                     <SolidColorBrush x:Key="ContentBg" Color="#2B2C2F" />
                     <SolidColorBrush x:Key="EditorBg" Color="#242528" />
+                    <!-- AvaloniaEdit 既定の濃い Blue は暗背景で沈むため、明度を上げる。 -->
+                    <SolidColorBrush x:Key="EditorLinkForeground" Color="#75BFFF" />
+                    <SolidColorBrush x:Key="EditorCurrentLineBg" Color="#244CA3F0" />
+                    <SolidColorBrush x:Key="EditorCurrentLineBorder" Color="#704CA3F0" />
                     <SolidColorBrush x:Key="OmniboxBg" Color="#2B2C2F" />
                     <SolidColorBrush x:Key="TextPrimary" Color="#E8EAED" />
                     <SolidColorBrush x:Key="TextSecondary" Color="#9AA0A6" />

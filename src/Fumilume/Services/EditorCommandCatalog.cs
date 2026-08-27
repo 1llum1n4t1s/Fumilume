@@ -37,6 +37,7 @@ public enum EditorCommandId
     MergeLines,
     DuplicateLine,
     DeleteLine,
+    SelectLine,
     IndentTab,
     UnindentTab,
     IndentSpace,
@@ -115,6 +116,7 @@ public static class EditorCommandCatalog
 
         new(EditorCommandId.DuplicateLine, EditCategory, "行の二重化", "Ctrl+I"),
         new(EditorCommandId.DeleteLine, EditCategory, "行削除", "Ctrl+Shift+E"),
+        new(EditorCommandId.SelectLine, EditCategory, "1 行選択"),
         new(EditorCommandId.DeleteToLineStart, EditCategory, "行頭まで削除"),
         new(EditorCommandId.DeleteToLineEnd, EditCategory, "行末まで削除"),
         // Tab / Shift+Tab の字下げは AvaloniaEdit が選択範囲へ既定で効かせている。

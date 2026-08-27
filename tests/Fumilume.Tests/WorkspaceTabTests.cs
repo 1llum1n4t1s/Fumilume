@@ -97,10 +97,13 @@ public sealed class WorkspaceTabTests
         var viewModel = CreateViewModel(settings);
 
         viewModel.Options.WordWrap = true;
-        viewModel.Options.FontSize = 999;
+        viewModel.Options.UiFontSize = 1;
+        viewModel.Options.EditorFontSize = 999;
 
         Assert.True(settings.WordWrap);
+        Assert.Equal(8, settings.UiFontSize); // 下限で丸められる
         Assert.Equal(48, settings.FontSize); // 上限で丸められる
+        Assert.Equal(8, SettingsService.Load().UiFontSize);
         Assert.Equal(48, SettingsService.Load().FontSize);
     }
 

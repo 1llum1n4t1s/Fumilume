@@ -51,6 +51,7 @@ public sealed partial class MainWindow : Window
             ?? throw new InvalidOperationException("エディタを初期化できませんでした。");
         _searchPanel = SearchPanel.Install(_editor);
         _editor.TextArea.TextView.BackgroundRenderers.Add(new BookmarkRenderer(() => _boundDocument));
+        ApplyUiFontOptions();
         ApplyEditorOptions();
         ApplyTabHeight();
 
@@ -76,6 +77,9 @@ public sealed partial class MainWindow : Window
     private void OnOpened(object? sender, EventArgs args)
     {
         UpdateMaximizeRestoreGlyph();
+        // テーマ辞書はウィンドウが VisualRoot へ接続されたあとに確定する。
+        ApplyUiFontOptions();
+        ApplyEditorOptions();
         _ = _viewModel.InitializeAsync(Program.StartupArgs);
         if (_options.CheckUpdatesOnStartup)
         {
@@ -118,9 +122,23 @@ public sealed partial class MainWindow : Window
         _editor.Options.EnableHyperlinks = _options.EnableHyperlinks;
         _editor.Options.EnableEmailHyperlinks = _options.EnableHyperlinks;
 
-        // 指定フォントが入っていない環境でも等幅で読めるようにフォールバックを連ねる。
-        _editor.FontFamily = new FontFamily($"{_options.FontFamily}, Cascadia Mono, Consolas, monospace");
-        _editor.FontSize = _options.FontSize;
+        // VS Code 形式の引用符付きリストを解釈し、最後は等幅フォントへ落とす。
+        _editor.FontFamily = new FontFamily(EditorFontFamily.ToAvalonia(_options.EditorFontFamily));
+        _editor.FontSize = _options.EditorFontSize;
+
+        // AvaloniaEdit の既定色（緑系）を使わず、テーマに合う青系へ固定する。
+        var textView = _editor.TextArea.TextView;
+        if (textView.TryFindResource("EditorCurrentLineBg", textView.ActualThemeVariant, out var currentLineBackground))
+        {
+            textView.CurrentLineBackground = currentLineBackground as IBrush;
+        }
+
+        if (textView.TryFindResource("EditorCurrentLineBorder", textView.ActualThemeVariant, out var currentLineBorder))
+        {
+            textView.CurrentLineBorder = currentLineBorder is IBrush brush
+                ? new Pen(brush, 1)
+                : null;
+        }
     }
 
     /// <summary>タブ 1 行の厚みを反映する。項目テンプレートの Grid と ListBoxItem の
@@ -128,6 +146,13 @@ public sealed partial class MainWindow : Window
     /// ここを 1 箇所書き換えれば両方が追従する（DataTemplate の DataContext はタブ側の
     /// ビューモデルなので、テンプレートから設定を辿らせずに済ませたい）。</summary>
     private void ApplyTabHeight() => Resources["TabItemHeight"] = _options.TabHeight;
+
+    /// <summary>ウィンドウの継承フォントを変え、明示指定されたアイコンとエディタは各自の設定を保つ。</summary>
+    private void ApplyUiFontOptions()
+    {
+        FontFamily = new FontFamily(_options.UiFontFamily);
+        FontSize = _options.UiFontSize;
+    }
 
     private void OnOptionsPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
@@ -140,6 +165,12 @@ public sealed partial class MainWindow : Window
         if (args.PropertyName == nameof(AppOptionsViewModel.TabHeight))
         {
             ApplyTabHeight();
+            return;
+        }
+
+        if (args.PropertyName is nameof(AppOptionsViewModel.UiFontFamily) or nameof(AppOptionsViewModel.UiFontSize))
+        {
+            ApplyUiFontOptions();
             return;
         }
 
