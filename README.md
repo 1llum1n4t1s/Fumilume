@@ -28,6 +28,19 @@ dotnet run --project src/Fumilume/Fumilume.csproj
 
 Windows 10 バージョン 1809 以降（x64 / ARM64）。配布版は Velopack によりインストールされ、自動更新されます。
 
+## 配布サイト
+
+<https://fumilume.kagayoi.com> はランディングページと更新ファイルの両方を、`web/` の Worker
+（`fumilume-landing`）が返しています。トップページとヒーロー画像は Worker バンドル同梱、
+`releases.*.json` / `*.nupkg` / `*-Setup.exe` は R2 バケット `fumilume-updates` から配信します。
+
+ページを更新したときは `web/` で次を実行します（リリーススクリプトからは呼ばれません）。
+
+```powershell
+$env:CLOUDFLARE_API_TOKEN = '<Cloudflare API トークン>'
+wrangler deploy
+```
+
 ## ライセンス
 
 [LICENSE](LICENSE) を参照してください。

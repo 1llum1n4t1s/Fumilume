@@ -1,0 +1,30 @@
+# Fumilume ランディングページ配信 Worker。
+# Worker 自身を配信元にして、DNS と証明書も Cloudflare に管理させる。
+# 更新ファイルは R2 バケットのバインディング経由で返すため、
+# fumilume.kagayoi.com を R2 の custom domain として直結させる必要はない。
+name = "fumilume-landing"
+main = "worker.js"
+compatibility_date = "2026-05-01"
+
+[[routes]]
+pattern = "fumilume.kagayoi.com"
+custom_domain = true
+
+[[r2_buckets]]
+binding = "UPDATES"
+bucket_name = "fumilume-updates"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
+# ヒーロー画像等のバイナリ資産を Worker バンドルへ同梱する
+[[rules]]
+type = "Data"
+globs = ["**/*.png"]
+fallthrough = false
+
+# 配信障害（R2 不調等）を事後調査できるよう Workers Logs を有効化する
+[observability]
+enabled = true
