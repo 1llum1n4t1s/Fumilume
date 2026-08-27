@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
@@ -55,7 +56,7 @@ public sealed partial class MainWindow : Window
         ApplyEditorOptions();
         ApplyTabHeight();
 
-        BuildCommandMenu();
+        BuildEditorContextMenu();
         RoundedClip.Attach(this.FindControl<Border>("ContentIsland"));
         ApplyWindowDecorations(WindowState);
         ApplyBackdrop();
@@ -65,7 +66,14 @@ public sealed partial class MainWindow : Window
         _options.PropertyChanged += OnOptionsPropertyChanged;
         _editor.TextArea.Caret.PositionChanged += OnEditorCaretPositionChanged;
         _editor.TextArea.SelectionChanged += OnEditorSelectionChanged;
+
+        // キーボードマクロの記録。移動と削除は AvaloniaEdit が処理する前に見たいので Tunnel で受ける
+        // （読むだけで Handled は立てない）。打った文字そのものは TextEntered から拾う。
+        _editor.TextArea.AddHandler(KeyDownEvent, OnEditorKeyDownForMacro, RoutingStrategies.Tunnel);
+        _editor.TextArea.TextEntered += OnEditorTextEnteredForMacro;
         AddHandler(KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
+        // システムのライト・ダーク切り替えにも強調表示の配色を追従させる。
+        ActualThemeVariantChanged += (_, _) => ApplySyntaxHighlighting();
         BindSelectedDocument();
 
         Opened += OnOpened;
@@ -126,6 +134,8 @@ public sealed partial class MainWindow : Window
         _editor.FontFamily = new FontFamily(EditorFontFamily.ToAvalonia(_options.EditorFontFamily));
         _editor.FontSize = _options.EditorFontSize;
 
+        ApplySyntaxHighlighting();
+
         // AvaloniaEdit の既定色（緑系）を使わず、テーマに合う青系へ固定する。
         var textView = _editor.TextArea.TextView;
         if (textView.TryFindResource("EditorCurrentLineBg", textView.ActualThemeVariant, out var currentLineBackground))
@@ -146,6 +156,17 @@ public sealed partial class MainWindow : Window
     /// ここを 1 箇所書き換えれば両方が追従する（DataTemplate の DataContext はタブ側の
     /// ビューモデルなので、テンプレートから設定を辿らせずに済ませたい）。</summary>
     private void ApplyTabHeight() => Resources["TabItemHeight"] = _options.TabHeight;
+
+    /// <summary>
+    /// 今の文書に合う強調表示を当てる。同梱の定義はライト前提の配色なので、
+    /// 当てる前に今のテーマへ合わせて色を整える。
+    /// </summary>
+    private void ApplySyntaxHighlighting()
+        => _editor.SyntaxHighlighting = _options.EnableSyntaxHighlighting
+            ? SyntaxHighlightingService.Resolve(
+                _boundDocument?.FilePath,
+                ActualThemeVariant == ThemeVariant.Dark)
+            : null;
 
     /// <summary>ウィンドウの継承フォントを変え、明示指定されたアイコンとエディタは各自の設定を保つ。</summary>
     private void ApplyUiFontOptions()
@@ -280,6 +301,7 @@ public sealed partial class MainWindow : Window
         _boundDocument.PropertyChanged += OnBoundDocumentPropertyChanged;
         _boundDocument.Bookmarks.Changed += OnBookmarksChanged;
         _editor.Document = _boundDocument.EditorDocument;
+        ApplySyntaxHighlighting();
         RestoreCaretFromDocument(scrollIntoView: false);
         InvalidateBookmarks();
     }
@@ -379,6 +401,11 @@ public sealed partial class MainWindow : Window
         {
             RestoreSelectionFromDocument();
         }
+        else if (args.PropertyName == nameof(DocumentViewModel.FilePath))
+        {
+            // 名前を付けて保存で拡張子が決まったら、その場で強調表示を切り替える。
+            ApplySyntaxHighlighting();
+        }
     }
 
     /// <summary>コマンドが動かした選択範囲をエディタへ映す（続けて別の変換を掛けられるように）。</summary>
@@ -430,27 +457,39 @@ public sealed partial class MainWindow : Window
     // ===== コマンドメニューとコマンドパレット =====
 
     /// <summary>
-    /// ツールバーの「コマンド」メニューを <see cref="EditorCommandCatalog"/> から組む。
+    /// エディタの右クリックメニューを <see cref="EditorCommandCatalog"/> から組む。
     ///
-    /// <c>MenuFlyout.ItemsSource</c> でデータバインドすると、階層メニューの Header と
-    /// ItemsSource をリフレクション束縛（<c>ReflectionBinding</c>）で引くことになり、
-    /// <c>PublishAot</c> のトリミングで落ちる。項目数は起動時に確定するので、ここで組み立てる。
+    /// 変換・整形の類は「今どこを選んでいるか」が決まって初めて意味を持つので、常時見えるツールバーではなく
+    /// 選択したその場に出す。ツールバーへ並べていた区分ボタン 4 つの置き換えでもある。
+    ///
+    /// <c>MenuFlyout.ItemsSource</c> でデータバインドすると、階層メニューの Header と ItemsSource を
+    /// リフレクション束縛（<c>ReflectionBinding</c>）で引くことになり、<c>PublishAot</c> のトリミングで
+    /// 落ちる。項目数は起動時に確定するので、ここで組み立てる。
     /// </summary>
-    private void BuildCommandMenu()
+    private void BuildEditorContextMenu()
     {
-        foreach (var icon in EditorCommandCatalog.CategoryIcons)
-        {
-            var group = _viewModel.EditorMenu.FirstOrDefault(node => node.Title == icon.Category);
-            var button = this.FindControl<Button>(icon.ButtonName);
-            if (group is null || button is null)
-            {
-                continue;
-            }
+        var cut = CreateEditorAction("切り取り", new KeyGesture(Key.X, KeyModifiers.Control), () => _editor.Cut());
+        var copy = CreateEditorAction("コピー", new KeyGesture(Key.C, KeyModifiers.Control), () => _editor.Copy());
+        var paste = CreateEditorAction("貼り付け", new KeyGesture(Key.V, KeyModifiers.Control), () => _editor.Paste());
+        var selectAll = CreateEditorAction("すべて選択", new KeyGesture(Key.A, KeyModifiers.Control), () => _editor.SelectAll());
 
-            var flyout = new MenuFlyout();
+        var flyout = new MenuFlyout();
+        flyout.Items.Add(cut);
+        flyout.Items.Add(copy);
+        flyout.Items.Add(paste);
+        flyout.Items.Add(selectAll);
+        flyout.Items.Add(new Separator());
+
+        foreach (var group in _viewModel.EditorMenu)
+        {
+            var parent = new MenuItem
+            {
+                Header = group.Title,
+                Icon = CreateCategoryIcon(group.Title),
+            };
             foreach (var leaf in group.Children)
             {
-                flyout.Items.Add(new MenuItem
+                parent.Items.Add(new MenuItem
                 {
                     Header = leaf.Title,
                     Command = leaf.Command,
@@ -459,8 +498,35 @@ public sealed partial class MainWindow : Window
                 });
             }
 
-            button.Flyout = flyout;
+            flyout.Items.Add(parent);
         }
+
+        // 選択が要る項目は、開くたびに今の状態で判断する。
+        flyout.Opening += (_, _) =>
+        {
+            var hasSelection = _editor.SelectionLength > 0;
+            cut.IsEnabled = hasSelection;
+            copy.IsEnabled = hasSelection;
+        };
+
+        _editor.ContextFlyout = flyout;
+    }
+
+    private static MenuItem CreateEditorAction(string header, KeyGesture gesture, Action run)
+    {
+        var item = new MenuItem { Header = header, InputGesture = gesture };
+        item.Click += (_, _) => run();
+        return item;
+    }
+
+    /// <summary>区分の見出しに添えるアイコン。対応が無ければ何も付けない。</summary>
+    private static Control? CreateCategoryIcon(string category)
+    {
+        var glyph = EditorCommandCatalog.CategoryIcons
+            .FirstOrDefault(icon => icon.Category == category)?.Glyph;
+        return glyph is null
+            ? null
+            : new TextBlock { Text = glyph, FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 14 };
     }
 
     /// <summary>メニュー右端へ出すキー表示。読めない書式は表示しないだけで、機能は動く。</summary>
@@ -554,6 +620,16 @@ public sealed partial class MainWindow : Window
 
     private void OnGlobalKeyDown(object? sender, KeyEventArgs args)
     {
+        // フォルダ横断検索はどのタブを見ていても始められる（結果タブからの再検索を含む）。
+        if (args.KeyModifiers.HasFlag(KeyModifiers.Control)
+            && args.KeyModifiers.HasFlag(KeyModifiers.Shift)
+            && args.Key == Key.F)
+        {
+            _viewModel.GrepCommand.Execute(null);
+            args.Handled = true;
+            return;
+        }
+
         if (!_viewModel.IsDocumentSelected)
         {
             return;
@@ -582,11 +658,69 @@ public sealed partial class MainWindow : Window
             else
             {
                 _searchPanel.FindNext(_editor.CaretOffset);
+                _viewModel.RecordMacroStep(new MacroStep
+                {
+                    Kind = MacroStepKind.FindNext,
+                    Text = _searchPanel.SearchPattern ?? string.Empty,
+                    MatchCase = _searchPanel.MatchCase,
+                    UseRegex = _searchPanel.UseRegex,
+                });
             }
 
             args.Handled = true;
         }
     }
+
+    // ===== キーボードマクロの記録 =====
+
+    /// <summary>
+    /// カーソル移動・削除・改行・タブを 1 手として記録する。文字入力は
+    /// <see cref="OnEditorTextEnteredForMacro"/> が受けるので、ここでは扱わない。
+    /// </summary>
+    private void OnEditorKeyDownForMacro(object? sender, KeyEventArgs args)
+    {
+        if (!_viewModel.IsCapturingMacro)
+        {
+            return;
+        }
+
+        var ctrl = args.KeyModifiers.HasFlag(KeyModifiers.Control);
+        var shift = args.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        var step = args.Key switch
+        {
+            Key.Left => Motion(ctrl ? MacroMotion.WordLeft : MacroMotion.CharacterLeft, shift),
+            Key.Right => Motion(ctrl ? MacroMotion.WordRight : MacroMotion.CharacterRight, shift),
+            Key.Up => Motion(MacroMotion.LineUp, shift),
+            Key.Down => Motion(MacroMotion.LineDown, shift),
+            Key.Home => Motion(ctrl ? MacroMotion.DocumentStart : MacroMotion.LineStart, shift),
+            Key.End => Motion(ctrl ? MacroMotion.DocumentEnd : MacroMotion.LineEnd, shift),
+            Key.Back => new MacroStep { Kind = MacroStepKind.DeleteBack },
+            Key.Delete => new MacroStep { Kind = MacroStepKind.DeleteForward },
+            Key.Enter or Key.Return => new MacroStep { Kind = MacroStepKind.InsertText, Text = "\n" },
+
+            // Tab は、実際に文字が入るときだけ記録する。選択があるときは字下げ、
+            // AcceptsTab が切れているときはフォーカス移動になり、文字は入らない。
+            Key.Tab when !shift && _editor.Options.AcceptsTab && _editor.SelectionLength == 0
+                => new MacroStep { Kind = MacroStepKind.InsertText, Text = "\t" },
+            _ => null,
+        };
+
+        if (step is not null)
+        {
+            _viewModel.RecordMacroStep(step);
+        }
+    }
+
+    private void OnEditorTextEnteredForMacro(object? sender, TextInputEventArgs args)
+    {
+        if (_viewModel.IsCapturingMacro && !string.IsNullOrEmpty(args.Text))
+        {
+            _viewModel.RecordMacroStep(new MacroStep { Kind = MacroStepKind.InsertText, Text = args.Text });
+        }
+    }
+
+    private static MacroStep Motion(MacroMotion motion, bool extendSelection)
+        => new() { Kind = MacroStepKind.MoveCaret, Motion = motion, ExtendSelection = extendSelection };
 
     private void OpenSearch(bool replace)
     {
@@ -602,6 +736,25 @@ public sealed partial class MainWindow : Window
         _searchPanel.IsReplaceMode = replace;
         _searchPanel.Open();
         Dispatcher.UIThread.Post(_searchPanel.Reactivate, DispatcherPriority.Loaded);
+    }
+
+    // ===== フォルダ横断検索の結果 =====
+
+    private void GrepResults_DoubleTapped(object? sender, TappedEventArgs args)
+    {
+        _viewModel.SelectedGrep?.OpenSelectedCommand.Execute(null);
+        args.Handled = true;
+    }
+
+    private void GrepResults_KeyDown(object? sender, KeyEventArgs args)
+    {
+        if (args.Key is not (Key.Enter or Key.Return))
+        {
+            return;
+        }
+
+        _viewModel.SelectedGrep?.OpenSelectedCommand.Execute(null);
+        args.Handled = true;
     }
 
     private void Find_Click(object? sender, RoutedEventArgs args)
@@ -662,13 +815,21 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            if (await _viewModel.CanCloseAsync())
+            if (!await _viewModel.CanCloseAsync())
             {
-                SaveWindowBounds();
-                _viewModel.PersistSessionState();
-                _closeConfirmed = true;
-                Close();
+                return;
             }
+
+            SaveWindowBounds();
+
+            // 未保存の内容をセッションへ預けられなかったときは閉じない（黙って捨てるより止まる）。
+            if (!await _viewModel.PersistSessionStateAsync())
+            {
+                return;
+            }
+
+            _closeConfirmed = true;
+            Close();
         }
         finally
         {

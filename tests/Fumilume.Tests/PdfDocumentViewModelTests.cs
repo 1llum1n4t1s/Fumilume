@@ -1,4 +1,5 @@
 using Avalonia.Media.Imaging;
+using Fumilume.Models;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 
@@ -44,12 +45,51 @@ public sealed class PdfDocumentViewModelTests(HeadlessAppFixture fixture)
         Assert.False(document.IsDocumentTab);
     }
 
+    /// <summary>
+    /// セッション復元は値を入れるだけでは足りない。ページ送りと拡大のコマンドは「今と同じ値」で
+    /// 早期に戻るため、復元後に描き直さないと画像が 1 ページ目・等倍のまま残る。
+    /// </summary>
+    [Fact]
+    public async Task RestoringAPdfViewStateRedrawsAtThatPageAndZoom()
+    {
+        using var renderer = new StubPdfRenderer(pageCount: 3);
+        using var document = new PdfDocumentViewModel(@"C:\tmp\guide.pdf", renderer, _ => Task.CompletedTask);
+        var rendersWhileOpening = renderer.Renders.Count;
+
+        await MainWindowViewModel.ApplyPdfViewStateAsync(
+            document,
+            new SessionTabState { PdfPage = 3, PdfZoom = 2.0 });
+
+        Assert.Equal(3, document.CurrentPage);
+        Assert.Equal(2.0, document.Zoom);
+        Assert.True(renderer.Renders.Count > rendersWhileOpening, "復元後に描き直していません。");
+        Assert.Equal((2, 2.0), renderer.Renders[^1]);
+    }
+
+    [Fact]
+    public async Task ARestoredPdfZoomStaysInsideTheSupportedRange()
+    {
+        using var renderer = new StubPdfRenderer(pageCount: 1);
+        using var document = new PdfDocumentViewModel(@"C:\tmp\guide.pdf", renderer, _ => Task.CompletedTask);
+
+        await MainWindowViewModel.ApplyPdfViewStateAsync(
+            document,
+            new SessionTabState { PdfPage = 9, PdfZoom = 99 });
+
+        Assert.Equal(1, document.CurrentPage);
+        Assert.Equal(4.0, document.Zoom);
+    }
+
     private sealed class StubPdfRenderer(int pageCount) : IPdfRenderer
     {
         public int PageCount { get; } = pageCount;
 
+        /// <summary>描画要求の記録。復元が実際に描き直したかを見るために使う。</summary>
+        public List<(int PageIndex, double Zoom)> Renders { get; } = [];
+
         public Task<Bitmap> RenderAsync(int pageIndex, double zoom, CancellationToken cancellationToken = default)
         {
+            Renders.Add((pageIndex, zoom));
             using var stream = new MemoryStream(
             [
                 137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,

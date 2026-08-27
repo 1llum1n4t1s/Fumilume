@@ -25,5 +25,8 @@ public interface IEditorDialogService
     /// <summary>はい / いいえを尋ねる。</summary>
     Task<bool> ConfirmAsync(string title, string message);
 
+    /// <summary>フォルダ横断検索の条件を尋ねる。取り消したときは <see langword="null"/>。</summary>
+    Task<GrepQuery?> PickGrepQueryAsync(GrepQuery initial);
+
     Task CheckForUpdatesAsync(bool manually);
 }

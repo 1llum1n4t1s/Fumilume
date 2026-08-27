@@ -230,6 +230,115 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
         return accepted;
     }
 
+    public async Task<GrepQuery?> PickGrepQueryAsync(GrepQuery initial)
+    {
+        var pattern = new TextBox { Text = initial.Pattern, PlaceholderText = "探す文字列" };
+        var folder = new TextBox { Text = initial.Folder, PlaceholderText = @"例: C:\work" };
+        var mask = new TextBox { Text = initial.FileMask, PlaceholderText = "*.txt;*.md" };
+        var subfolders = new CheckBox { Content = "下のフォルダも探す", IsChecked = initial.IncludeSubfolders };
+        var matchCase = new CheckBox { Content = "大文字と小文字を区別する", IsChecked = initial.MatchCase };
+        var useRegex = new CheckBox { Content = "正規表現で探す", IsChecked = initial.UseRegex };
+        var browse = new Button { Content = "参照…", MinWidth = 76 };
+
+        var search = new Button { Content = "検索", IsDefault = true, MinWidth = 88 };
+        var cancel = new Button { Content = "キャンセル", IsCancel = true, MinWidth = 88 };
+        var dialog = new AppDialogWindow(
+            "フォルダから探す",
+            UseAcrylic,
+            new StackPanel
+            {
+                Spacing = 10,
+                Children =
+                {
+                    CreateFieldLabel("探す文字列"),
+                    pattern,
+                    CreateFieldLabel("探すフォルダ"),
+                    new Grid
+                    {
+                        ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                        Children = { folder, browse },
+                    },
+                    CreateFieldLabel("対象にするファイル（; で区切ります）"),
+                    mask,
+                    subfolders,
+                    matchCase,
+                    useRegex,
+                },
+            },
+            search,
+            cancel)
+        {
+            Width = 520,
+        };
+
+        Grid.SetColumn(browse, 1);
+        browse.Margin = new Avalonia.Thickness(8, 0, 0, 0);
+        browse.Click += async (_, _) =>
+        {
+            var picked = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "探すフォルダを選ぶ",
+                AllowMultiple = false,
+            });
+            if (picked.Count > 0 && picked[0].TryGetLocalPath() is { } path)
+            {
+                folder.Text = path;
+            }
+        };
+
+        void UpdateSearchState()
+            => search.IsEnabled = !string.IsNullOrEmpty(pattern.Text) && !string.IsNullOrWhiteSpace(folder.Text);
+
+        GrepQuery? result = null;
+        pattern.TextChanged += (_, _) => UpdateSearchState();
+        folder.TextChanged += (_, _) => UpdateSearchState();
+        search.Click += (_, _) =>
+        {
+            if (string.IsNullOrEmpty(pattern.Text) || string.IsNullOrWhiteSpace(folder.Text))
+            {
+                return;
+            }
+
+            result = new GrepQuery(
+                pattern.Text,
+                folder.Text.Trim(),
+                string.IsNullOrWhiteSpace(mask.Text) ? "*.*" : mask.Text.Trim(),
+                subfolders.IsChecked == true,
+                matchCase.IsChecked == true,
+                useRegex.IsChecked == true);
+            dialog.Close();
+        };
+        cancel.Click += (_, _) => dialog.Close();
+        dialog.AddHandler(
+            InputElement.KeyDownEvent,
+            (_, args) =>
+            {
+                if (args.Key == Key.Escape)
+                {
+                    args.Handled = true;
+                    dialog.Close();
+                }
+            },
+            RoutingStrategies.Tunnel);
+        dialog.Opened += (_, _) =>
+        {
+            pattern.SelectAll();
+            pattern.Focus();
+        };
+        UpdateSearchState();
+
+        await dialog.ShowDialog(owner);
+        return result;
+    }
+
+    private static TextBlock CreateFieldLabel(string text)
+        => new()
+        {
+            Text = text,
+            FontSize = 12.5,
+            Margin = new Avalonia.Thickness(0, 4, 0, 0),
+        };
+
     private static TextBlock CreateMessage(string message)
         => new()
         {

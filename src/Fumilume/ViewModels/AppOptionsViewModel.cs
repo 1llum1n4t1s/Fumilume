@@ -47,6 +47,13 @@ public sealed class AppOptionsViewModel : ObservableObject
         set => SetOption(_settings.HighlightCurrentLine, value, v => _settings.HighlightCurrentLine = v);
     }
 
+    /// <summary>拡張子に応じた構文の色分け。</summary>
+    public bool EnableSyntaxHighlighting
+    {
+        get => _settings.EnableSyntaxHighlighting;
+        set => SetOption(_settings.EnableSyntaxHighlighting, value, v => _settings.EnableSyntaxHighlighting = v);
+    }
+
     public bool ShowColumnRuler
     {
         get => _settings.ShowColumnRuler;
@@ -279,6 +286,13 @@ public sealed class AppOptionsViewModel : ObservableObject
         set => SetOption(_settings.ConfirmOnExit, value, v => _settings.ConfirmOnExit = v);
     }
 
+    /// <summary>終了時のタブを次回起動時に復元する。ON の間は未保存でも確認せずに閉じられる。</summary>
+    public bool RestoreSession
+    {
+        get => _settings.RestoreSession;
+        set => SetOption(_settings.RestoreSession, value, v => _settings.RestoreSession = v);
+    }
+
     // ===== 外観 =====
 
     /// <summary>"System" / "Light" / "Dark"。設定タブの ComboBox が Tag 経由でこの文字列を渡す。</summary>
@@ -330,7 +344,39 @@ public sealed class AppOptionsViewModel : ObservableObject
         set => SetOption(_settings.CheckUpdatesOnStartup, value, v => _settings.CheckUpdatesOnStartup = v);
     }
 
+    /// <summary>次に検索を開くときの初期値として、使った条件を覚える。</summary>
+    public void RememberGrepQuery(GrepQuery query)
+    {
+        _settings.GrepPattern = query.Pattern;
+        _settings.GrepFolder = query.Folder;
+        _settings.GrepFileMask = query.FileMask;
+        _settings.GrepIncludeSubfolders = query.IncludeSubfolders;
+
+        // 大文字小文字と正規表現は 1 ファイル内の検索と同じ設定を使う（別々に覚えると食い違う）。
+        SearchMatchCase = query.MatchCase;
+        SearchUseRegex = query.UseRegex;
+        Persist();
+    }
+
     /// <summary>ビュー側（ウィンドウ位置の保存など）が設定を直接書き換えたあとの保存経路。</summary>
+    // ===== 左サイドのパネル =====
+
+    /// <summary>前回開いていた左パネル。設定タブには出さず、操作した結果だけを覚える。</summary>
+    public SidePanelKind SidePanel
+        => Enum.TryParse<SidePanelKind>(_settings.SidePanel, out var kind) ? kind : SidePanelKind.Tabs;
+
+    public void RememberSidePanel(SidePanelKind kind)
+    {
+        var name = kind.ToString();
+        if (string.Equals(_settings.SidePanel, name, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _settings.SidePanel = name;
+        Persist();
+    }
+
     public void Persist() => SettingsService.Save(_settings);
 
     private bool SetOption<T>(T current, T value, Action<T> assign, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)

@@ -36,6 +36,9 @@ public abstract partial class WorkspaceTabViewModel : ObservableObject
     /// <summary>PDF 表示タブかどうか。</summary>
     public virtual bool IsPdfTab => false;
 
+    /// <summary>フォルダ横断検索の結果タブかどうか。</summary>
+    public virtual bool IsGrepTab => false;
+
     [RelayCommand]
     private Task CloseTabAsync() => _closeAsync(this);
 }

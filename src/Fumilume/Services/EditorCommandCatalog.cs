@@ -83,15 +83,15 @@ public static class EditorCommandCatalog
     public const string JumpCategory = "検索・移動";
 
     /// <summary>
-    /// ツールバーの区分ごとのボタン名（<c>x:Name</c>）とアイコン。
+    /// 区分の見出しへ添えるアイコン。
     /// アイコンは Segoe Fluent Icons のコードポイントで、フォントに実在することを確認済み。
     /// </summary>
     public static IReadOnlyList<EditorCommandCategoryIcon> CategoryIcons { get; } =
     [
-        new(EditCategory, "EditMenuButton", ""),
-        new(ConvertCategory, "ConvertMenuButton", ""),
-        new(InsertCategory, "InsertMenuButton", ""),
-        new(JumpCategory, "JumpMenuButton", ""),
+        new(EditCategory, ""),
+        new(ConvertCategory, ""),
+        new(InsertCategory, ""),
+        new(JumpCategory, ""),
     ];
 
     public static IReadOnlyList<EditorCommandDefinition> All { get; } =
@@ -162,8 +162,7 @@ public static class EditorCommandCatalog
 /// <summary>メニュー 1 段ぶん。</summary>
 public sealed record EditorCommandGroup(string Category, IReadOnlyList<EditorCommandDefinition> Commands);
 
-/// <summary>ツールバーに並べる区分アイコン 1 個ぶん。</summary>
+/// <summary>区分の見出しに添えるアイコン 1 個ぶん。</summary>
 /// <param name="Category">対応する区分名。</param>
-/// <param name="ButtonName">XAML 側のボタンの <c>x:Name</c>。</param>
 /// <param name="Glyph">Segoe Fluent Icons のグリフ。</param>
-public sealed record EditorCommandCategoryIcon(string Category, string ButtonName, string Glyph);
+public sealed record EditorCommandCategoryIcon(string Category, string Glyph);

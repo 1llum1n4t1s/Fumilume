@@ -35,12 +35,18 @@ public sealed partial class MainWindowViewModel
     private string _commandPaletteQuery = string.Empty;
 
     [ObservableProperty]
-    private EditorCommandDefinition? _selectedPaletteCommand;
+    private CommandPaletteEntry? _selectedPaletteCommand;
 
     /// <summary>絞り込み後の候補。</summary>
-    public ObservableCollection<EditorCommandDefinition> CommandPaletteResults { get; } = [];
+    public ObservableCollection<CommandPaletteEntry> CommandPaletteResults { get; } = [];
 
-    [RelayCommand(CanExecute = nameof(IsDocumentSelected))]
+    /// <summary>ワークスペース操作の区分名。文書コマンドの区分と並べても意味が混ざらない粒度にする。</summary>
+    private const string FileCategory = "ファイル";
+    private const string ViewCategory = "表示";
+    private const string SearchCategory = "検索";
+    private const string MacroCategory = "マクロ";
+
+    [RelayCommand]
     private void OpenCommandPalette()
     {
         CommandPaletteQuery = string.Empty;
@@ -54,13 +60,13 @@ public sealed partial class MainWindowViewModel
     [RelayCommand]
     private Task RunSelectedPaletteCommandAsync()
     {
-        if (SelectedPaletteCommand is not { } definition)
+        if (SelectedPaletteCommand is not { } entry)
         {
             return Task.CompletedTask;
         }
 
         IsCommandPaletteOpen = false;
-        return RunEditorCommandAsync(definition.Id);
+        return entry.RunAsync();
     }
 
     partial void OnCommandPaletteQueryChanged(string value) => RefreshCommandPaletteResults();
@@ -69,28 +75,126 @@ public sealed partial class MainWindowViewModel
     {
         var query = CommandPaletteQuery.Trim();
         CommandPaletteResults.Clear();
-        foreach (var definition in EditorCommandCatalog.All)
+        foreach (var entry in EnumeratePaletteEntries())
         {
-            if (query.Length == 0 || Matches(definition, query))
+            if (query.Length == 0 || Matches(entry, query))
             {
-                CommandPaletteResults.Add(definition);
+                CommandPaletteResults.Add(entry);
             }
         }
 
         SelectedPaletteCommand = CommandPaletteResults.FirstOrDefault();
     }
 
-    private static bool Matches(EditorCommandDefinition definition, string query)
-        => definition.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
-            || definition.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// パレットへ並べる候補。今の状態で実行できるものだけを出す
+    /// （設定タブを見ているときに「大文字へ変換」を出しても押せないため）。
+    /// </summary>
+    private IEnumerable<CommandPaletteEntry> EnumeratePaletteEntries()
+    {
+        yield return Entry(FileCategory, "新しい文書", "Ctrl+N", NewDocument);
+        yield return Entry(FileCategory, "ファイルを開く", "Ctrl+O", () => OpenAsync());
+
+        if (IsDocumentSelected)
+        {
+            yield return Entry(FileCategory, "保存", "Ctrl+S", () => SaveAsync());
+            yield return Entry(FileCategory, "名前を付けて保存", "Ctrl+Shift+S", () => SaveAsAsync());
+        }
+
+        if (Documents.Any(document => document.IsModified))
+        {
+            yield return Entry(FileCategory, "すべて保存", "Ctrl+Alt+S", () => SaveAllAsync());
+        }
+
+        if (CanReload())
+        {
+            yield return Entry(FileCategory, "ディスクから開き直す", "Ctrl+Shift+R", () => ReloadAsync());
+        }
+
+        if (SelectedTab is { } tab)
+        {
+            yield return Entry(FileCategory, "このタブを閉じる", null, () => CloseTabCoreAsync(tab));
+        }
+
+        yield return Entry(SearchCategory, "フォルダから探す", "Ctrl+Shift+F", () => GrepAsync());
+
+        if (CanToggleMarkdownPreview())
+        {
+            yield return Entry(ViewCategory, "Markdown プレビューを切り替え", "Ctrl+Shift+M", ToggleMarkdownPreview);
+        }
+
+        yield return Entry(ViewCategory, "設定を開く", "Ctrl+,", () => EnsureSettingsTab(select: true));
+        yield return Entry(ViewCategory, "更新を確認", null, () => _dialogs.CheckForUpdatesAsync(manually: true));
+
+        yield return Entry(MacroCategory, MacroRecordingTitle, "Shift+F1", ToggleMacroRecording);
+        if (HasRecordedMacro)
+        {
+            yield return Entry(MacroCategory, "マクロを実行", "Shift+F5", () => RunMacroAsync());
+            yield return Entry(MacroCategory, "回数を指定してマクロを実行", null, () => RunMacroRepeatedlyAsync());
+            yield return Entry(MacroCategory, "マクロに名前を付けて保存", null, () => SaveMacroAsAsync());
+        }
+
+        foreach (var macro in SavedMacros)
+        {
+            var saved = macro;
+            yield return Entry(MacroCategory, $"{saved.Name}（{saved.Summary}）", null, () => RunSavedMacroAsync(saved));
+        }
+
+        if (!IsDocumentSelected)
+        {
+            yield break;
+        }
+
+        foreach (var definition in EditorCommandCatalog.All)
+        {
+            yield return new CommandPaletteEntry(
+                definition.Category,
+                definition.Title,
+                definition.Gesture,
+                () => RunEditorCommandAsync(definition.Id));
+        }
+    }
+
+    private static CommandPaletteEntry Entry(string category, string title, string? gesture, Func<Task> run)
+        => new(category, title, gesture, run);
+
+    private static CommandPaletteEntry Entry(string category, string title, string? gesture, Action run)
+        => new(category, title, gesture, () =>
+        {
+            run();
+            return Task.CompletedTask;
+        });
+
+    private static bool Matches(CommandPaletteEntry entry, string query)
+        => entry.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || entry.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// 非同期なのは「パターンに一致する行をマーク」だけが入力ダイアログを開くため。
     /// 他の分岐は最初の <c>await</c> まで同期で走り切るので、キー割り当てからの体感は変わらない。
     /// </summary>
+    /// <summary>
+    /// マクロに記録しないコマンド。どちらも入力ダイアログを開くので、記録できても再生時に止まる。
+    /// 再生側で読み飛ばすのではなく記録の時点で弾くのは、一覧に「動かない手」を残さないため。
+    /// </summary>
+    private static readonly EditorCommandId[] NotRecordable =
+        [EditorCommandId.GoToLine, EditorCommandId.BookmarkPattern];
+
     [RelayCommand(CanExecute = nameof(IsDocumentSelected))]
     private async Task RunEditorCommandAsync(EditorCommandId commandId)
     {
+        if (IsCapturingMacro)
+        {
+            if (NotRecordable.Contains(commandId))
+            {
+                StatusMessage = "この操作はマクロに記録できません（入力を尋ねるため）";
+            }
+            else
+            {
+                RecordMacroStep(new MacroStep { Kind = MacroStepKind.Command, Command = commandId });
+            }
+        }
+
         if (SelectedDocument is not { } document)
         {
             return;

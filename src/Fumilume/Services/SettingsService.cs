@@ -16,6 +16,9 @@ public sealed class AppSettings
 
     public bool HighlightCurrentLine { get; set; } = true;
 
+    /// <summary>拡張子に応じた構文の色分け（秀丸の「強調表示」相当）。</summary>
+    public bool EnableSyntaxHighlighting { get; set; } = true;
+
     /// <summary>指定桁に縦線を引く（sakura のタイプ別設定『スクリーン』の指定桁縦線）。</summary>
     public bool ShowColumnRuler { get; set; }
 
@@ -87,6 +90,22 @@ public sealed class AppSettings
     /// <summary>検索を開くときカーソル位置の単語を初期値にする（sakura の m_bCaretTextForSearch）。</summary>
     public bool SearchUseCaretWord { get; set; } = true;
 
+    // ===== フォルダ横断検索（秀丸の grep 相当） =====
+    /// <summary>前回探した文字列。次に検索を開いたときの初期値になる。</summary>
+    public string GrepPattern { get; set; } = string.Empty;
+
+    /// <summary>前回探したフォルダ。</summary>
+    public string GrepFolder { get; set; } = string.Empty;
+
+    /// <summary>対象にするファイル名のパターン（<c>;</c> 区切り）。</summary>
+    public string GrepFileMask { get; set; } = AppSettingsDefaults.GrepFileMask;
+
+    public bool GrepIncludeSubfolders { get; set; } = true;
+
+    // ===== 左サイドのパネル =====
+    /// <summary>前回開いていた左パネル（SidePanelKind の名前。読めない値は「タブ一覧」へ倒す）。</summary>
+    public string SidePanel { get; set; } = "Tabs";
+
     // ===== ファイル（sakura の共通設定『ファイル』『バックアップ』相当） =====
     /// <summary>開き直したときに前回のカーソル位置へ戻す（sakura の m_bRestoreCurPosition）。</summary>
     public bool RestoreCaretPosition { get; set; } = true;
@@ -102,6 +121,12 @@ public sealed class AppSettings
 
     /// <summary>終了時に確認する（sakura の m_bExitConfirm）。未保存が無いときも尋ねる。</summary>
     public bool ConfirmOnExit { get; set; }
+
+    /// <summary>
+    /// 終了時のタブを次回起動時に復元する（メモ帳と同じ扱い）。
+    /// ON のときは未保存のまま閉じられ、内容は session.json 側へ引き継がれる。
+    /// </summary>
+    public bool RestoreSession { get; set; } = true;
 
     /// <summary>前回のカーソル位置を覚えておく入れ物（パス → 文字位置）。</summary>
     public Dictionary<string, int> CaretPositions { get; set; } = [];
@@ -133,9 +158,6 @@ public sealed class AppSettings
 
     // ===== 更新 =====
     public bool CheckUpdatesOnStartup { get; set; } = true;
-
-    /// <summary>設定タブを開いた状態で終了したか。次回起動時に同じ状態へ戻す。</summary>
-    public bool SettingsTabOpen { get; set; }
 }
 
 /// <summary>既定値の正本。<see cref="AppSettings"/> の初期化と <see cref="SettingsService"/> の
@@ -151,6 +173,7 @@ internal static class AppSettingsDefaults
     public const int ColumnRulerPosition = 80;
     public const double LineHeightFactor = 1.0;
     public const int LargeFileThresholdMegabytes = 32;
+    public const string GrepFileMask = "*.*";
     public const double TabHeight = 34;
 
     public const double MinimumFontSize = 8;

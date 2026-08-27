@@ -46,6 +46,62 @@
         <Setter Property="BorderThickness" Value="0" />
     </Style>
 
+    <!-- 左サイドのパネル切り替え。今どの面を見ているかは塗りで示す（文言を入れる幅が無い）。 -->
+    <Style Selector="Button.panelswitch">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.panelswitch:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+    </Style>
+    <Style Selector="Button.panelswitch.active">
+        <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+
+    <!-- アウトラインとブックマークの一覧。縦タブより行を詰めて、一度に見える件数を稼ぐ。 -->
+    <Style Selector="ListBox.sidelist">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0,2" />
+    </Style>
+    <Style Selector="ListBox.sidelist ListBoxItem">
+        <Setter Property="Padding" Value="12,3" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <!-- 一覧が空のときの案内。空白のままだと「壊れている」と読めてしまう。 -->
+    <Style Selector="TextBlock.sideempty">
+        <Setter Property="Margin" Value="14,0" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+    </Style>
+
+    <!-- フォルダ横断検索の結果。1 行 1 一致なので、行を詰めて一覧性を優先する。 -->
+    <Style Selector="ListBox.grepresults">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="4,6" />
+    </Style>
+
+    <Style Selector="ListBox.grepresults ListBoxItem">
+        <Setter Property="Padding" Value="12,3" />
+        <Setter Property="MinHeight" Value="0" />
+    </Style>
+
     <!-- タブの閉じるボタンと、タブ一覧下の丸いアイコンボタン。 -->
     <Style Selector="Button.tabclose">
         <Setter Property="Width" Value="28" />
@@ -78,6 +134,24 @@
     </Style>
     <Style Selector="Button.command:disabled">
         <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <!-- 全機能の入口。押すボタンではなく「名前を入れて引く欄」に見せたいので、
+         検索欄と同じ角丸と枠を持たせる。 -->
+    <Style Selector="Button.palette">
+        <Setter Property="Width" Value="340" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Divider}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="14" />
+    </Style>
+    <Style Selector="Button.palette:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
     </Style>
 
     <Style Selector="ae|TextEditor.editor">

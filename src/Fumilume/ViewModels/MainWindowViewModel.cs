@@ -8,18 +8,31 @@ namespace Fumilume.ViewModels;
 
 public sealed partial class MainWindowViewModel : ObservableObject
 {
+    /// <summary>2 枚目以降の未保存文書に付く名前の前置き（採番の読み書きで共有する）。</summary>
+    private const string UntitledPrefix = "無題 ";
+
     private readonly IDocumentFileService _files;
     private readonly IEditorDialogService _dialogs;
+    private readonly IGrepService _grep;
     private int _untitledSequence;
+
+    /// <summary>起動時の復元処理。終了時はこれの完了を待ってからセッションを書き直す。</summary>
+    private Task? _initialization;
 
     public MainWindowViewModel(
         IDocumentFileService files,
         IEditorDialogService dialogs,
-        AppSettings? settings = null)
+        AppSettings? settings = null,
+        IGrepService? grep = null)
     {
         _files = files;
         _dialogs = dialogs;
+        // 検索は読み込みの経路を文書と揃えたいので、既定では同じファイルサービスの上に組む。
+        _grep = grep ?? new GrepService(files);
         Options = new AppOptionsViewModel(settings ?? new AppSettings());
+
+        // 生成プロパティ経由で入れると設定へ書き戻しが走るため、ここは補助フィールドへ直接入れる。
+        _sidePanel = Options.SidePanel;
         NewDocument();
     }
 
@@ -37,6 +50,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsSettingsSelected))]
     [NotifyPropertyChangedFor(nameof(SelectedPdf))]
     [NotifyPropertyChangedFor(nameof(IsPdfSelected))]
+    [NotifyPropertyChangedFor(nameof(SelectedGrep))]
+    [NotifyPropertyChangedFor(nameof(IsGrepSelected))]
     private WorkspaceTabViewModel? _selectedTab;
 
     [ObservableProperty]
@@ -58,6 +73,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public bool IsPdfSelected => SelectedTab is PdfDocumentViewModel;
 
+    public GrepResultTabViewModel? SelectedGrep => SelectedTab as GrepResultTabViewModel;
+
+    public bool IsGrepSelected => SelectedTab is GrepResultTabViewModel;
+
     /// <summary>開いている文書だけを取り出す（未保存確認や重複オープンの判定に使う）。</summary>
     public IEnumerable<DocumentViewModel> Documents => Tabs.OfType<DocumentViewModel>();
 
@@ -67,10 +86,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public string WindowTitle => $"{SelectedTab?.TabTitle ?? "Fumilume"} - Fumilume";
 
-    public string CurrentPath => SelectedDocument?.PathDisplay ?? SelectedPdf?.FilePath ?? "新しいテキスト文書";
+    public string CurrentPath => SelectedDocument?.PathDisplay
+        ?? SelectedPdf?.FilePath
+        ?? SelectedGrep?.Query.Describe()
+        ?? "新しいテキスト文書";
 
-    public async Task InitializeAsync(IEnumerable<string> startupArgs)
+    /// <summary>起動時の復元と引数のオープン。戻り値は <see cref="PersistSessionStateAsync"/> が待つ。</summary>
+    public Task InitializeAsync(IEnumerable<string> startupArgs)
+        => _initialization = InitializeCoreAsync(startupArgs);
+
+    private async Task InitializeCoreAsync(IEnumerable<string> startupArgs)
     {
+        // 前回終了時のタブを先に戻し、起動引数のファイルはその上へ開く（引数のタブが前面に来る）。
+        var session = Options.RestoreSession ? SessionStateService.Load() : new SessionState();
+        await RestoreSessionAsync(session);
+
         var paths = startupArgs.Where(File.Exists).ToArray();
         if (paths.Length > 0)
         {
@@ -78,7 +108,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         // 前回終了時に設定タブを開いていたなら同じ状態へ戻す（選択は文書のまま）。
-        if (Options.Settings.SettingsTabOpen)
+        if (session.SettingsTabOpen)
         {
             EnsureSettingsTab(select: false);
         }
@@ -86,6 +116,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public async Task<bool> CanCloseAsync()
     {
+        // タブを復元する設定なら、未保存でもそのまま閉じられる（内容は次回起動時に戻る）。
+        // 個別のタブを閉じるときは今までどおり確認する（そのタブは復元対象から外れるため）。
+        if (Options.RestoreSession)
+        {
+            return true;
+        }
+
         foreach (var document in Documents.Where(item => item.IsModified).ToArray())
         {
             if (!await ResolveUnsavedAsync(document))
@@ -97,24 +134,72 @@ public sealed partial class MainWindowViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>終了時に、次回復元したい状態を settings.json へ書き戻す。</summary>
-    public void PersistSessionState()
+    /// <summary>
+    /// 終了時に、次回復元したい状態を書き戻す。
+    ///
+    /// 未保存の文書は「確認せずに閉じる代わりにセッションへ預ける」約束なので、預け先へ書けなかった
+    /// ときは終了させない。書けたか（＝閉じてよいか）を戻り値で返す。
+    /// </summary>
+    public async Task<bool> PersistSessionStateAsync()
     {
-        Options.Settings.SettingsTabOpen = Tabs.Any(tab => tab.IsSettingsTab);
+        // 復元の途中で書くと、まだ戻していないタブの控えを「使われていない」と判断して消してしまう。
+        await WaitForInitializationAsync();
+
         foreach (var document in Documents)
         {
             RememberCaretPosition(document);
         }
 
         Options.Persist();
+
+        if (!Options.RestoreSession)
+        {
+            // 復元しない設定へ切り替えたあとに古い控えが残らないようにする。
+            SessionStateService.Clear();
+            return true;
+        }
+
+        if (SessionStateService.Save(CaptureSession()))
+        {
+            return true;
+        }
+
+        // 失われるものが無ければ、保存できなくても終了は妨げない。
+        if (!Documents.Any(document => document.IsModified))
+        {
+            return true;
+        }
+
+        await _dialogs.ShowErrorAsync(
+            "未保存の内容を引き継げません",
+            $"作業中の内容を {AppStoragePaths.Directory} へ控えられませんでした。\n\n"
+            + "空き容量とアクセス権を確認するか、必要な文書を保存してから終了してください。");
+        return false;
+    }
+
+    /// <summary>起動時の復元が終わるのを待つ。失敗していても終了処理は続ける。</summary>
+    private async Task WaitForInitializationAsync()
+    {
+        if (_initialization is not { } initialization)
+        {
+            return;
+        }
+
+        try
+        {
+            await initialization;
+        }
+        catch (Exception ex)
+        {
+            AppLogger.For<MainWindowViewModel>().Error("起動時の復元が失敗したまま終了処理へ入りました。", ex);
+        }
     }
 
     [RelayCommand]
     private void NewDocument()
     {
         _untitledSequence++;
-        var name = _untitledSequence == 1 ? "無題" : $"無題 {_untitledSequence}";
-        var document = new DocumentViewModel(name, CloseTabCoreAsync);
+        var document = new DocumentViewModel(UntitledNameFor(_untitledSequence), CloseTabCoreAsync);
         document.PropertyChanged += OnDocumentPropertyChanged;
         InsertContentTab(document);
         SelectedTab = document;
@@ -130,6 +215,70 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         var paths = await _dialogs.PickOpenPathsAsync();
         await OpenPathsAsync(paths);
+    }
+
+    /// <summary>フォルダを横断して探す（秀丸の grep 相当）。結果は専用のタブへ並べる。</summary>
+    [RelayCommand]
+    private async Task GrepAsync()
+    {
+        var query = await _dialogs.PickGrepQueryAsync(CreateInitialGrepQuery());
+        if (query is null)
+        {
+            return;
+        }
+
+        // 次に開くときの初期値として、条件をそのまま覚えておく。
+        Options.RememberGrepQuery(query);
+
+        var tab = new GrepResultTabViewModel(query, _grep, OpenGrepMatchAsync, CloseTabCoreAsync);
+        InsertContentTab(tab);
+        SelectedTab = tab;
+        await tab.RunAsync();
+        StatusMessage = tab.Status;
+    }
+
+    /// <summary>探す文字列は選択中の語、探す場所は今の文書のフォルダを初期値にする。</summary>
+    private GrepQuery CreateInitialGrepQuery()
+    {
+        var settings = Options.Settings;
+        var pattern = SelectedDocument?.SelectedText is { Length: > 0 } selected && !selected.Contains('\n')
+            ? selected
+            : settings.GrepPattern;
+        var folder = SelectedDocument?.FilePath is { } path
+            ? Path.GetDirectoryName(path) ?? settings.GrepFolder
+            : settings.GrepFolder;
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+        {
+            folder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        }
+
+        return new GrepQuery(
+            pattern,
+            folder,
+            settings.GrepFileMask,
+            settings.GrepIncludeSubfolders,
+            Options.SearchMatchCase,
+            Options.SearchUseRegex);
+    }
+
+    /// <summary>検索結果の 1 行からファイルを開き、その行を選択して見せる。</summary>
+    private async Task OpenGrepMatchAsync(GrepMatch match)
+    {
+        await OpenPathsAsync([match.FilePath]);
+        if (SelectedDocument is not { } document)
+        {
+            return;
+        }
+
+        var editorDocument = document.EditorDocument;
+        var lineNumber = Math.Clamp(match.LineNumber, 1, editorDocument.LineCount);
+        var line = editorDocument.GetLineByNumber(lineNumber);
+
+        // 一致した桁へカーソルを置き、行全体を選択して目で追えるようにする。
+        document.CaretIndex = Math.Clamp(line.Offset + match.Column - 1, line.Offset, line.EndOffset);
+        document.SelectionStart = line.Offset;
+        document.SelectionLength = line.Length;
+        StatusMessage = $"{Path.GetFileName(match.FilePath)} の {lineNumber:N0} 行目へ移動しました";
     }
 
     public async Task OpenPathsAsync(IEnumerable<string> paths)
@@ -356,6 +505,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             pdf.Dispose();
         }
+        else if (tab is GrepResultTabViewModel grep)
+        {
+            // 検索中に閉じられたら、走っている検索も止める。
+            grep.Dispose();
+        }
         else if (tab is SettingsTabViewModel)
         {
             SettingsTab = null;
@@ -365,7 +519,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Tabs.Remove(tab);
 
         // 表示できるタブが 1 つも無い状態は作らない（設定タブだけになったら空文書を用意する）。
-        if (!Tabs.Any(item => item is DocumentViewModel or PdfDocumentViewModel))
+        if (!Tabs.Any(item => item is DocumentViewModel or PdfDocumentViewModel or GrepResultTabViewModel))
         {
             NewDocument();
             return;
@@ -494,6 +648,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
         NotifyDocumentCommandsChanged();
+        OnSelectedTabChangedForSidePanel();
     }
 
     private void OnDocumentPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -529,6 +684,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(CanRedo));
             RedoCommand.NotifyCanExecuteChanged();
         }
+
+        if (args.PropertyName == nameof(DocumentViewModel.Text))
+        {
+            OnSelectedTextChangedForSidePanel();
+        }
     }
 
     private void NotifyDocumentCommandsChanged()
@@ -550,14 +710,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        var pristine = Documents.FirstOrDefault(document =>
-            document.FilePath is null && !document.IsModified && document.Text.Length == 0);
+        var pristine = Documents.FirstOrDefault(IsPristine);
         if (pristine is null)
         {
             return;
         }
 
-        pristine.PropertyChanged -= OnDocumentPropertyChanged;
+        DetachDocument(pristine);
         Tabs.Remove(pristine);
     }
+
+    /// <summary>一度も触られていない空の新規文書か（開いた文書に押し出してよい相手）。</summary>
+    private static bool IsPristine(DocumentViewModel document)
+        => document.FilePath is null && !document.IsModified && document.Text.Length == 0;
+
+    /// <summary>一覧から外す文書の購読を解く。</summary>
+    private void DetachDocument(DocumentViewModel document)
+        => document.PropertyChanged -= OnDocumentPropertyChanged;
+
+    private static string UntitledNameFor(int sequence)
+        => sequence <= 1 ? "無題" : UntitledPrefix + sequence.ToString();
 }

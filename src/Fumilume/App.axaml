@@ -36,6 +36,9 @@
                     <SolidColorBrush x:Key="BookmarkTint" Color="#140F6CBD" />
                     <SolidColorBrush x:Key="SettingsButtonBg" Color="#E8EDF3" />
 
+                    <!-- マクロを記録中であることを示す丸。アクセント色だと通常の強調と見分けが付かない。 -->
+                    <SolidColorBrush x:Key="RecordingIndicator" Color="#C5221F" />
+
                     <!-- ThemeService が OS のアクセントカラーで上書きするまでの初期値。 -->
                     <SolidColorBrush x:Key="AccentBrush" Color="#0F6CBD" />
                 </ResourceDictionary>
@@ -67,6 +70,8 @@
                     <SolidColorBrush x:Key="CommandPaletteScrim" Color="#66000000" />
                     <SolidColorBrush x:Key="BookmarkTint" Color="#204CA3F0" />
                     <SolidColorBrush x:Key="SettingsButtonBg" Color="#2B2C2F" />
+
+                    <SolidColorBrush x:Key="RecordingIndicator" Color="#F28B82" />
 
                     <SolidColorBrush x:Key="AccentBrush" Color="#4CA3F0" />
                 </ResourceDictionary>

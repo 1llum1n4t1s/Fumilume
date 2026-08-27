@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Fumilume.Services;
 
 namespace Fumilume.ViewModels;
 
@@ -155,15 +157,22 @@ public sealed partial class DocumentViewModel
     /// <summary>カーソル位置（選択があれば置き換えて）へ文字列を差し込む。</summary>
     public void InsertText(string text)
     {
+        // マクロの再生では改行も通るので、この文書の改行コードへ揃えてから差し込む
+        // （挿入系コマンドが渡す日付やパスに改行は無いため、そちらの結果は変わらない）。
+        var newLine = GetDocumentNewLine();
+        var normalized = newLine == "\n"
+            ? text
+            : text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", newLine, StringComparison.Ordinal);
+
         var (offset, length) = ClampRange(SelectionStart, SelectionLength);
         if (length == 0)
         {
             offset = ClampOffset(CaretIndex);
         }
 
-        EditorDocument.Replace(offset, length, text);
-        SetSelection(offset + text.Length, 0);
-        CaretIndex = offset + text.Length;
+        EditorDocument.Replace(offset, length, normalized);
+        SetSelection(offset + normalized.Length, 0);
+        CaretIndex = offset + normalized.Length;
     }
 
     // ===== ブックマーク =====
@@ -173,6 +182,9 @@ public sealed partial class DocumentViewModel
     /// <summary>行に付ける印。文書と同じ寿命で、タブを閉じるまで残る。</summary>
     public DocumentBookmarks Bookmarks => _bookmarks ??= new DocumentBookmarks(EditorDocument);
 
+    /// <summary>印が 1 つでも付いているか。印を使っていない文書に入れ物を作らせずに調べる。</summary>
+    public bool HasBookmarks => _bookmarks is { } bookmarks && bookmarks.Lines.Count > 0;
+
     /// <summary>カーソル行の印を反転する。付けたときは <see langword="true"/>。</summary>
     public bool ToggleBookmark() => Bookmarks.Toggle(CurrentLine);
 
@@ -180,6 +192,9 @@ public sealed partial class DocumentViewModel
     public bool GoToNextBookmark() => GoToLineIfAny(Bookmarks.Next(CurrentLine));
 
     public bool GoToPreviousBookmark() => GoToLineIfAny(Bookmarks.Previous(CurrentLine));
+
+    /// <summary>指定行の先頭へカーソルを移す（左パネルの一覧から飛ぶときに使う）。</summary>
+    public void GoToLine(int lineNumber) => GoToLineIfAny(lineNumber);
 
     private bool GoToLineIfAny(int? lineNumber)
     {
@@ -193,6 +208,175 @@ public sealed partial class DocumentViewModel
         SelectionLength = 0;
         return true;
     }
+
+    // ===== カーソル移動と素の編集 =====
+    //
+    // 普段はこれらを AvaloniaEdit の TextArea が直接処理しており、ViewModel は結果を受け取るだけ。
+    // キーボードマクロの再生では入力そのものを作り直さず（環境とタイミングに依存して不安定）、
+    // 同じ結果になる操作をモデル側で組み立てるため、ここに置いている。
+
+    /// <summary>カーソルを動かす。<paramref name="extendSelection"/> は Shift を押しながらの移動。</summary>
+    public void MoveCaret(MacroMotion motion, bool extendSelection)
+    {
+        // 選択があるときの起点は、カーソルと反対側の端。これを取り違えると Shift 移動で選択が裏返る。
+        var anchor = HasSelection
+            ? CaretIndex == SelectionStart ? SelectionStart + SelectionLength : SelectionStart
+            : ClampOffset(CaretIndex);
+        var target = ResolveMotion(motion);
+
+        if (extendSelection)
+        {
+            SelectionStart = ClampOffset(Math.Min(anchor, target));
+            SelectionLength = Math.Abs(target - anchor);
+            CaretIndex = ClampOffset(target);
+            return;
+        }
+
+        SetSelection(target, 0);
+    }
+
+    /// <summary>選択があればそれを、無ければカーソルの手前 1 つを消す（Backspace 相当）。</summary>
+    public void DeleteBack()
+    {
+        if (DeleteSelectionIfAny())
+        {
+            return;
+        }
+
+        var offset = ClampOffset(CaretIndex);
+        if (NextCaretPosition(offset, LogicalDirection.Backward) is not { } start)
+        {
+            return;
+        }
+
+        EditorDocument.Remove(start, offset - start);
+        SetSelection(start, 0);
+    }
+
+    /// <summary>選択があればそれを、無ければカーソルの後ろ 1 つを消す（Delete 相当）。</summary>
+    public void DeleteForward()
+    {
+        if (DeleteSelectionIfAny())
+        {
+            return;
+        }
+
+        var offset = ClampOffset(CaretIndex);
+        if (NextCaretPosition(offset, LogicalDirection.Forward) is not { } end)
+        {
+            return;
+        }
+
+        EditorDocument.Remove(offset, end - offset);
+        SetSelection(offset, 0);
+    }
+
+    /// <summary>
+    /// カーソルの後ろから次の一致を探して選択する。末尾まで無ければ先頭から 1 度だけ回り込む。
+    /// 検索欄（AvaloniaEdit の SearchPanel）とは別実装で、条件は呼び出し側が持ち回る。
+    /// </summary>
+    public bool FindNext(string pattern, bool matchCase, bool useRegex)
+    {
+        if (string.IsNullOrEmpty(pattern))
+        {
+            return false;
+        }
+
+        var text = EditorDocument.Text;
+        var from = Math.Clamp(HasSelection ? SelectionStart + SelectionLength : CaretIndex, 0, text.Length);
+
+        if (!useRegex)
+        {
+            var comparison = matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            var found = text.IndexOf(pattern, from, comparison);
+            if (found < 0)
+            {
+                found = text.IndexOf(pattern, 0, comparison);
+            }
+
+            if (found < 0)
+            {
+                return false;
+            }
+
+            SetSelection(found, pattern.Length);
+            return true;
+        }
+
+        try
+        {
+            var options = matchCase ? RegexOptions.None : RegexOptions.IgnoreCase;
+            var regex = new Regex(pattern, options, TimeSpan.FromSeconds(2));
+            var match = regex.Match(text, from);
+            if (!match.Success)
+            {
+                match = regex.Match(text);
+            }
+
+            if (!match.Success)
+            {
+                return false;
+            }
+
+            SetSelection(match.Index, match.Length);
+            return true;
+        }
+        catch (Exception exception) when (exception is ArgumentException or RegexMatchTimeoutException)
+        {
+            // 書式が壊れた式と、戻りすぎる式で編集を止めない。
+            return false;
+        }
+    }
+
+    private bool DeleteSelectionIfAny()
+    {
+        var (offset, length) = ClampRange(SelectionStart, SelectionLength);
+        if (length == 0)
+        {
+            return false;
+        }
+
+        EditorDocument.Remove(offset, length);
+        SetSelection(offset, 0);
+        return true;
+    }
+
+    private int ResolveMotion(MacroMotion motion)
+    {
+        var offset = ClampOffset(CaretIndex);
+        var line = EditorDocument.GetLineByOffset(offset);
+        return motion switch
+        {
+            MacroMotion.CharacterLeft => NextCaretPosition(offset, LogicalDirection.Backward) ?? 0,
+            MacroMotion.CharacterRight => NextCaretPosition(offset, LogicalDirection.Forward) ?? EditorDocument.TextLength,
+            MacroMotion.WordLeft =>
+                NextCaretPosition(offset, LogicalDirection.Backward, CaretPositioningMode.WordStartOrSymbol) ?? 0,
+            MacroMotion.WordRight =>
+                NextCaretPosition(offset, LogicalDirection.Forward, CaretPositioningMode.WordStartOrSymbol)
+                ?? EditorDocument.TextLength,
+            MacroMotion.LineUp => OffsetOnLine(line.PreviousLine, offset - line.Offset) ?? line.Offset,
+            MacroMotion.LineDown => OffsetOnLine(line.NextLine, offset - line.Offset) ?? line.Offset + line.Length,
+            MacroMotion.LineStart => line.Offset,
+            MacroMotion.LineEnd => line.Offset + line.Length,
+            MacroMotion.DocumentStart => 0,
+            MacroMotion.DocumentEnd => EditorDocument.TextLength,
+            _ => offset,
+        };
+    }
+
+    /// <summary>次に止まれる位置。これ以上進めないときは <see langword="null"/>。</summary>
+    private int? NextCaretPosition(
+        int offset,
+        LogicalDirection direction,
+        CaretPositioningMode mode = CaretPositioningMode.Normal)
+    {
+        var next = TextUtilities.GetNextCaretPosition(EditorDocument, offset, direction, mode);
+        return next < 0 ? null : next;
+    }
+
+    /// <summary>同じ桁を保ったまま別の行へ移る。行が短ければその行末で止める。</summary>
+    private static int? OffsetOnLine(DocumentLine? line, int column)
+        => line is null ? null : line.Offset + Math.Min(Math.Max(column, 0), line.Length);
 
     // ===== 対括弧の検索 =====
 

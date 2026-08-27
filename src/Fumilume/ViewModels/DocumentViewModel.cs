@@ -9,6 +9,9 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 {
     private bool _isLoading;
 
+    /// <summary>前回終了時の未保存内容から復元した文書か（保存するまで未保存のまま扱う）。</summary>
+    private bool _restoredUnsaved;
+
     public DocumentViewModel(string untitledName, Func<WorkspaceTabViewModel, Task> closeAsync)
         : base(closeAsync)
     {
@@ -152,6 +155,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             NewLine = content.NewLine;
             Text = content.Text;
             CaretIndex = 0;
+            _restoredUnsaved = false;
             IsModified = false;
         }
         finally
@@ -163,10 +167,38 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         }
     }
 
+    /// <summary>
+    /// 前回終了時の未保存の内容を、ディスクを読まずに復元する。
+    ///
+    /// 復元直後は Undo 履歴が空なので「Undo し切ったから保存済みへ戻る」とは言えない。
+    /// <see cref="_restoredUnsaved"/> を立てて、保存するまで未保存のままにしておく。
+    /// </summary>
+    public void RestoreUnsaved(string? path, TextDocumentContent content)
+    {
+        _isLoading = true;
+        try
+        {
+            FilePath = path is null ? null : Path.GetFullPath(path);
+            Encoding = content.Encoding;
+            NewLine = content.NewLine;
+            Text = content.Text;
+            CaretIndex = 0;
+        }
+        finally
+        {
+            _isLoading = false;
+            EditorDocument.UndoStack.ClearAll();
+            UpdateTextStatistics();
+            _restoredUnsaved = true;
+            IsModified = true;
+        }
+    }
+
     public void MarkSaved(string path)
     {
         FilePath = Path.GetFullPath(path);
         EditorDocument.UndoStack.MarkAsOriginalFile();
+        _restoredUnsaved = false;
         IsModified = false;
     }
 
@@ -221,7 +253,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
         if (!_isLoading && args.PropertyName == nameof(UndoStack.IsOriginalFile))
         {
-            IsModified = !EditorDocument.UndoStack.IsOriginalFile;
+            IsModified = _restoredUnsaved || !EditorDocument.UndoStack.IsOriginalFile;
         }
     }
 

@@ -16,428 +16,467 @@
            ファイル   … Fumilume の外（拡張子の関連付け）
            更新と情報 … 版と更新
          本文幅は TabControl.settingsnav のテンプレート（MaxWidth 960）で頭打ちにしているので、
-         各タブ側では幅を指定しない。体裁は Styles/SettingsStyles.axaml。 -->
+         各タブ側では幅を指定しない。体裁は Styles/SettingsStyles.axaml。
+
+         項目が増えるとタブ分けだけでは辿り着けなくなるため、上の検索欄でカード単位に
+         絞り込める（照合はコードビハインドの SettingsSearch）。新しいカードを足すときは
+         Classes="settingscard" を付けておけば、検索の対象に自動で入る。 -->
     <Border Background="{DynamicResource SettingsPageBg}">
-        <TabControl Classes="settingsnav" Margin="24">
+        <Grid Margin="24" RowDefinitions="Auto,*">
 
-            <!-- ===== 表示 ===== -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="icon" Text="&#xE890;" FontSize="15" VerticalAlignment="Center" />
-                        <TextBlock Text="表示" VerticalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,0,12,16">
-                        <TextBlock Classes="settingsh1" Text="表示" />
-                        <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
-                                   Text="エディタに何を出すかを決めます" />
+            <!-- ===== 設定を名前で探す =====
+                 6 タブ 20 枚のカードを端から開いて回るのが唯一の探し方になっていたので、
+                 見出し・項目名・補足文を通しで照合して、当たったカードだけを残す。
+                 左の 192px は TabControl.settingsnav の見出し列（180 ＋ 余白 12）ぶん。 -->
+            <Grid Grid.Row="0" ColumnDefinitions="192,*" Margin="0,0,0,14">
+                <Grid Grid.Column="1" MaxWidth="960" ColumnDefinitions="*,Auto"
+                      HorizontalAlignment="Stretch">
+                    <TextBox x:Name="SettingsSearchBox" Grid.Column="0" Classes="settingsfield"
+                             MaxWidth="420" HorizontalAlignment="Left"
+                             PlaceholderText="設定を名前で探す"
+                             TextChanged="SettingsSearch_TextChanged"
+                             KeyDown="SettingsSearch_KeyDown"
+                             AutomationProperties.Name="設定を名前で探す" />
+                    <TextBlock x:Name="SettingsSearchSummary" Grid.Column="1" IsVisible="False"
+                               VerticalAlignment="Center" Margin="12,0,0,0" FontSize="12"
+                               Foreground="{DynamicResource TextSecondary}" />
+                </Grid>
+            </Grid>
 
-                        <HeaderedContentControl Classes="settingscard" Header="エディタ">
-                            <StackPanel Classes="settingsfields">
-                                <CheckBox Content="行番号を表示"
-                                          IsChecked="{Binding Options.ShowLineNumbers, Mode=TwoWay}" />
-                                <CheckBox Content="右端で折り返す"
-                                          IsChecked="{Binding Options.WordWrap, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="折り返しを止めると、長い行は横スクロールで読みます。" />
-                                <CheckBox Content="折り返した行を元の字下げに合わせる"
-                                          IsChecked="{Binding Options.InheritWordWrapIndentation, Mode=TwoWay}" />
-                                <CheckBox Content="カーソル行を強調"
-                                          IsChecked="{Binding Options.HighlightCurrentLine, Mode=TwoWay}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
+            <TabControl x:Name="SettingsTabs" Grid.Row="1" Classes="settingsnav">
 
-                        <!-- sakura のタイプ別設定『スクリーン』にあたる。sakura と同じく種類ごとに切れる。 -->
-                        <HeaderedContentControl Classes="settingscard" Header="記号の表示">
-                            <StackPanel Classes="settingsfields">
-                                <CheckBox Content="半角空白を表示"
-                                          IsChecked="{Binding Options.ShowSpaces, Mode=TwoWay}" />
-                                <CheckBox Content="タブを表示"
-                                          IsChecked="{Binding Options.ShowTabs, Mode=TwoWay}" />
-                                <CheckBox Content="改行を表示"
-                                          IsChecked="{Binding Options.ShowEndOfLine, Mode=TwoWay}" />
-                                <CheckBox Content="制御文字を枠付きで表示"
-                                          IsChecked="{Binding Options.ShowControlCharacters, Mode=TwoWay}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="桁と行間">
-                            <StackPanel Spacing="8">
-                                <CheckBox Content="指定桁に縦線を引く"
-                                          IsChecked="{Binding Options.ShowColumnRuler, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" Margin="28,2,0,0" Text="縦線の桁位置" />
-                                <StackPanel Orientation="Horizontal" Spacing="12" Margin="28,0,0,0"
-                                            HorizontalAlignment="Left">
-                                    <Slider Width="280" VerticalAlignment="Center"
-                                            Minimum="4" Maximum="200" TickFrequency="1"
-                                            IsSnapToTickEnabled="True"
-                                            IsEnabled="{Binding Options.ShowColumnRuler}"
-                                            Value="{Binding Options.ColumnRulerPosition, Mode=TwoWay}" />
-                                    <TextBlock VerticalAlignment="Center" FontSize="13"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               Text="{Binding Options.ColumnRulerPosition, StringFormat={}{0:N0} 桁}" />
-                                </StackPanel>
-                                <TextBlock Classes="settingscaption" Margin="0,10,0,0" Text="行の高さ" />
-                                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
-                                    <Slider Width="280" VerticalAlignment="Center"
-                                            Minimum="0.8" Maximum="2.5" TickFrequency="0.05"
-                                            IsSnapToTickEnabled="True"
-                                            Value="{Binding Options.LineHeightFactor, Mode=TwoWay}" />
-                                    <TextBlock VerticalAlignment="Center" FontSize="13"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               Text="{Binding Options.LineHeightFactor, StringFormat={}×{0:N2}}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="UIフォント">
-                            <StackPanel Spacing="8">
-                                <TextBlock Classes="settingscaption" Margin="0" Text="メニュー・タブ・設定画面" />
-                                <ComboBox x:Name="UiFontFamilyPicker"
-                                          Classes="settingsfield" MinWidth="400" HorizontalAlignment="Left"
-                                          IsEditable="True" MaxDropDownHeight="320"
-                                          PlaceholderText="Inter"
-                                          ItemsSource="{Binding #SettingsRoot.FontFamilies}"
-                                          Text="{Binding Options.UiFontFamily, Mode=TwoWay}"
-                                          TextSearch.TextBinding="{Binding Name, x:DataType=media:FontFamily}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="media:FontFamily">
-                                            <TextBlock FontFamily="{Binding}" FontSize="16" Text="{Binding Name}" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="一覧の名前は、実際のフォントでプレビューされます。名前を直接入力することもできます。" />
-                                <TextBlock Classes="settingscaption" Margin="0,8,0,0" Text="サイズ" />
-                                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
-                                    <Slider Width="300" VerticalAlignment="Center"
-                                            Minimum="8" Maximum="48" TickFrequency="1"
-                                            IsSnapToTickEnabled="True"
-                                            Value="{Binding Options.UiFontSize, Mode=TwoWay}" />
-                                    <TextBlock VerticalAlignment="Center" FontSize="13"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               Text="{Binding Options.UiFontSize, StringFormat={}{0:N0} pt}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="エディタフォント">
-                            <StackPanel Spacing="8">
-                                <TextBlock Classes="settingscaption" Margin="0" Text="本文・行番号" />
-                                <ComboBox x:Name="EditorFontFamilyPicker"
-                                          Classes="settingsfield" MinWidth="400" HorizontalAlignment="Left"
-                                          IsEditable="True" MaxDropDownHeight="320"
-                                          PlaceholderText="'Cascadia Code', Consolas, monospace"
-                                          ItemsSource="{Binding #SettingsRoot.EditorFontFamilies}"
-                                          Text="{Binding Options.EditorFontFamily, Mode=TwoWay}"
-                                          TextSearch.TextBinding="{Binding Name, x:DataType=media:FontFamily}">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="media:FontFamily">
-                                            <TextBlock FontFamily="{Binding}" FontSize="16" Text="{Binding Name}" />
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="一覧には等幅フォントだけを表示します。直接入力では、VS Code と同じ形式で複数のフォントをカンマ区切りにできます。" />
-                                <TextBlock Classes="settingscaption" Margin="0,8,0,0" Text="サイズ" />
-                                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
-                                    <Slider Width="300" VerticalAlignment="Center"
-                                            Minimum="8" Maximum="48" TickFrequency="1"
-                                            IsSnapToTickEnabled="True"
-                                            Value="{Binding Options.EditorFontSize, Mode=TwoWay}" />
-                                    <TextBlock VerticalAlignment="Center" FontSize="13"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               Text="{Binding Options.EditorFontSize, StringFormat={}{0:N0} pt}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </HeaderedContentControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ===== 編集 ===== -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="icon" Text="&#xE70F;" FontSize="15" VerticalAlignment="Center" />
-                        <TextBlock Text="編集" VerticalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,0,12,16">
-                        <TextBlock Classes="settingsh1" Text="編集" />
-                        <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
-                                   Text="入力したときの振る舞いを決めます" />
-
-                        <HeaderedContentControl Classes="settingscard" Header="インデント">
-                            <StackPanel Spacing="8">
-                                <TextBlock Classes="settingscaption" Margin="0" Text="タブ幅（文字数）" />
-                                <ComboBox Classes="settingsfield" MinWidth="140" HorizontalAlignment="Left"
-                                          ItemsSource="{Binding IndentationSizeOptions}"
-                                          SelectedItem="{Binding Options.IndentationSize, Mode=TwoWay}" />
-                                <CheckBox Content="Tab キーでスペースを入れる" Margin="0,8,0,0"
-                                          IsChecked="{Binding Options.ConvertTabsToSpaces, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="OFF のときはタブ文字をそのまま挿入します。既存ファイルの字下げを崩したくないときは OFF のままにしてください。" />
-                                <CheckBox Content="Tab キーを編集領域で受け取る" Margin="0,8,0,0"
-                                          IsChecked="{Binding Options.AcceptsTab, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="OFF にすると Tab キーで次のコントロールへフォーカスが移ります。" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="カーソルと選択">
-                            <StackPanel Classes="settingsfields">
-                                <CheckBox Content="矩形選択を使う（Alt を押しながらドラッグ）"
-                                          IsChecked="{Binding Options.EnableRectangularSelection, Mode=TwoWay}" />
-                                <CheckBox Content="フリーカーソル（行末より右にもカーソルを置ける）"
-                                          IsChecked="{Binding Options.EnableVirtualSpace, Mode=TwoWay}" />
-                                <CheckBox Content="Insert キーで上書きモードに切り替える"
-                                          IsChecked="{Binding Options.AllowToggleOverstrikeMode, Mode=TwoWay}" />
-                                <CheckBox Content="最終行より下へスクロールできるようにする"
-                                          IsChecked="{Binding Options.AllowScrollBelowDocument, Mode=TwoWay}" />
-                                <CheckBox Content="文字を打っている間はマウスカーソルを隠す"
-                                          IsChecked="{Binding Options.HideCursorWhileTyping, Mode=TwoWay}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="コピーとドラッグ">
-                            <StackPanel Classes="settingsfields">
-                                <CheckBox Content="選択が無いときのコピー・切り取りは行全体を対象にする"
-                                          IsChecked="{Binding Options.CutCopyWholeLine, Mode=TwoWay}" />
-                                <CheckBox Content="選択したテキストをドラッグして動かせるようにする"
-                                          IsChecked="{Binding Options.EnableTextDragDrop, Mode=TwoWay}" />
-                                <CheckBox Content="本文中の URL をクリックで開けるようにする"
-                                          IsChecked="{Binding Options.EnableHyperlinks, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="Ctrl を押しながらクリックすると開きます。" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ===== 検索 ===== -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="icon" Text="&#xE721;" FontSize="15" VerticalAlignment="Center" />
-                        <TextBlock Text="検索" VerticalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,0,12,16">
-                        <TextBlock Classes="settingsh1" Text="検索" />
-                        <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
-                                   Text="検索と置換を開いたときの初期値を決めます" />
-
-                        <HeaderedContentControl Classes="settingscard" Header="既定の検索条件">
-                            <StackPanel Classes="settingsfields">
-                                <CheckBox Content="大文字と小文字を区別する"
-                                          IsChecked="{Binding Options.SearchMatchCase, Mode=TwoWay}" />
-                                <CheckBox Content="正規表現で検索する"
-                                          IsChecked="{Binding Options.SearchUseRegex, Mode=TwoWay}" />
-                                <CheckBox Content="選択中の文字列を検索欄の初期値にする"
-                                          IsChecked="{Binding Options.SearchUseCaretWord, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="ここで決めた条件は、検索 (Ctrl+F) や置換 (Ctrl+H) を開くたびに適用されます。開いたあとで個別に変えることもできます。" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="ブックマーク">
-                            <StackPanel Spacing="6">
-                                <TextBlock Classes="settingscaption" Margin="0" TextWrapping="Wrap"
-                                           Text="F2 で次、Shift+F2 で前、Ctrl+F2 で設定と解除、Ctrl+Shift+F2 で全解除です。印を付けた行は左端に色帯が出ます。" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ===== 外観 ===== -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="icon" Text="&#xE790;" FontSize="15" VerticalAlignment="Center" />
-                        <TextBlock Text="外観" VerticalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,0,12,16">
-                        <TextBlock Classes="settingsh1" Text="外観" />
-                        <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
-                                   Text="配色とウィンドウの質感を調整します" />
-
-                        <HeaderedContentControl Classes="settingscard" Header="テーマ">
-                            <StackPanel Spacing="8">
-                                <ComboBox Classes="settingsfield" MinWidth="240" HorizontalAlignment="Left"
-                                          ItemsSource="{Binding ThemeModeOptions}"
-                                          DisplayMemberBinding="{Binding DisplayName, x:DataType=vm:ThemeModeOption}"
-                                          SelectedValueBinding="{Binding Value, x:DataType=vm:ThemeModeOption}"
-                                          SelectedValue="{Binding Options.ThemeMode, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap" Margin="0,6,0,0"
-                                           Text="「システムに合わせる」は Windows のライト / ダーク設定に追従します。" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="ウィンドウ">
-                            <StackPanel Classes="settingsfields">
-                                <CheckBox Content="背景をすりガラス（アクリル）にする"
-                                          IsChecked="{Binding Options.UseAcrylic, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="OFF にすると単色の背景になります。描画負荷を下げたいときや、透過が効かない環境で使ってください。" />
-                                <CheckBox Content="ウィンドウのサイズと位置を保存する"
-                                          IsChecked="{Binding Options.RememberWindowBounds, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="OFF にすると、次回は既定のサイズ・位置で起動します。" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="タブ一覧">
-                            <StackPanel Spacing="8">
-                                <TextBlock Classes="settingscaption" Margin="0" Text="タブの高さ" />
-                                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
-                                    <NumericUpDown Classes="settingsfield" Width="140"
-                                                   Minimum="26" Maximum="60" Increment="2"
-                                                   FormatString="0"
-                                                   Value="{Binding Options.TabHeight, Mode=TwoWay}" />
-                                    <TextBlock VerticalAlignment="Center" FontSize="13"
-                                               Foreground="{DynamicResource TextSecondary}" Text="px" />
-                                </StackPanel>
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="Kiriha と同じ 26～60 px・2 px刻みです。既定は 34 px です。" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <!-- ===== ファイル ===== -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="icon" Text="&#xE8B7;" FontSize="15" VerticalAlignment="Center" />
-                        <TextBlock Text="ファイル" VerticalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,0,12,16">
-                        <TextBlock Classes="settingsh1" Text="ファイル" />
-                        <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
-                                   Text="開くとき・保存するときの振る舞いと、拡張子の関連付けを決めます" />
-
-                        <HeaderedContentControl Classes="settingscard" Header="開くとき">
-                            <StackPanel Spacing="8">
-                                <CheckBox Content="前回のカーソル位置を復元する"
-                                          IsChecked="{Binding Options.RestoreCaretPosition, Mode=TwoWay}" />
-                                <CheckBox Content="大きなファイルを開く前に確認する" Margin="0,4,0,0"
-                                          IsChecked="{Binding Options.WarnOnLargeFile, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" Margin="28,2,0,0" Text="確認を出し始めるサイズ" />
-                                <StackPanel Orientation="Horizontal" Spacing="12" Margin="28,0,0,0"
-                                            HorizontalAlignment="Left">
-                                    <Slider Width="280" VerticalAlignment="Center"
-                                            Minimum="1" Maximum="512" TickFrequency="1"
-                                            IsSnapToTickEnabled="True"
-                                            IsEnabled="{Binding Options.WarnOnLargeFile}"
-                                            Value="{Binding Options.LargeFileThresholdMegabytes, Mode=TwoWay}" />
-                                    <TextBlock VerticalAlignment="Center" FontSize="13"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               Text="{Binding Options.LargeFileThresholdMegabytes, StringFormat={}{0:N0} MB}" />
-                                </StackPanel>
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <HeaderedContentControl Classes="settingscard" Header="保存するとき">
-                            <StackPanel Classes="settingsfields">
-                                <CheckBox Content="上書きの前にバックアップ (.bak) を作る"
-                                          IsChecked="{Binding Options.CreateBackupOnSave, Mode=TwoWay}" />
-                                <TextBlock Classes="settingscaption" TextWrapping="Wrap"
-                                           Text="保存先と同じフォルダーに「元のファイル名.bak」を残します。" />
-                                <CheckBox Content="終了するときに確認する"
-                                          IsChecked="{Binding Options.ConfirmOnExit, Mode=TwoWay}" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-
-                        <TextBlock Classes="settingscaption" Margin="0,4,0,10" TextWrapping="Wrap"
-                                   Text="ダブルクリックで Fumilume が開く拡張子を選びます。切り替えるとすぐ反映され、変更は現在のユーザーにだけ適用されます。" />
-
-                        <!-- 全選択 / 全解除 -->
-                        <StackPanel Margin="0,0,0,12" Orientation="Horizontal" Spacing="8">
-                            <Button Classes="cmd" Content="全選択"
-                                    Command="{Binding SelectAllAssociationsCommand}" />
-                            <Button Classes="cmd" Content="全解除"
-                                    Command="{Binding DeselectAllAssociationsCommand}" />
+                <!-- ===== 表示 ===== -->
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="icon" Text="&#xE890;" FontSize="15" VerticalAlignment="Center" />
+                            <TextBlock Text="表示" VerticalAlignment="Center" />
                         </StackPanel>
+                    </TabItem.Header>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,12,16">
+                            <TextBlock Classes="settingsh1" Text="表示" />
+                            <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
+                                       Text="エディタに何を出すかを決めます" />
 
-                        <!-- カード内リスト。行ごとに下線を引き、外周だけを角丸で囲う。
-                             カードの左右パディング 4 は、行の下線が角丸の縁へ噛まないようにするための逃げ。 -->
-                        <Border Padding="4,0"
-                                Background="{DynamicResource SettingsCardBg}"
-                                BorderBrush="{DynamicResource SettingsCardBorder}"
-                                BorderThickness="1"
-                                CornerRadius="14">
-                            <ItemsControl ItemsSource="{Binding Associations}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:FileAssociationItemViewModel">
-                                        <Border Padding="12,8"
-                                                BorderBrush="{DynamicResource SettingsCardBorder}"
-                                                BorderThickness="0,0,0,1">
-                                            <Grid ColumnDefinitions="*,Auto">
-                                                <TextBlock Grid.Column="0" VerticalAlignment="Center"
-                                                           FontSize="13"
-                                                           Foreground="{DynamicResource TextPrimary}"
-                                                           Text="{Binding Description}" />
-                                                <ToggleSwitch Grid.Column="1" Margin="0" Padding="0"
-                                                              VerticalAlignment="Center"
-                                                              IsChecked="{Binding IsAssociated, Mode=TwoWay}"
-                                                              OffContent="" OnContent="" />
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
+                            <HeaderedContentControl Classes="settingscard" Header="エディタ">
+                                <StackPanel Classes="settingsfields">
+                                    <CheckBox Content="行番号を表示"
+                                              IsChecked="{Binding Options.ShowLineNumbers, Mode=TwoWay}" />
+                                    <CheckBox Content="右端で折り返す"
+                                              IsChecked="{Binding Options.WordWrap, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="折り返しを止めると、長い行は横スクロールで読みます。" />
+                                    <CheckBox Content="折り返した行を元の字下げに合わせる"
+                                              IsChecked="{Binding Options.InheritWordWrapIndentation, Mode=TwoWay}" />
+                                    <CheckBox Content="カーソル行を強調"
+                                              IsChecked="{Binding Options.HighlightCurrentLine, Mode=TwoWay}" />
+                                    <CheckBox Content="構文を色分けする"
+                                              IsChecked="{Binding Options.EnableSyntaxHighlighting, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" Margin="28,0,0,0" TextWrapping="Wrap"
+                                               Text="C#、JSON、XML、Markdown など、拡張子に対応する文法のキーワードや文字列を色分けします。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
 
-            <!-- ===== 更新と情報 ===== -->
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Classes="icon" Text="&#xE895;" FontSize="15" VerticalAlignment="Center" />
-                        <TextBlock Text="更新と情報" VerticalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="0,0,12,16">
-                        <TextBlock Classes="settingsh1" Text="更新と情報" />
-                        <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
-                                   Text="版の確認と更新の設定です" />
+                            <!-- sakura のタイプ別設定『スクリーン』にあたる。sakura と同じく種類ごとに切れる。 -->
+                            <HeaderedContentControl Classes="settingscard" Header="記号の表示">
+                                <StackPanel Classes="settingsfields">
+                                    <CheckBox Content="半角空白を表示"
+                                              IsChecked="{Binding Options.ShowSpaces, Mode=TwoWay}" />
+                                    <CheckBox Content="タブを表示"
+                                              IsChecked="{Binding Options.ShowTabs, Mode=TwoWay}" />
+                                    <CheckBox Content="改行を表示"
+                                              IsChecked="{Binding Options.ShowEndOfLine, Mode=TwoWay}" />
+                                    <CheckBox Content="制御文字を枠付きで表示"
+                                              IsChecked="{Binding Options.ShowControlCharacters, Mode=TwoWay}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
 
-                        <HeaderedContentControl Classes="settingscard" Header="更新">
-                            <StackPanel Classes="settingsfields">
-                                <CheckBox Content="起動時に更新を確認する"
-                                          IsChecked="{Binding Options.CheckUpdatesOnStartup, Mode=TwoWay}" />
-                                <Button Classes="cmd" HorizontalAlignment="Left" Margin="0,10,0,0"
-                                        Content="今すぐ更新を確認"
-                                        Command="{Binding CheckForUpdatesCommand}" />
+                            <HeaderedContentControl Classes="settingscard" Header="桁と行間">
+                                <StackPanel Spacing="8">
+                                    <CheckBox Content="指定桁に縦線を引く"
+                                              IsChecked="{Binding Options.ShowColumnRuler, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" Margin="28,2,0,0" Text="縦線の桁位置" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="28,0,0,0"
+                                                HorizontalAlignment="Left">
+                                        <Slider Width="280" VerticalAlignment="Center"
+                                                Minimum="4" Maximum="200" TickFrequency="1"
+                                                IsSnapToTickEnabled="True"
+                                                IsEnabled="{Binding Options.ShowColumnRuler}"
+                                                Value="{Binding Options.ColumnRulerPosition, Mode=TwoWay}" />
+                                        <TextBlock VerticalAlignment="Center" FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Text="{Binding Options.ColumnRulerPosition, StringFormat={}{0:N0} 桁}" />
+                                    </StackPanel>
+                                    <TextBlock Classes="settingscaption" Margin="0,10,0,0" Text="行の高さ" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
+                                        <Slider Width="280" VerticalAlignment="Center"
+                                                Minimum="0.8" Maximum="2.5" TickFrequency="0.05"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding Options.LineHeightFactor, Mode=TwoWay}" />
+                                        <TextBlock VerticalAlignment="Center" FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Text="{Binding Options.LineHeightFactor, StringFormat={}×{0:N2}}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="UIフォント">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="settingscaption" Margin="0" Text="メニュー・タブ・設定画面" />
+                                    <ComboBox x:Name="UiFontFamilyPicker"
+                                              Classes="settingsfield" MinWidth="400" HorizontalAlignment="Left"
+                                              IsEditable="True" MaxDropDownHeight="320"
+                                              PlaceholderText="Inter"
+                                              ItemsSource="{Binding #SettingsRoot.FontFamilies}"
+                                              Text="{Binding Options.UiFontFamily, Mode=TwoWay}"
+                                              TextSearch.TextBinding="{Binding Name, x:DataType=media:FontFamily}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="media:FontFamily">
+                                                <TextBlock FontFamily="{Binding}" FontSize="16" Text="{Binding Name}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="一覧の名前は、実際のフォントでプレビューされます。名前を直接入力することもできます。" />
+                                    <TextBlock Classes="settingscaption" Margin="0,8,0,0" Text="サイズ" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
+                                        <Slider Width="300" VerticalAlignment="Center"
+                                                Minimum="8" Maximum="48" TickFrequency="1"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding Options.UiFontSize, Mode=TwoWay}" />
+                                        <TextBlock VerticalAlignment="Center" FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Text="{Binding Options.UiFontSize, StringFormat={}{0:N0} pt}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="エディタフォント">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="settingscaption" Margin="0" Text="本文・行番号" />
+                                    <ComboBox x:Name="EditorFontFamilyPicker"
+                                              Classes="settingsfield" MinWidth="400" HorizontalAlignment="Left"
+                                              IsEditable="True" MaxDropDownHeight="320"
+                                              PlaceholderText="'Cascadia Code', Consolas, monospace"
+                                              ItemsSource="{Binding #SettingsRoot.EditorFontFamilies}"
+                                              Text="{Binding Options.EditorFontFamily, Mode=TwoWay}"
+                                              TextSearch.TextBinding="{Binding Name, x:DataType=media:FontFamily}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="media:FontFamily">
+                                                <TextBlock FontFamily="{Binding}" FontSize="16" Text="{Binding Name}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="一覧には等幅フォントだけを表示します。直接入力では、VS Code と同じ形式で複数のフォントをカンマ区切りにできます。" />
+                                    <TextBlock Classes="settingscaption" Margin="0,8,0,0" Text="サイズ" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
+                                        <Slider Width="300" VerticalAlignment="Center"
+                                                Minimum="8" Maximum="48" TickFrequency="1"
+                                                IsSnapToTickEnabled="True"
+                                                Value="{Binding Options.EditorFontSize, Mode=TwoWay}" />
+                                        <TextBlock VerticalAlignment="Center" FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Text="{Binding Options.EditorFontSize, StringFormat={}{0:N0} pt}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ===== 編集 ===== -->
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="icon" Text="&#xE70F;" FontSize="15" VerticalAlignment="Center" />
+                            <TextBlock Text="編集" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,12,16">
+                            <TextBlock Classes="settingsh1" Text="編集" />
+                            <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
+                                       Text="入力したときの振る舞いを決めます" />
+
+                            <HeaderedContentControl Classes="settingscard" Header="インデント">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="settingscaption" Margin="0" Text="タブ幅（文字数）" />
+                                    <ComboBox Classes="settingsfield" MinWidth="140" HorizontalAlignment="Left"
+                                              ItemsSource="{Binding IndentationSizeOptions}"
+                                              SelectedItem="{Binding Options.IndentationSize, Mode=TwoWay}" />
+                                    <CheckBox Content="Tab キーでスペースを入れる" Margin="0,8,0,0"
+                                              IsChecked="{Binding Options.ConvertTabsToSpaces, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="OFF のときはタブ文字をそのまま挿入します。既存ファイルの字下げを崩したくないときは OFF のままにしてください。" />
+                                    <CheckBox Content="Tab キーを編集領域で受け取る" Margin="0,8,0,0"
+                                              IsChecked="{Binding Options.AcceptsTab, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="OFF にすると Tab キーで次のコントロールへフォーカスが移ります。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="カーソルと選択">
+                                <StackPanel Classes="settingsfields">
+                                    <CheckBox Content="矩形選択を使う（Alt を押しながらドラッグ）"
+                                              IsChecked="{Binding Options.EnableRectangularSelection, Mode=TwoWay}" />
+                                    <CheckBox Content="フリーカーソル（行末より右にもカーソルを置ける）"
+                                              IsChecked="{Binding Options.EnableVirtualSpace, Mode=TwoWay}" />
+                                    <CheckBox Content="Insert キーで上書きモードに切り替える"
+                                              IsChecked="{Binding Options.AllowToggleOverstrikeMode, Mode=TwoWay}" />
+                                    <CheckBox Content="最終行より下へスクロールできるようにする"
+                                              IsChecked="{Binding Options.AllowScrollBelowDocument, Mode=TwoWay}" />
+                                    <CheckBox Content="文字を打っている間はマウスカーソルを隠す"
+                                              IsChecked="{Binding Options.HideCursorWhileTyping, Mode=TwoWay}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="コピーとドラッグ">
+                                <StackPanel Classes="settingsfields">
+                                    <CheckBox Content="選択が無いときのコピー・切り取りは行全体を対象にする"
+                                              IsChecked="{Binding Options.CutCopyWholeLine, Mode=TwoWay}" />
+                                    <CheckBox Content="選択したテキストをドラッグして動かせるようにする"
+                                              IsChecked="{Binding Options.EnableTextDragDrop, Mode=TwoWay}" />
+                                    <CheckBox Content="本文中の URL をクリックで開けるようにする"
+                                              IsChecked="{Binding Options.EnableHyperlinks, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="Ctrl を押しながらクリックすると開きます。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ===== 検索 ===== -->
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="icon" Text="&#xE721;" FontSize="15" VerticalAlignment="Center" />
+                            <TextBlock Text="検索" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,12,16">
+                            <TextBlock Classes="settingsh1" Text="検索" />
+                            <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
+                                       Text="検索と置換を開いたときの初期値を決めます" />
+
+                            <HeaderedContentControl Classes="settingscard" Header="既定の検索条件">
+                                <StackPanel Classes="settingsfields">
+                                    <CheckBox Content="大文字と小文字を区別する"
+                                              IsChecked="{Binding Options.SearchMatchCase, Mode=TwoWay}" />
+                                    <CheckBox Content="正規表現で検索する"
+                                              IsChecked="{Binding Options.SearchUseRegex, Mode=TwoWay}" />
+                                    <CheckBox Content="選択中の文字列を検索欄の初期値にする"
+                                              IsChecked="{Binding Options.SearchUseCaretWord, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="ここで決めた条件は、検索 (Ctrl+F) や置換 (Ctrl+H) を開くたびに適用されます。開いたあとで個別に変えることもできます。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="ブックマーク">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Classes="settingscaption" Margin="0" TextWrapping="Wrap"
+                                               Text="F2 で次、Shift+F2 で前、Ctrl+F2 で設定と解除、Ctrl+Shift+F2 で全解除です。印を付けた行は左端に色帯が出ます。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ===== 外観 ===== -->
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="icon" Text="&#xE790;" FontSize="15" VerticalAlignment="Center" />
+                            <TextBlock Text="外観" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,12,16">
+                            <TextBlock Classes="settingsh1" Text="外観" />
+                            <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
+                                       Text="配色とウィンドウの質感を調整します" />
+
+                            <HeaderedContentControl Classes="settingscard" Header="テーマ">
+                                <StackPanel Spacing="8">
+                                    <ComboBox Classes="settingsfield" MinWidth="240" HorizontalAlignment="Left"
+                                              ItemsSource="{Binding ThemeModeOptions}"
+                                              DisplayMemberBinding="{Binding DisplayName, x:DataType=vm:ThemeModeOption}"
+                                              SelectedValueBinding="{Binding Value, x:DataType=vm:ThemeModeOption}"
+                                              SelectedValue="{Binding Options.ThemeMode, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Text="「システムに合わせる」は Windows のライト / ダーク設定に追従します。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="ウィンドウ">
+                                <StackPanel Classes="settingsfields">
+                                    <CheckBox Content="背景をすりガラス（アクリル）にする"
+                                              IsChecked="{Binding Options.UseAcrylic, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="OFF にすると単色の背景になります。描画負荷を下げたいときや、透過が効かない環境で使ってください。" />
+                                    <CheckBox Content="ウィンドウのサイズと位置を保存する"
+                                              IsChecked="{Binding Options.RememberWindowBounds, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="OFF にすると、次回は既定のサイズ・位置で起動します。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="タブ一覧">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Classes="settingscaption" Margin="0" Text="タブの高さ" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
+                                        <NumericUpDown Classes="settingsfield" Width="140"
+                                                       Minimum="26" Maximum="60" Increment="2"
+                                                       FormatString="0"
+                                                       Value="{Binding Options.TabHeight, Mode=TwoWay}" />
+                                        <TextBlock VerticalAlignment="Center" FontSize="13"
+                                                   Foreground="{DynamicResource TextSecondary}" Text="px" />
+                                    </StackPanel>
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="Kiriha と同じ 26～60 px・2 px刻みです。既定は 34 px です。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ===== ファイル ===== -->
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="icon" Text="&#xE8B7;" FontSize="15" VerticalAlignment="Center" />
+                            <TextBlock Text="ファイル" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,12,16">
+                            <TextBlock Classes="settingsh1" Text="ファイル" />
+                            <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
+                                       Text="開くとき・保存するときの振る舞いと、拡張子の関連付けを決めます" />
+
+                            <HeaderedContentControl Classes="settingscard" Header="開くとき">
+                                <StackPanel Spacing="8">
+                                    <CheckBox Content="前回開いていたタブを復元する"
+                                              IsChecked="{Binding Options.RestoreSession, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" Margin="28,2,0,4" TextWrapping="Wrap"
+                                               Text="ON のときは未保存の内容も引き継ぐので、保存していないタブがあっても確認せずに終了できます。" />
+                                    <CheckBox Content="前回のカーソル位置を復元する"
+                                              IsChecked="{Binding Options.RestoreCaretPosition, Mode=TwoWay}" />
+                                    <CheckBox Content="大きなファイルを開く前に確認する" Margin="0,4,0,0"
+                                              IsChecked="{Binding Options.WarnOnLargeFile, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" Margin="28,2,0,0" Text="確認を出し始めるサイズ" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12" Margin="28,0,0,0"
+                                                HorizontalAlignment="Left">
+                                        <Slider Width="280" VerticalAlignment="Center"
+                                                Minimum="1" Maximum="512" TickFrequency="1"
+                                                IsSnapToTickEnabled="True"
+                                                IsEnabled="{Binding Options.WarnOnLargeFile}"
+                                                Value="{Binding Options.LargeFileThresholdMegabytes, Mode=TwoWay}" />
+                                        <TextBlock VerticalAlignment="Center" FontSize="13"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Text="{Binding Options.LargeFileThresholdMegabytes, StringFormat={}{0:N0} MB}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="保存するとき">
+                                <StackPanel Classes="settingsfields">
+                                    <CheckBox Content="上書きの前にバックアップ (.bak) を作る"
+                                              IsChecked="{Binding Options.CreateBackupOnSave, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" TextWrapping="Wrap"
+                                               Text="保存先と同じフォルダーに「元のファイル名.bak」を残します。" />
+                                    <CheckBox Content="終了するときに確認する"
+                                              IsChecked="{Binding Options.ConfirmOnExit, Mode=TwoWay}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <TextBlock Classes="settingscaption" Margin="0,4,0,10" TextWrapping="Wrap"
+                                       Text="ダブルクリックで Fumilume が開く拡張子を選びます。切り替えるとすぐ反映され、変更は現在のユーザーにだけ適用されます。" />
+
+                            <!-- 全選択 / 全解除 -->
+                            <StackPanel Margin="0,0,0,12" Orientation="Horizontal" Spacing="8">
+                                <Button Classes="cmd" Content="全選択"
+                                        Command="{Binding SelectAllAssociationsCommand}" />
+                                <Button Classes="cmd" Content="全解除"
+                                        Command="{Binding DeselectAllAssociationsCommand}" />
                             </StackPanel>
-                        </HeaderedContentControl>
 
-                        <HeaderedContentControl Classes="settingscard" Header="バージョン">
-                            <StackPanel Spacing="6">
-                                <TextBlock FontSize="13" Foreground="{DynamicResource TextPrimary}"
-                                           Text="{Binding AppVersion, StringFormat=Fumilume {0}}" />
-                                <TextBlock Classes="settingscaption" Margin="0"
-                                           Text="設定は %LocalAppData%\Fumilume\settings.json に保存されます。" />
-                            </StackPanel>
-                        </HeaderedContentControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-        </TabControl>
+                            <!-- カード内リスト。行ごとに下線を引き、外周だけを角丸で囲う。
+                                 カードの左右パディング 4 は、行の下線が角丸の縁へ噛まないようにするための逃げ。 -->
+                            <Border Padding="4,0"
+                                    Background="{DynamicResource SettingsCardBg}"
+                                    BorderBrush="{DynamicResource SettingsCardBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="14">
+                                <ItemsControl ItemsSource="{Binding Associations}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:FileAssociationItemViewModel">
+                                            <Border Padding="12,8"
+                                                    BorderBrush="{DynamicResource SettingsCardBorder}"
+                                                    BorderThickness="0,0,0,1">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                                                               FontSize="13"
+                                                               Foreground="{DynamicResource TextPrimary}"
+                                                               Text="{Binding Description}" />
+                                                    <ToggleSwitch Grid.Column="1" Margin="0" Padding="0"
+                                                                  VerticalAlignment="Center"
+                                                                  IsChecked="{Binding IsAssociated, Mode=TwoWay}"
+                                                                  OffContent="" OnContent="" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ===== 更新と情報 ===== -->
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="icon" Text="&#xE895;" FontSize="15" VerticalAlignment="Center" />
+                            <TextBlock Text="更新と情報" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,12,16">
+                            <TextBlock Classes="settingsh1" Text="更新と情報" />
+                            <TextBlock Classes="settingssubtitle" TextWrapping="Wrap"
+                                       Text="版の確認と更新の設定です" />
+
+                            <HeaderedContentControl Classes="settingscard" Header="更新">
+                                <StackPanel Classes="settingsfields">
+                                    <CheckBox Content="起動時に更新を確認する"
+                                              IsChecked="{Binding Options.CheckUpdatesOnStartup, Mode=TwoWay}" />
+                                    <Button Classes="cmd" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                            Content="今すぐ更新を確認"
+                                            Command="{Binding CheckForUpdatesCommand}" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+
+                            <HeaderedContentControl Classes="settingscard" Header="バージョン">
+                                <StackPanel Spacing="6">
+                                    <TextBlock FontSize="13" Foreground="{DynamicResource TextPrimary}"
+                                               Text="{Binding AppVersion, StringFormat=Fumilume {0}}" />
+                                    <TextBlock Classes="settingscaption" Margin="0"
+                                               Text="設定は %LocalAppData%\Fumilume\settings.json に保存されます。" />
+                                </StackPanel>
+                            </HeaderedContentControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+
+            <TextBlock x:Name="SettingsNoMatch" Grid.Row="1" IsVisible="False"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontSize="13" Foreground="{DynamicResource TextSecondary}"
+                       Text="一致する設定はありません" />
+        </Grid>
     </Border>
 </UserControl>

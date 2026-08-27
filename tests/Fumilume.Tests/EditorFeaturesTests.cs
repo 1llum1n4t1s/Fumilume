@@ -85,6 +85,8 @@ public sealed class EditorFeaturesTests
 
         public Task<bool> ConfirmAsync(string title, string message) => Task.FromResult(true);
 
+        public Task<GrepQuery?> PickGrepQueryAsync(GrepQuery initial) => Task.FromResult<GrepQuery?>(null);
+
         public Task CheckForUpdatesAsync(bool manually)
             => Task.CompletedTask;
     }

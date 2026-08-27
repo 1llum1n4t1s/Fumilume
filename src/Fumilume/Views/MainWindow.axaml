@@ -34,6 +34,11 @@
         <!-- コマンドパレット。sakura のメニューバーは置けないので、機能が増えても入り口を変えない一覧を出す。 -->
         <KeyBinding Gesture="Ctrl+Shift+P" Command="{Binding OpenCommandPaletteCommand}" />
 
+        <!-- キーボードマクロ。秀丸は Shift+F1 記録・Shift+F2 実行だが、Shift+F2 は
+             sakura 由来の「前のブックマークへ」で埋まっているので実行を Shift+F5 に置く。 -->
+        <KeyBinding Gesture="Shift+F1" Command="{Binding ToggleMacroRecordingCommand}" />
+        <KeyBinding Gesture="Shift+F5" Command="{Binding RunMacroCommand}" />
+
         <!-- sakura の既定キー（CKeyBind.cpp）のうち、Fumilume の既存割り当てと衝突しないものを引き継ぐ。
              Ctrl+G は sakura では Grep だが、Fumilume では既に「指定行へ移動」なのでそのまま残す。 -->
         <KeyBinding Gesture="Ctrl+F7" Command="{Binding RunEditorCommandCommand}" CommandParameter="{x:Static s:EditorCommandId.ToUpper}" />
@@ -107,38 +112,109 @@
                 </StackPanel>
             </Grid>
 
-            <!-- ===== 縦タブ =====
-                 文書タブと設定タブが同じ一覧に並ぶ。項目の型は WorkspaceTabViewModel で、
-                 表示に要る 3 つ（表題・アイコン・ツールチップ）だけを基底が公開している。 -->
-            <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="*,Auto">
-                <ListBox Grid.Row="0" Classes="verticaltabs"
-                         ItemContainerTheme="{StaticResource VerticalTabItemTheme}"
-                         ItemsSource="{Binding Tabs}"
-                         SelectedItem="{Binding SelectedTab}"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto"
-                         AutomationProperties.Name="タブ一覧">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
-                            <Grid Height="{DynamicResource TabItemHeight}"
-                                  ColumnDefinitions="32,*,36" Background="Transparent">
-                                <TextBlock Grid.Column="0" Classes="icon" Text="{Binding TabGlyph}"
-                                           HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
-                                <TextBlock Grid.Column="1" Text="{Binding TabTitle}" FontSize="12.5"
-                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                           Foreground="{DynamicResource TextPrimary}"
-                                           ToolTip.Tip="{Binding TabTooltip}" />
-                                <Button Grid.Column="2" Classes="tabclose" Command="{Binding CloseTabCommand}"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center"
-                                        AutomationProperties.Name="タブを閉じる">
-                                    <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />
-                                </Button>
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+            <!-- ===== 左サイドのパネル =====
+                 タブ一覧・アウトライン・ブックマークを同じ場所で切り替える。1 枚に 1 つの
+                 用途しか持たせないので、機能が増えても幅と優先度が崩れない。
+                 フォルダ横断検索の結果だけは 1 行 1 一致で横幅が要るため、ここではなく
+                 中央のタブに出す（190px では場所と本文が同時に読めない）。 -->
+            <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*,Auto">
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,0,10,4" Spacing="2">
+                    <Button Classes="panelswitch" Classes.active="{Binding IsTabsPanel}"
+                            Content="&#xE8A5;"
+                            Command="{Binding SelectSidePanelCommand}"
+                            CommandParameter="{x:Static vm:SidePanelKind.Tabs}"
+                            AutomationProperties.Name="開いているもの" ToolTip.Tip="開いているもの" />
+                    <Button Classes="panelswitch" Classes.active="{Binding IsOutlinePanel}"
+                            Content="&#xE8FD;"
+                            Command="{Binding SelectSidePanelCommand}"
+                            CommandParameter="{x:Static vm:SidePanelKind.Outline}"
+                            AutomationProperties.Name="アウトライン" ToolTip.Tip="アウトライン（見出し）" />
+                    <Button Classes="panelswitch" Classes.active="{Binding IsBookmarksPanel}"
+                            Content="&#xE735;"
+                            Command="{Binding SelectSidePanelCommand}"
+                            CommandParameter="{x:Static vm:SidePanelKind.Bookmarks}"
+                            AutomationProperties.Name="ブックマーク" ToolTip.Tip="ブックマーク (Ctrl+F2)" />
+                </StackPanel>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10,6,10,12" Spacing="4">
+                <Panel Grid.Row="1">
+                    <!-- 開いているもの。文書タブと設定タブが同じ一覧に並ぶ。項目の型は
+                         WorkspaceTabViewModel で、表示に要る 3 つ（表題・アイコン・ツールチップ）
+                         だけを基底が公開している。 -->
+                    <ListBox Classes="verticaltabs" IsVisible="{Binding IsTabsPanel}"
+                             ItemContainerTheme="{StaticResource VerticalTabItemTheme}"
+                             ItemsSource="{Binding Tabs}"
+                             SelectedItem="{Binding SelectedTab}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             AutomationProperties.Name="タブ一覧">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
+                                <Grid Height="{DynamicResource TabItemHeight}"
+                                      ColumnDefinitions="32,*,36" Background="Transparent">
+                                    <TextBlock Grid.Column="0" Classes="icon" Text="{Binding TabGlyph}"
+                                               HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding TabTitle}" FontSize="12.5"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource TextPrimary}"
+                                               ToolTip.Tip="{Binding TabTooltip}" />
+                                    <Button Grid.Column="2" Classes="tabclose" Command="{Binding CloseTabCommand}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            AutomationProperties.Name="タブを閉じる">
+                                        <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />
+                                    </Button>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- アウトライン。選ぶだけでその行へ飛ぶので、矢印キーで見出しを辿れる。 -->
+                    <Panel IsVisible="{Binding IsOutlinePanel}">
+                        <ListBox x:Name="OutlineList" Classes="sidelist"
+                                 ItemsSource="{Binding Outline}"
+                                 SelectedItem="{Binding SelectedOutlineItem}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 AutomationProperties.Name="アウトライン">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="s:OutlineItem">
+                                    <Grid ColumnDefinitions="Auto,*" ToolTip.Tip="{Binding Title}">
+                                        <Border Grid.Column="0" Width="{Binding Indent}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12.5"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextPrimary}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Classes="sideempty" IsVisible="{Binding !HasOutline}"
+                                   Text="{Binding OutlineEmptyMessage}" />
+                    </Panel>
+
+                    <!-- ブックマーク。行番号と本文を並べ、選ぶとその行へ飛ぶ。 -->
+                    <Panel IsVisible="{Binding IsBookmarksPanel}">
+                        <ListBox x:Name="BookmarkList" Classes="sidelist"
+                                 ItemsSource="{Binding Bookmarks}"
+                                 SelectedItem="{Binding SelectedBookmark}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 AutomationProperties.Name="ブックマーク">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BookmarkEntry">
+                                    <Grid ColumnDefinitions="36,*" ToolTip.Tip="{Binding Display}">
+                                        <TextBlock Grid.Column="0" Text="{Binding Location}" FontSize="12"
+                                                   TextAlignment="Right" Margin="0,0,8,0"
+                                                   Foreground="{DynamicResource TextSecondary}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Display}" FontSize="12.5"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextPrimary}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Classes="sideempty" IsVisible="{Binding !HasBookmarks}"
+                                   Text="{Binding BookmarkEmptyMessage}" />
+                    </Panel>
+                </Panel>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="10,6,10,12" Spacing="4">
                     <Button Classes="tabclose" Content="&#xE710;" Command="{Binding NewDocumentCommand}"
                             AutomationProperties.Name="新しい文書" ToolTip.Tip="新しい文書 (Ctrl+N)" />
                     <Button Classes="tabclose" Content="&#xE8E5;" Command="{Binding OpenCommand}"
@@ -166,38 +242,13 @@
 
                     <Grid RowDefinitions="48,*,36" IsVisible="{Binding IsDocumentSelected}">
                         <Border Grid.Row="0" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
-                            <Grid ColumnDefinitions="*,Auto" Margin="8,4">
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,4">
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
-                                    <Button Classes="command" Command="{Binding NewDocumentCommand}" ToolTip.Tip="新規 (Ctrl+N)">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Classes="icon" Text="&#xE710;" />
-                                            <TextBlock Text="新規" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Classes="command" Command="{Binding OpenCommand}" ToolTip.Tip="開く (Ctrl+O)">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Classes="icon" Text="&#xE8E5;" />
-                                            <TextBlock Text="開く" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </Button>
                                     <Button Classes="command" Command="{Binding SaveCommand}" ToolTip.Tip="保存 (Ctrl+S)">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <TextBlock Classes="icon" Text="&#xE74E;" />
                                             <TextBlock Text="保存" VerticalAlignment="Center" />
                                         </StackPanel>
-                                    </Button>
-                                    <Button Classes="command" Command="{Binding SaveAsCommand}"
-                                            AutomationProperties.Name="名前を付けて保存"
-                                            ToolTip.Tip="名前を付けて保存 (Ctrl+Shift+S)">
-                                        <TextBlock Classes="icon" Text="&#xE792;" />
-                                    </Button>
-                                    <Button Classes="command" Command="{Binding SaveAllCommand}"
-                                            AutomationProperties.Name="すべて保存" ToolTip.Tip="すべて保存 (Ctrl+Alt+S)">
-                                        <TextBlock Classes="icon" Text="&#xEA35;" />
-                                    </Button>
-                                    <Button Classes="command" Command="{Binding ReloadCommand}"
-                                            AutomationProperties.Name="ディスクから開き直す" ToolTip.Tip="開き直す (Ctrl+Shift+R)">
-                                        <TextBlock Classes="icon" Text="&#xE72C;" />
                                     </Button>
                                     <Border Width="1" Height="24" Margin="6,0" Background="{DynamicResource Divider}" />
                                     <Button Classes="command" Command="{Binding UndoCommand}"
@@ -212,56 +263,36 @@
                                             AutomationProperties.Name="検索" ToolTip.Tip="検索 (Ctrl+F)">
                                         <TextBlock Classes="icon" Text="&#xE721;" />
                                     </Button>
-                                    <Button Classes="command" Click="Replace_Click"
-                                            AutomationProperties.Name="置換" ToolTip.Tip="置換 (Ctrl+H)">
-                                        <TextBlock Classes="icon" Text="&#xE8AB;" />
-                                    </Button>
-                                    <Button Classes="command" Command="{Binding GoToLineCommand}"
-                                            AutomationProperties.Name="指定行へ移動" ToolTip.Tip="指定行へ移動 (Ctrl+G)">
-                                        <TextBlock Classes="icon" Text="&#xE8A7;" />
-                                    </Button>
-                                    <Border Width="1" Height="24" Margin="6,0" Background="{DynamicResource Divider}" />
+                                </StackPanel>
 
-                                    <!-- ===== 区分ごとのコマンドアイコン =====
-                                         sakura のメニューバー（編集／変換／挿入／検索）に当たる入り口。
-                                         中身は EditorCommandCatalog からコードビハインドで組む
-                                         （MenuFlyout をデータバインドするとリフレクション束縛になり
-                                         PublishAot のトリミングで落ちるため）。アイコンと x:Name の対応は
-                                         EditorCommandCatalog.CategoryIcons が持っている。 -->
-                                    <Button x:Name="EditMenuButton" Classes="command"
-                                            AutomationProperties.Name="編集コマンド" ToolTip.Tip="編集">
-                                        <TextBlock Classes="icon" Text="&#xE70F;" />
-                                    </Button>
-                                    <Button x:Name="ConvertMenuButton" Classes="command"
-                                            AutomationProperties.Name="変換コマンド" ToolTip.Tip="変換">
-                                        <TextBlock Classes="icon" Text="&#xE8C1;" />
-                                    </Button>
-                                    <Button x:Name="InsertMenuButton" Classes="command"
-                                            AutomationProperties.Name="挿入コマンド" ToolTip.Tip="挿入">
-                                        <TextBlock Classes="icon" Text="&#xE70B;" />
-                                    </Button>
-                                    <Button x:Name="JumpMenuButton" Classes="command"
-                                            AutomationProperties.Name="検索・移動コマンド" ToolTip.Tip="検索・移動">
-                                        <TextBlock Classes="icon" Text="&#xE82D;" />
-                                    </Button>
-                                    <Button Classes="command" Command="{Binding OpenCommandPaletteCommand}"
-                                            AutomationProperties.Name="コマンドパレット"
-                                            ToolTip.Tip="コマンドパレット (Ctrl+Shift+P)">
-                                        <TextBlock Classes="icon" Text="&#xE712;" />
-                                    </Button>
+                                <!-- ===== 全機能の入口 =====
+                                     ツールバーへ機能を足し続けると横に伸びて優先度が消える。常時出すのは
+                                     上の 4 つだけにして、残りはここから名前で引く（sakura のメニューバーは
+                                     タイトルバーを掴んで動かす作りと両立しないため置けない）。 -->
+                                <Button Grid.Column="1" Classes="palette"
+                                        Command="{Binding OpenCommandPaletteCommand}"
+                                        AutomationProperties.Name="コマンドパレット"
+                                        ToolTip.Tip="すべての機能を名前で探す (Ctrl+Shift+P)">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <TextBlock Grid.Column="0" Classes="icon" Text="&#xE721;" FontSize="12"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextSecondary}" />
+                                        <TextBlock Grid.Column="1" Margin="8,0" VerticalAlignment="Center"
+                                                   FontSize="12.5" Text="コマンドを名前で探す"
+                                                   Foreground="{DynamicResource TextSecondary}" />
+                                        <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11.5"
+                                                   Text="Ctrl+Shift+P"
+                                                   Foreground="{DynamicResource TextSecondary}" />
+                                    </Grid>
+                                </Button>
+
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+                                    <!-- 今の文書でしか意味のないものだけを、この位置へ文脈で出す。 -->
                                     <Button Classes="command" Command="{Binding ToggleMarkdownPreviewCommand}"
                                             IsVisible="{Binding SelectedDocument.CanShowMarkdownPreview}"
                                             AutomationProperties.Name="Markdown プレビュー切り替え"
                                             ToolTip.Tip="Markdown プレビュー (Ctrl+Shift+M)">
                                         <TextBlock Classes="icon" Text="&#xE8A7;" />
-                                    </Button>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
-                                    <Border Width="1" Height="24" Margin="4,0,6,0" Background="{DynamicResource Divider}" />
-                                    <!-- 設定はフライアウトではなくタブで開く（項目が増えても入り口が変わらない）。 -->
-                                    <Button Classes="command" Command="{Binding OpenSettingsCommand}"
-                                            AutomationProperties.Name="設定" ToolTip.Tip="設定 (Ctrl+,)">
-                                        <TextBlock Classes="icon" Text="&#xE713;" />
                                     </Button>
                                 </StackPanel>
                             </Grid>
@@ -283,11 +314,20 @@
 
                         <Border Grid.Row="2" Background="{DynamicResource ContentBg}"
                                 BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0">
-                            <Grid ColumnDefinitions="*,Auto" Margin="16,0,10,0">
-                                <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" FontSize="12"
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="16,0,10,0">
+                                <!-- 記録中と気付かないまま編集すると、意図しない手が混ざったマクロができる。 -->
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" Margin="0,0,12,0"
+                                            VerticalAlignment="Center" IsVisible="{Binding IsRecordingMacro}">
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource RecordingIndicator}"
+                                             VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding MacroRecordingText}" FontSize="12"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource TextPrimary}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" FontSize="12"
                                            Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis" />
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
                                     <TextBlock Text="{Binding SelectedDocument.LineColumnText}" FontSize="12"
                                                Foreground="{DynamicResource TextSecondary}" />
                                     <TextBlock Text="{Binding SelectedDocument.StatisticsText}" FontSize="12"
@@ -366,6 +406,86 @@
                         </Border>
                     </Grid>
 
+                    <!-- ===== フォルダ横断検索の結果 =====
+                         秀丸の grep 結果に当たる面。1 行選ぶと該当ファイルの該当行へ飛ぶ
+                         （ダブルクリックまたは Enter）。 -->
+                    <Grid RowDefinitions="48,*,36" IsVisible="{Binding IsGrepSelected}">
+                        <Border Grid.Row="0" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
+                            <Grid ColumnDefinitions="Auto,*" Margin="10,4">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                                    <Button Classes="command" Command="{Binding GrepCommand}"
+                                            ToolTip.Tip="新しい検索 (Ctrl+Shift+F)">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Classes="icon" Text="&#xE81E;" />
+                                            <TextBlock Text="新しい検索" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Classes="command" Command="{Binding SelectedGrep.SearchAgainCommand}"
+                                            AutomationProperties.Name="もう一度検索" ToolTip.Tip="もう一度検索">
+                                        <TextBlock Classes="icon" Text="&#xE72C;" />
+                                    </Button>
+                                    <Button Classes="command" Command="{Binding SelectedGrep.CancelSearchCommand}"
+                                            AutomationProperties.Name="検索を中止" ToolTip.Tip="検索を中止">
+                                        <TextBlock Classes="icon" Text="&#xE711;" />
+                                    </Button>
+                                    <Border Width="1" Height="24" Margin="6,0" Background="{DynamicResource Divider}" />
+                                    <Button Classes="command" Command="{Binding SelectedGrep.OpenSelectedCommand}"
+                                            ToolTip.Tip="選んだ行へ移動 (Enter)">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Classes="icon" Text="&#xE8A7;" />
+                                            <TextBlock Text="その行へ" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondary}"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding SelectedGrep.TabTooltip}" />
+                            </Grid>
+                        </Border>
+
+                        <Panel Grid.Row="1" Background="{DynamicResource EditorBg}">
+                            <ListBox x:Name="GrepResultList" Classes="grepresults"
+                                     ItemsSource="{Binding SelectedGrep.Matches}"
+                                     SelectedItem="{Binding SelectedGrep.SelectedMatch}"
+                                     DoubleTapped="GrepResults_DoubleTapped"
+                                     KeyDown="GrepResults_KeyDown"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     AutomationProperties.Name="検索結果">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:GrepMatchItem">
+                                        <Grid ColumnDefinitions="230,*" ToolTip.Tip="{Binding Tooltip}">
+                                            <TextBlock Grid.Column="0" Text="{Binding Location}" FontSize="12.5"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextSecondary}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Preview}" FontSize="12.5"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextPrimary}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       IsVisible="{Binding SelectedGrep.IsSearching}"
+                                       Foreground="{DynamicResource TextSecondary}" Text="検索しています…" />
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       IsVisible="{Binding SelectedGrep.HasNoMatches}"
+                                       Foreground="{DynamicResource TextSecondary}"
+                                       Text="一致する行は見つかりませんでした" />
+                        </Panel>
+
+                        <Border Grid.Row="2" Background="{DynamicResource ContentBg}"
+                                BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0">
+                            <Grid Margin="16,0,10,0" ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding SelectedGrep.Status}" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="1" Text="フォルダ横断検索" FontSize="12"
+                                           Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+
                     <!-- ===== コマンドパレット =====
                          sakura のメニューバーは Fumilume には置けない（タイトルバーを掴んで動かす作りと
                          両立しない）。機能が 400 件規模まで増えても入り口が変わらないよう、
@@ -394,7 +514,7 @@
                                          KeyDown="CommandPalette_KeyDown"
                                          AutomationProperties.Name="コマンド候補">
                                     <ListBox.ItemTemplate>
-                                        <DataTemplate x:DataType="s:EditorCommandDefinition">
+                                        <DataTemplate x:DataType="vm:CommandPaletteEntry">
                                             <Grid ColumnDefinitions="64,*,Auto" Height="30">
                                                 <TextBlock Grid.Column="0" Text="{Binding Category}" FontSize="11.5"
                                                            VerticalAlignment="Center"

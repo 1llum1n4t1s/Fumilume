@@ -51,7 +51,21 @@ public sealed class DocumentFileService : IDocumentFileService
         var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            await File.WriteAllBytesAsync(temporaryPath, payload, cancellationToken);
+            var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                useAsync: true);
+            await using (stream.ConfigureAwait(false))
+            {
+                await stream.WriteAsync(payload, cancellationToken);
+
+                // 置き換え前にディスクまで送る（電源断で「置き換えは済んだが中身は空」を避ける）。
+                // 設定ファイルと同じ扱いにする。失われて困る度合いは本文のほうが大きい。
+                stream.Flush(flushToDisk: true);
+            }
 
             // sakura の「保存時にバックアップを作成する」相当。上書き直前の内容を .bak へ退避する。
             // バックアップに失敗しても保存そのものは通す（保存できないほうが困る）。
@@ -63,6 +77,9 @@ public sealed class DocumentFileService : IDocumentFileService
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
+                    AppLogger.For<DocumentFileService>().Warn(
+                        $"バックアップを作成できませんでした: {fullPath}.bak",
+                        ex);
                 }
             }
 
