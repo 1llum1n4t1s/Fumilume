@@ -12,37 +12,54 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly IEditorDialogService _dialogs;
     private int _untitledSequence;
 
-    public MainWindowViewModel(IDocumentFileService files, IEditorDialogService dialogs)
+    public MainWindowViewModel(
+        IDocumentFileService files,
+        IEditorDialogService dialogs,
+        AppSettings? settings = null)
     {
         _files = files;
         _dialogs = dialogs;
+        Options = new AppOptionsViewModel(settings ?? new AppSettings());
         NewDocument();
     }
 
-    public ObservableCollection<DocumentViewModel> Documents { get; } = [];
+    /// <summary>タブ一覧。文書タブと設定タブが同じ並びに入る。</summary>
+    public ObservableCollection<WorkspaceTabViewModel> Tabs { get; } = [];
+
+    /// <summary>エディタ本体と設定タブが共有するオプション。</summary>
+    public AppOptionsViewModel Options { get; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
     [NotifyPropertyChangedFor(nameof(CurrentPath))]
-    private DocumentViewModel? _selectedDocument;
+    [NotifyPropertyChangedFor(nameof(SelectedDocument))]
+    [NotifyPropertyChangedFor(nameof(IsDocumentSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSettingsSelected))]
+    private WorkspaceTabViewModel? _selectedTab;
 
     [ObservableProperty]
     private string _statusMessage = "準備完了";
 
+    /// <summary>開かれている設定タブ（無ければ null）。設定ビューの DataContext をここへ直接
+    /// 差し込むことで、文書タブを選んでいる間に設定ビューが文書へバインドされるのを避ける。</summary>
     [ObservableProperty]
-    private bool _wordWrap;
+    private SettingsTabViewModel? _settingsTab;
 
-    [ObservableProperty]
-    private bool _showLineNumbers = true;
+    /// <summary>選択中のタブが文書ならそれ。設定タブのときは null。</summary>
+    public DocumentViewModel? SelectedDocument => SelectedTab as DocumentViewModel;
 
-    [ObservableProperty]
-    private bool _showWhitespace;
+    public bool IsDocumentSelected => SelectedTab is DocumentViewModel;
+
+    public bool IsSettingsSelected => SelectedTab is SettingsTabViewModel;
+
+    /// <summary>開いている文書だけを取り出す（未保存確認や重複オープンの判定に使う）。</summary>
+    public IEnumerable<DocumentViewModel> Documents => Tabs.OfType<DocumentViewModel>();
 
     public bool CanUndo => SelectedDocument?.CanUndo == true;
 
     public bool CanRedo => SelectedDocument?.CanRedo == true;
 
-    public string WindowTitle => $"{SelectedDocument?.DisplayTitle ?? "Fumilume"} - Fumilume";
+    public string WindowTitle => $"{SelectedTab?.TabTitle ?? "Fumilume"} - Fumilume";
 
     public string CurrentPath => SelectedDocument?.PathDisplay ?? "新しいテキスト文書";
 
@@ -52,6 +69,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (paths.Length > 0)
         {
             await OpenPathsAsync(paths);
+        }
+
+        // 前回終了時に設定タブを開いていたなら同じ状態へ戻す（選択は文書のまま）。
+        if (Options.Settings.SettingsTabOpen)
+        {
+            EnsureSettingsTab(select: false);
         }
     }
 
@@ -68,17 +91,33 @@ public sealed partial class MainWindowViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>終了時に、次回復元したい状態を settings.json へ書き戻す。</summary>
+    public void PersistSessionState()
+    {
+        Options.Settings.SettingsTabOpen = Tabs.Any(tab => tab.IsSettingsTab);
+        foreach (var document in Documents)
+        {
+            RememberCaretPosition(document);
+        }
+
+        Options.Persist();
+    }
+
     [RelayCommand]
     private void NewDocument()
     {
         _untitledSequence++;
         var name = _untitledSequence == 1 ? "無題" : $"無題 {_untitledSequence}";
-        var document = new DocumentViewModel(name, CloseDocumentCoreAsync);
+        var document = new DocumentViewModel(name, CloseTabCoreAsync);
         document.PropertyChanged += OnDocumentPropertyChanged;
-        Documents.Add(document);
-        SelectedDocument = document;
+        InsertDocumentTab(document);
+        SelectedTab = document;
         StatusMessage = "新しい文書を作成しました";
     }
+
+    /// <summary>設定タブを開く（既に開いていればそれを選ぶ）。</summary>
+    [RelayCommand]
+    private void OpenSettings() => EnsureSettingsTab(select: true);
 
     [RelayCommand]
     private async Task OpenAsync()
@@ -96,18 +135,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 string.Equals(document.FilePath, fullPath, StringComparison.OrdinalIgnoreCase));
             if (existing is not null)
             {
-                SelectedDocument = existing;
+                SelectedTab = existing;
+                continue;
+            }
+
+            if (!await ConfirmLargeFileAsync(fullPath))
+            {
                 continue;
             }
 
             try
             {
                 var content = await _files.ReadAsync(fullPath);
-                var document = new DocumentViewModel(Path.GetFileName(fullPath), CloseDocumentCoreAsync);
+                var document = new DocumentViewModel(Path.GetFileName(fullPath), CloseTabCoreAsync);
                 document.Load(fullPath, content);
+                RestoreCaretPosition(document, fullPath);
                 document.PropertyChanged += OnDocumentPropertyChanged;
-                Documents.Add(document);
-                SelectedDocument = document;
+                InsertDocumentTab(document);
+                SelectedTab = document;
                 StatusMessage = $"{Path.GetFileName(fullPath)} を開きました";
             }
             catch (Exception ex)
@@ -121,25 +166,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
         RemovePristineInitialDocument();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsDocumentSelected))]
     private Task SaveAsync()
         => SelectedDocument is null ? Task.CompletedTask : SaveDocumentAsync(SelectedDocument, saveAs: false);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsDocumentSelected))]
     private Task SaveAsAsync()
         => SelectedDocument is null ? Task.CompletedTask : SaveDocumentAsync(SelectedDocument, saveAs: true);
 
     [RelayCommand]
-    private Task CloseDocumentAsync(DocumentViewModel? document)
-        => document is null ? Task.CompletedTask : CloseDocumentCoreAsync(document);
+    private Task CloseTabAsync(WorkspaceTabViewModel? tab)
+        => tab is null ? Task.CompletedTask : CloseTabCoreAsync(tab);
 
     [RelayCommand]
     private Task CheckForUpdatesAsync()
         => _dialogs.CheckForUpdatesAsync(manually: true);
-
-    [RelayCommand]
-    private Task ConfigureFileAssociationsAsync()
-        => _dialogs.ConfigureFileAssociationsAsync();
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private void Undo()
@@ -149,7 +190,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private void Redo()
         => SelectedDocument?.EditorDocument.UndoStack.Redo();
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsDocumentSelected))]
     private async Task GoToLineAsync()
     {
         var document = SelectedDocument;
@@ -168,22 +209,82 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusMessage = $"行 {line.Value:N0} へ移動しました";
     }
 
-    private async Task CloseDocumentCoreAsync(DocumentViewModel document)
+    /// <summary>設定タブは常に一覧の末尾に置き、文書タブはその手前へ追加する。</summary>
+    private void InsertDocumentTab(DocumentViewModel document)
     {
-        if (document.IsModified && !await ResolveUnsavedAsync(document))
+        var settingsIndex = IndexOfSettingsTab();
+        if (settingsIndex < 0)
         {
+            Tabs.Add(document);
+        }
+        else
+        {
+            Tabs.Insert(settingsIndex, document);
+        }
+    }
+
+    private int IndexOfSettingsTab()
+    {
+        for (var index = 0; index < Tabs.Count; index++)
+        {
+            if (Tabs[index].IsSettingsTab)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private void EnsureSettingsTab(bool select)
+    {
+        if (SettingsTab is null)
+        {
+            SettingsTab = new SettingsTabViewModel(
+                Options,
+                CheckForUpdatesCommand,
+                _dialogs.ShowErrorAsync,
+                CloseTabCoreAsync);
+            Tabs.Add(SettingsTab);
+        }
+
+        if (select)
+        {
+            SelectedTab = SettingsTab;
+        }
+    }
+
+    private async Task CloseTabCoreAsync(WorkspaceTabViewModel tab)
+    {
+        if (tab is DocumentViewModel document)
+        {
+            if (document.IsModified && !await ResolveUnsavedAsync(document))
+            {
+                return;
+            }
+
+            RememberCaretPosition(document);
+            document.PropertyChanged -= OnDocumentPropertyChanged;
+        }
+        else if (tab is SettingsTabViewModel)
+        {
+            SettingsTab = null;
+        }
+
+        var closingIndex = Tabs.IndexOf(tab);
+        Tabs.Remove(tab);
+
+        // 文書が 1 つも無い状態は作らない（設定タブだけが残るとエディタが空になる）。
+        if (!Documents.Any())
+        {
+            NewDocument();
             return;
         }
 
-        document.PropertyChanged -= OnDocumentPropertyChanged;
-        Documents.Remove(document);
-        if (Documents.Count == 0)
+        if (ReferenceEquals(SelectedTab, tab) || SelectedTab is null)
         {
-            NewDocument();
-        }
-        else if (ReferenceEquals(SelectedDocument, document))
-        {
-            SelectedDocument = Documents[^1];
+            var nextIndex = Math.Clamp(closingIndex, 0, Tabs.Count - 1);
+            SelectedTab = Tabs[nextIndex];
         }
     }
 
@@ -213,9 +314,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         try
         {
-            await _files.WriteAsync(path, document.CreateSaveContent());
+            await _files.WriteAsync(path, document.CreateSaveContent(), Options.CreateBackupOnSave);
             document.MarkSaved(path);
-            SelectedDocument = document;
+            RememberCaretPosition(document);
+            SelectedTab = document;
             StatusMessage = $"{document.DisplayName} を保存しました";
             return true;
         }
@@ -228,14 +330,79 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    partial void OnSelectedDocumentChanged(DocumentViewModel? oldValue, DocumentViewModel? newValue)
+    /// <summary>終了時の確認（sakura の m_bExitConfirm）。設定が OFF ならビュー側から呼ばれない。</summary>
+    public Task<bool> ConfirmExitAsync()
+        => _dialogs.ConfirmAsync("Fumilume の終了", "Fumilume を終了しますか？");
+
+    // ===== ファイル設定（sakura の共通設定『ファイル』相当） =====
+
+    /// <summary>
+    /// 大きなファイルを開く前に尋ねる（sakura の m_bAlertIfLargeFile / m_nAlertFileSize）。
+    /// サイズが読めないときは黙って開く（存在しないファイルは後段のエラーで扱う）。
+    /// </summary>
+    private async Task<bool> ConfirmLargeFileAsync(string fullPath)
     {
-        OnPropertyChanged(nameof(WindowTitle));
-        OnPropertyChanged(nameof(CurrentPath));
+        if (!Options.WarnOnLargeFile)
+        {
+            return true;
+        }
+
+        long length;
+        try
+        {
+            var info = new FileInfo(fullPath);
+            if (!info.Exists)
+            {
+                return true;
+            }
+
+            length = info.Length;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return true;
+        }
+
+        var thresholdBytes = (long)Options.LargeFileThresholdMegabytes * 1024 * 1024;
+        if (length <= thresholdBytes)
+        {
+            return true;
+        }
+
+        return await _dialogs.ConfirmAsync(
+            "大きなファイルを開きます",
+            $"{Path.GetFileName(fullPath)} は {length / 1024.0 / 1024.0:N1} MB あります。\n開くまで時間がかかることがあります。続けますか？");
+    }
+
+    /// <summary>前回のカーソル位置へ戻す（sakura の m_bRestoreCurPosition）。</summary>
+    private void RestoreCaretPosition(DocumentViewModel document, string fullPath)
+    {
+        if (!Options.RestoreCaretPosition ||
+            !Options.Settings.CaretPositions.TryGetValue(fullPath, out var offset))
+        {
+            return;
+        }
+
+        document.CaretIndex = Math.Clamp(offset, 0, document.EditorDocument.TextLength);
+    }
+
+    /// <summary>閉じる・保存のたびにカーソル位置を控える。</summary>
+    private void RememberCaretPosition(DocumentViewModel document)
+    {
+        if (!Options.RestoreCaretPosition || document.FilePath is not { } path)
+        {
+            return;
+        }
+
+        Options.Settings.CaretPositions[path] = document.CaretIndex;
+        Options.Persist();
+    }
+
+    partial void OnSelectedTabChanged(WorkspaceTabViewModel? oldValue, WorkspaceTabViewModel? newValue)
+    {
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
-        UndoCommand.NotifyCanExecuteChanged();
-        RedoCommand.NotifyCanExecuteChanged();
+        NotifyDocumentCommandsChanged();
     }
 
     private void OnDocumentPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -245,7 +412,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        if (args.PropertyName is nameof(DocumentViewModel.DisplayTitle) or nameof(DocumentViewModel.FilePath))
+        if (args.PropertyName is nameof(DocumentViewModel.DisplayTitle)
+            or nameof(DocumentViewModel.TabTitle)
+            or nameof(DocumentViewModel.FilePath))
         {
             OnPropertyChanged(nameof(WindowTitle));
             OnPropertyChanged(nameof(CurrentPath));
@@ -264,9 +433,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    private void NotifyDocumentCommandsChanged()
+    {
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        SaveCommand.NotifyCanExecuteChanged();
+        SaveAsCommand.NotifyCanExecuteChanged();
+        GoToLineCommand.NotifyCanExecuteChanged();
+    }
+
     private void RemovePristineInitialDocument()
     {
-        if (Documents.Count <= 1)
+        if (Documents.Count() <= 1)
         {
             return;
         }
@@ -279,6 +457,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         pristine.PropertyChanged -= OnDocumentPropertyChanged;
-        Documents.Remove(pristine);
+        Tabs.Remove(pristine);
     }
 }

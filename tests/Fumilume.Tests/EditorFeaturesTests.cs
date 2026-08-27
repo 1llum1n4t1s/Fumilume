@@ -11,9 +11,11 @@ public sealed class EditorFeaturesTests
     {
         var viewModel = CreateViewModel(new FakeDialogService());
 
-        Assert.True(viewModel.ShowLineNumbers);
-        Assert.False(viewModel.WordWrap);
-        Assert.False(viewModel.ShowWhitespace);
+        Assert.True(viewModel.Options.ShowLineNumbers);
+        Assert.False(viewModel.Options.WordWrap);
+        Assert.False(viewModel.Options.ShowSpaces);
+        Assert.False(viewModel.Options.ShowTabs);
+        Assert.False(viewModel.Options.ShowEndOfLine);
     }
 
     [Fact]
@@ -54,6 +56,7 @@ public sealed class EditorFeaturesTests
         public Task WriteAsync(
             string path,
             TextDocumentContent content,
+            bool createBackup = false,
             CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
@@ -77,8 +80,10 @@ public sealed class EditorFeaturesTests
         public Task<int?> PickLineNumberAsync(int currentLine, int maximumLine)
             => Task.FromResult(RequestedLine);
 
-        public Task ConfigureFileAssociationsAsync()
-            => Task.CompletedTask;
+        public Task<string?> PromptTextAsync(string title, string message, string initialText)
+            => Task.FromResult<string?>(null);
+
+        public Task<bool> ConfirmAsync(string title, string message) => Task.FromResult(true);
 
         public Task CheckForUpdatesAsync(bool manually)
             => Task.CompletedTask;

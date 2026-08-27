@@ -19,7 +19,7 @@ public sealed class DocumentFileServiceTests
             var service = new DocumentFileService();
             var content = new TextDocumentContent("一行目\n二行目\r\n三行目", encoding, "\r\n");
 
-            await service.WriteAsync(path, content, TestContext.Current.CancellationToken);
+            await service.WriteAsync(path, content, cancellationToken: TestContext.Current.CancellationToken);
             var loaded = await service.ReadAsync(path, TestContext.Current.CancellationToken);
             var bytes = await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken);
 

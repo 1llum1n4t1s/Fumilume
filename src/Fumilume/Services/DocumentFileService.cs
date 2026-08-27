@@ -32,6 +32,7 @@ public sealed class DocumentFileService : IDocumentFileService
     public async Task WriteAsync(
         string path,
         TextDocumentContent content,
+        bool createBackup = false,
         CancellationToken cancellationToken = default)
     {
         var fullPath = Path.GetFullPath(path);
@@ -51,6 +52,20 @@ public sealed class DocumentFileService : IDocumentFileService
         try
         {
             await File.WriteAllBytesAsync(temporaryPath, payload, cancellationToken);
+
+            // sakura の「保存時にバックアップを作成する」相当。上書き直前の内容を .bak へ退避する。
+            // バックアップに失敗しても保存そのものは通す（保存できないほうが困る）。
+            if (createBackup && File.Exists(fullPath))
+            {
+                try
+                {
+                    File.Copy(fullPath, fullPath + ".bak", overwrite: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+
             File.Move(temporaryPath, fullPath, overwrite: true);
         }
         finally

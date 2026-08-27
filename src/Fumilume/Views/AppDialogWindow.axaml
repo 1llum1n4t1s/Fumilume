@@ -1,0 +1,76 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Fumilume.Views.AppDialogWindow"
+        Icon="/icon/app_icon_crystal_warm.png"
+        Width="460"
+        MinWidth="340"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="32"
+        WindowDecorations="BorderOnly"
+        Background="Transparent"
+        UseLayoutRounding="True">
+    <!-- 体裁はメインウィンドウと同じ Styles/CommonStyles.axaml を共有する。
+         アクリルの可否は設定に追従させるためコードビハインドで決める。 -->
+    <Panel>
+        <Border x:Name="FallbackLayer" Background="{DynamicResource FallbackWindowBg}" />
+        <ExperimentalAcrylicBorder x:Name="AcrylicLayer" IsHitTestVisible="False">
+            <ExperimentalAcrylicBorder.Material>
+                <ExperimentalAcrylicMaterial BackgroundSource="Digger"
+                                             TintColor="{DynamicResource AcrylicTintColor}" />
+            </ExperimentalAcrylicBorder.Material>
+        </ExperimentalAcrylicBorder>
+        <Border x:Name="AcrylicScrim" Background="{DynamicResource AcrylicScrimBrush}" IsHitTestVisible="False" />
+
+        <Grid RowDefinitions="32,*">
+            <!-- Background="Transparent" が無いと Grid がヒットテストされず、掴んで動かせない。 -->
+            <Grid x:Name="TitleBar" Grid.Row="0" ColumnDefinitions="*,Auto"
+                  Background="Transparent"
+                  PointerPressed="TitleBar_PointerPressed">
+                <TextBlock x:Name="DialogTitle"
+                           Margin="16,0,10,0"
+                           FontSize="12.5"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextPrimary}"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
+                           IsHitTestVisible="False" />
+                <Button Grid.Column="1"
+                        Classes="caption close"
+                        Click="Close_Click"
+                        AutomationProperties.Name="閉じる">
+                    <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />
+                </Button>
+            </Grid>
+
+            <!-- 角丸の切り抜きはコードビハインドの Clip で行う（ClipToBounds は矩形で角丸に追従せず、
+                 下端の操作バーが島の角丸の枠線を塗りつぶしてしまう）。 -->
+            <Border x:Name="DialogSurface"
+                    Grid.Row="1"
+                    Margin="6,0,6,6"
+                    Background="{DynamicResource ContentBg}"
+                    BorderBrush="{DynamicResource Divider}"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <Grid RowDefinitions="*,Auto">
+                    <ContentControl x:Name="DialogContentHost"
+                                    Margin="24,22,24,20"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch" />
+                    <Border Grid.Row="1"
+                            Padding="24,14"
+                            Background="{DynamicResource OmniboxBg}"
+                            BorderBrush="{DynamicResource Divider}"
+                            BorderThickness="0,1,0,0">
+                        <StackPanel x:Name="DialogActionHost"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Spacing="8" />
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Panel>
+</Window>

@@ -1,20 +1,18 @@
 using System.ComponentModel;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Fumilume.Models;
 
 namespace Fumilume.ViewModels;
 
-public sealed partial class DocumentViewModel : ObservableObject
+public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 {
-    private readonly Func<DocumentViewModel, Task> _closeAsync;
     private bool _isLoading;
 
-    public DocumentViewModel(string untitledName, Func<DocumentViewModel, Task> closeAsync)
+    public DocumentViewModel(string untitledName, Func<WorkspaceTabViewModel, Task> closeAsync)
+        : base(closeAsync)
     {
         UntitledName = untitledName;
-        _closeAsync = closeAsync;
         EditorDocument.TextChanged += OnEditorDocumentTextChanged;
         EditorDocument.UndoStack.PropertyChanged += OnUndoStackPropertyChanged;
         EditorDocument.UndoStack.MarkAsOriginalFile();
@@ -23,16 +21,26 @@ public sealed partial class DocumentViewModel : ObservableObject
 
     public string UntitledName { get; }
 
+    /// <summary>Segoe Fluent Icons の文書アイコン。</summary>
+    public override string TabGlyph => "";
+
+    public override string TabTitle => DisplayTitle;
+
+    public override string TabTooltip => PathDisplay;
+
     public TextDocument EditorDocument { get; } = new();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayName))]
     [NotifyPropertyChangedFor(nameof(DisplayTitle))]
     [NotifyPropertyChangedFor(nameof(PathDisplay))]
+    [NotifyPropertyChangedFor(nameof(TabTitle))]
+    [NotifyPropertyChangedFor(nameof(TabTooltip))]
     private string? _filePath;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DisplayTitle))]
+    [NotifyPropertyChangedFor(nameof(TabTitle))]
     private bool _isModified;
 
     [ObservableProperty]
@@ -150,9 +158,6 @@ public sealed partial class DocumentViewModel : ObservableObject
 
     public int GetLineStartOffset(int lineNumber)
         => EditorDocument.GetLineByNumber(Math.Clamp(lineNumber, 1, EditorDocument.LineCount)).Offset;
-
-    [RelayCommand]
-    private Task CloseAsync() => _closeAsync(this);
 
     private void OnEditorDocumentTextChanged(object? sender, EventArgs args)
     {
