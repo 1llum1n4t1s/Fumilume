@@ -5,6 +5,7 @@
 // 購入・ライセンス関連の経路は持たない。
 import landingHtml from "./index.html";
 import heroAppPng from "./hero-app.png";
+import iconPng from "./icon.png";
 
 export default {
   async fetch(request, env) {
@@ -22,6 +23,17 @@ export default {
     // ヒーローのアプリスクリーンショット（Worker バンドル同梱）
     if (pathname === "/hero-app.png") {
       return new Response(heroAppPng, {
+        headers: {
+          "content-type": "image/png",
+          "cache-control": "public, max-age=86400",
+        },
+      });
+    }
+
+    // アプリアイコン。/favicon.ico はリンクを見ない直リクエスト向けで、中身は同じ PNG を返す
+    // （主要ブラウザは content-type が image/png なら favicon.ico パスでも PNG を受け付ける）。
+    if (pathname === "/icon.png" || pathname === "/favicon.ico") {
+      return new Response(iconPng, {
         headers: {
           "content-type": "image/png",
           "cache-control": "public, max-age=86400",

@@ -217,7 +217,7 @@ foreach ($plan in $publishPlans) {
             --packTitle 'Fumilume' `
             --packAuthors 'Kagayoi' `
             --mainExe Fumilume.exe `
-            --icon (Join-Path 'src' 'Fumilume' 'icon' 'app.ico') `
+            --icon (Join-Path 'src' 'Fumilume' 'icon' 'app_crystal_warm.ico') `
             --packDir $plan.PublishDir `
             --outputDir $ArtifactsDir `
             --channel $plan.Channel `

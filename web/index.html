@@ -10,6 +10,8 @@
   <meta name="robots" content="index, follow" />
   <meta name="theme-color" content="#ffffff" />
   <link rel="canonical" href="https://fumilume.kagayoi.com/" />
+  <link rel="icon" type="image/png" sizes="256x256" href="/icon.png" />
+  <link rel="apple-touch-icon" href="/icon.png" />
 
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Fumilume" />
@@ -92,11 +94,8 @@
     }
     .nav-inner { display: flex; align-items: center; gap: 26px; height: 64px; }
     .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: .02em; }
-    .brand-mark {
-      width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
-      background: linear-gradient(135deg, #4aa8ff, #006fee);
-      color: #fff; font-size: 15px; box-shadow: var(--shadow-sm);
-    }
+    /* アプリ本体と同じアイコン。画像自体が形を持つので、地色や角丸は付けない。 */
+    .brand-mark { width: 30px; height: 30px; object-fit: contain; }
     .nav-links { display: flex; gap: 4px; margin-left: auto; }
     .nav-links a {
       padding: 7px 14px; border-radius: 999px; font-size: 13.5px; font-weight: 500; color: var(--muted);
@@ -244,7 +243,7 @@
 
   <header class="nav">
     <div class="wrap nav-inner">
-      <a class="brand" href="#top"><span class="brand-mark">📝</span>Fumilume</a>
+      <a class="brand" href="#top"><img class="brand-mark" src="/icon.png" width="30" height="30" alt="" />Fumilume</a>
       <nav class="nav-links" aria-label="ページ内リンク">
         <a href="#features">機能</a>
         <a href="#price">価格</a>
@@ -421,7 +420,7 @@
     <h2 id="footer-title" class="sr-only">フッター</h2>
     <div class="wrap foot">
       <div>
-        <a class="brand" href="#top"><span class="brand-mark">📝</span>Fumilume</a>
+        <a class="brand" href="#top"><img class="brand-mark" src="/icon.png" width="30" height="30" alt="" />Fumilume</a>
         <p style="max-width: 30em; margin: 10px 0 0;">垂直タブで文書を行き来しながら、文字コードも改行コードもそのまま。無料の Windows テキストエディタ。</p>
       </div>
       <nav aria-label="サポートリンク">
