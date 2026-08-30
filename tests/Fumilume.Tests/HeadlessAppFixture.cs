@@ -29,6 +29,8 @@ public sealed class HeadlessAppFixture : IDisposable
             {
                 AppBuilder.Configure<App>()
                     .UseHeadless(new AvaloniaHeadlessPlatformOptions())
+                    .ConfigureFonts(fontManager =>
+                        fontManager.AddFontCollection(new FumilumeFontCollection()))
                     .SetupWithoutStarting();
             }
             catch (Exception ex)

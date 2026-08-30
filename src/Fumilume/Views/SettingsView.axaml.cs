@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Fumilume.Services;
 
 namespace Fumilume.Views;
 
@@ -17,19 +18,27 @@ public sealed partial class SettingsView : UserControl
         FontFamilies =
         [
             .. systemFonts
-                .Append(new FontFamily("Inter"))
+                .Append(AppFontFamilies.BundledUiFont)
                 .GroupBy(font => font.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.First())
                 .OrderBy(font => font.Name, StringComparer.CurrentCultureIgnoreCase),
         ];
         // 手入力した名前を TryGetGlyphTypeface へ渡すと代替フォントが返り、固定ピッチと
         // 誤判定する場合がある。OS が実在を保証した SystemFonts だけを判定対象にする。
-        EditorFontFamilies = [.. systemFonts.Where(IsMonospaced)];
+        EditorFontFamilies =
+        [
+            .. systemFonts
+                .Where(IsMonospaced)
+                .Append(AppFontFamilies.BundledEditorFont)
+                .GroupBy(font => font.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .OrderBy(font => font.Name, StringComparer.CurrentCultureIgnoreCase),
+        ];
         InitializeComponent();
         BuildSearchIndex();
     }
 
-    /// <summary>OS に入っているフォントと、同梱している Inter。候補名は各フォント自身で描く。</summary>
+    /// <summary>OS に入っているフォントと、同梱している IBM Plex Sans JP。候補名は各フォント自身で描く。</summary>
     public IReadOnlyList<FontFamily> FontFamilies { get; }
 
     /// <summary>エディタ向け候補。OpenType の固定ピッチ情報がある等幅フォントだけを並べる。</summary>

@@ -52,6 +52,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEditorVisible))]
+    [NotifyPropertyChangedFor(nameof(MarkdownPreviewToggleLabel))]
     private bool _isMarkdownPreview;
 
     [ObservableProperty]
@@ -85,6 +86,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     public bool CanShowMarkdownPreview => IsMarkdown;
 
     public bool IsEditorVisible => !IsMarkdownPreview;
+
+    public string MarkdownPreviewToggleLabel => IsMarkdownPreview ? "編集へ戻る" : "プレビュー";
 
     public string EncodingLabel => Encoding switch
     {
@@ -218,6 +221,22 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         }
     }
 
+    partial void OnEncodingChanged(DocumentEncoding value)
+    {
+        if (!_isLoading)
+        {
+            IsModified = true;
+        }
+    }
+
+    partial void OnNewLineChanged(string value)
+    {
+        if (!_isLoading)
+        {
+            IsModified = true;
+        }
+    }
+
     public int GetLineStartOffset(int lineNumber)
         => EditorDocument.GetLineByNumber(Math.Clamp(lineNumber, 1, EditorDocument.LineCount)).Offset;
 
@@ -260,6 +279,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     private void UpdateTextStatistics()
     {
         CharacterCount = Text.Length;
-        LineCount = Text.Length == 0 ? 1 : Text.Count(character => character == '\n') + 1;
+        // AvaloniaEdit は LF / CRLF / CR のどれも改行として扱う。文字だけを数えると
+        // 古い Mac 形式（CR）の文書で、表示中の行数とステータスバーが食い違う。
+        LineCount = EditorDocument.LineCount;
     }
 }

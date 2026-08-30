@@ -52,6 +52,24 @@ public sealed class DocumentFileServiceTests
         }
     }
 
+    [Fact]
+    public void TemporaryFileCleanupDoesNotThrowWhenTheFileIsLocked()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"Fumilume-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using var locked = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+
+            DocumentFileService.TryDeleteTemporaryFile(path);
+
+            Assert.True(File.Exists(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static bool HasPreamble(byte[] bytes, DocumentEncoding encoding)
     {
         var preamble = encoding switch

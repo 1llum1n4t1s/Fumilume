@@ -14,6 +14,7 @@ public sealed class MarkdownDocumentParserTests
             本文 **太字** と [リンク](https://example.com)
 
             - 項目
+            7. 七番目
             > 引用
             ```cs
             var value = 1;
@@ -26,9 +27,21 @@ public sealed class MarkdownDocumentParserTests
             block => Assert.Equal(new MarkdownBlock(MarkdownBlockKind.Heading, "見出し", 1), block),
             block => Assert.Equal(new MarkdownBlock(MarkdownBlockKind.Paragraph, "本文 太字 と リンク"), block),
             block => Assert.Equal(new MarkdownBlock(MarkdownBlockKind.Bullet, "項目"), block),
+            block => Assert.Equal(new MarkdownBlock(MarkdownBlockKind.Numbered, "七番目", Number: 7), block),
             block => Assert.Equal(new MarkdownBlock(MarkdownBlockKind.Quote, "引用"), block),
             block => Assert.Equal(new MarkdownBlock(MarkdownBlockKind.Code, "var value = 1;"), block),
             block => Assert.Equal(MarkdownBlockKind.Rule, block.Kind));
+    }
+
+    [Fact]
+    public void CrOnlyMarkdownIsParsedAsSeparateBlocks()
+    {
+        var blocks = MarkdownDocumentParser.Parse("# 見出し\r\r本文");
+
+        Assert.Collection(
+            blocks,
+            block => Assert.Equal(new MarkdownBlock(MarkdownBlockKind.Heading, "見出し", 1), block),
+            block => Assert.Equal(new MarkdownBlock(MarkdownBlockKind.Paragraph, "本文"), block));
     }
 
     [Fact]

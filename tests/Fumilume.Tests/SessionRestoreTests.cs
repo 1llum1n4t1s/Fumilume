@@ -275,6 +275,94 @@ public sealed class SessionRestoreTests
     }
 
     [Fact]
+    public async Task PersistBeforeInitializationLeavesThePreviousSessionUntouched()
+    {
+        using var storage = new TemporaryStorage();
+        Assert.True(SessionStateService.Save(SingleTabSession("前回の書きかけ")));
+        var viewModel = CreateViewModel();
+
+        Assert.True(await viewModel.PersistSessionStateAsync());
+
+        var preserved = Assert.Single(SessionStateService.Load().Tabs);
+        Assert.Equal("前回の書きかけ", preserved.Text);
+    }
+
+    [Fact]
+    public async Task SystemShutdownSynchronouslyStoresTheCurrentUnsavedText()
+    {
+        using var storage = new TemporaryStorage();
+        var viewModel = CreateViewModel();
+        await viewModel.InitializeAsync([]);
+        viewModel.SelectedDocument!.Text = "OS終了でも残す内容";
+
+        Assert.True(viewModel.PersistSessionStateForShutdown());
+
+        var stored = Assert.Single(SessionStateService.Load().Tabs);
+        Assert.Equal("OS終了でも残す内容", stored.Text);
+    }
+
+    [Fact]
+    public async Task AnUnsavedBufferSurvivesWhenRestoringItsTabThrows()
+    {
+        using var storage = new TemporaryStorage();
+        var broken = new SessionState
+        {
+            Tabs =
+            [
+                new SessionTabState
+                {
+                    UntitledName = "無題",
+                    IsModified = true,
+                    Text = "復元に失敗しても残す内容",
+                    Bookmarks = null!,
+                },
+            ],
+            SelectedTabIndex = 0,
+        };
+        Assert.True(SessionStateService.Save(broken));
+
+        var viewModel = CreateViewModel();
+        await viewModel.InitializeAsync([]);
+        Assert.Contains("残存する控えは保持しています", viewModel.StatusMessage);
+
+        Assert.True(await viewModel.PersistSessionStateAsync());
+        var savedAgain = SessionStateService.Load();
+
+        var preserved = Assert.Single(savedAgain.Tabs);
+        Assert.True(preserved.IsModified);
+        Assert.Equal("復元に失敗しても残す内容", preserved.Text);
+    }
+
+    [Fact]
+    public async Task RestoringALargeSavedFileUsesTheSameConfirmationAsOpeningIt()
+    {
+        using var storage = new TemporaryStorage();
+        var path = Path.Combine(storage.Path, "large.txt");
+        using (var file = File.Create(path))
+        {
+            file.SetLength(2L * 1024 * 1024);
+        }
+
+        Assert.True(SessionStateService.Save(new SessionState
+        {
+            Tabs = [new SessionTabState { FilePath = path }],
+            SelectedTabIndex = 0,
+        }));
+        var dialogs = new StubDialogService { ConfirmResult = false };
+        var files = new FakeFileService();
+        var viewModel = new MainWindowViewModel(
+            files,
+            dialogs,
+            new AppSettings { LargeFileThresholdMegabytes = 1 });
+
+        await viewModel.InitializeAsync([]);
+
+        Assert.Equal(1, dialogs.Confirmations);
+        Assert.Equal(0, files.Reads);
+        Assert.Null(viewModel.SelectedDocument!.FilePath);
+    }
+
+    [Fact]
     public async Task ClosingIsRefusedWhenTheUnsavedContentCannotBeStored()
     {
         using var storage = new TemporaryStorage();
@@ -404,11 +492,14 @@ public sealed class SessionRestoreTests
     {
         public string ReadText { get; init; } = string.Empty;
 
+        public int Reads { get; private set; }
+
         /// <summary>読み込みをここで止める（復元の途中で閉じられた状況を作る）。</summary>
         public Task? ReadGate { get; init; }
 
         public async Task<TextDocumentContent> ReadAsync(string path, CancellationToken cancellationToken = default)
         {
+            Reads++;
             if (ReadGate is { } gate)
             {
                 await gate;
@@ -433,6 +524,10 @@ public sealed class SessionRestoreTests
         /// <summary>エラーを知らせた回数。</summary>
         public int Errors { get; private set; }
 
+        public int Confirmations { get; private set; }
+
+        public bool ConfirmResult { get; init; } = true;
+
         public Task<IReadOnlyList<string>> PickOpenPathsAsync() => Task.FromResult<IReadOnlyList<string>>([]);
 
         public Task<string?> PickSavePathAsync(string suggestedFileName) => Task.FromResult<string?>(null);
@@ -454,7 +549,11 @@ public sealed class SessionRestoreTests
         public Task<string?> PromptTextAsync(string title, string message, string initialText)
             => Task.FromResult<string?>(null);
 
-        public Task<bool> ConfirmAsync(string title, string message) => Task.FromResult(true);
+        public Task<bool> ConfirmAsync(string title, string message)
+        {
+            Confirmations++;
+            return Task.FromResult(ConfirmResult);
+        }
 
         public Task<GrepQuery?> PickGrepQueryAsync(GrepQuery initial) => Task.FromResult<GrepQuery?>(null);
 

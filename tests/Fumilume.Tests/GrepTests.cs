@@ -29,6 +29,18 @@ public sealed class GrepTests
     }
 
     [Fact]
+    public async Task CrOnlyFilesReportTheSameLineNumberAsTheEditor()
+    {
+        using var storage = new TemporaryStorage();
+        Write(storage, "classic-mac.txt", "一行目\r目的の言葉\r三行目");
+
+        var match = Assert.Single((await Search(storage, "目的の言葉")).Matches);
+
+        Assert.Equal(2, match.LineNumber);
+        Assert.Equal("目的の言葉", match.LineText);
+    }
+
+    [Fact]
     public async Task SubfoldersAreSearchedOnlyWhenAsked()
     {
         using var storage = new TemporaryStorage();

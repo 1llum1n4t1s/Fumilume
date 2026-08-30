@@ -106,6 +106,9 @@ public sealed class AppSettings
     /// <summary>前回開いていた左パネル（SidePanelKind の名前。読めない値は「タブ一覧」へ倒す）。</summary>
     public string SidePanel { get; set; } = "Tabs";
 
+    /// <summary>左のタブ・アウトライン・ブックマーク領域の幅。</summary>
+    public double SidePanelWidth { get; set; } = AppSettingsDefaults.SidePanelWidth;
+
     // ===== ファイル（sakura の共通設定『ファイル』『バックアップ』相当） =====
     /// <summary>開き直したときに前回のカーソル位置へ戻す（sakura の m_bRestoreCurPosition）。</summary>
     public bool RestoreCaretPosition { get; set; } = true;
@@ -164,9 +167,11 @@ public sealed class AppSettings
 /// 正規化で同じ値を参照するために切り出してある。</summary>
 internal static class AppSettingsDefaults
 {
-    public const string UiFontFamily = "Inter";
+    public const string LegacyUiFontFamily = "Inter";
+    public const string LegacyEditorFontFamily = "'Cascadia Mono', Consolas, monospace";
+    public const string UiFontFamily = AppFontFamilies.IbmPlexSansJpName;
     public const double UiFontSize = 14;
-    public const string FontFamily = "'Cascadia Mono', Consolas, monospace";
+    public const string FontFamily = AppFontFamilies.UdevGothicJpDocName;
     public const double FontSize = 15;
     public const int IndentationSize = 4;
     public const string ThemeMode = "System";
@@ -175,6 +180,7 @@ internal static class AppSettingsDefaults
     public const int LargeFileThresholdMegabytes = 32;
     public const string GrepFileMask = "*.*";
     public const double TabHeight = 34;
+    public const double SidePanelWidth = 240;
 
     public const double MinimumFontSize = 8;
     public const double MaximumFontSize = 48;
@@ -190,6 +196,8 @@ internal static class AppSettingsDefaults
     /// <summary>Kiriha と同じ縦タブ高さの契約。</summary>
     public const double MinimumTabHeight = 26;
     public const double MaximumTabHeight = 60;
+    public const double MinimumSidePanelWidth = 216;
+    public const double MaximumSidePanelWidth = 480;
 
     /// <summary>覚えておくカーソル位置の件数。無制限だと settings.json が延々と太る。</summary>
     public const int MaximumCaretPositions = 200;
@@ -292,6 +300,10 @@ public static class SettingsService
             Math.Round(settings.TabHeight),
             AppSettingsDefaults.MinimumTabHeight,
             AppSettingsDefaults.MaximumTabHeight);
+        settings.SidePanelWidth = Math.Clamp(
+            Math.Round(settings.SidePanelWidth),
+            AppSettingsDefaults.MinimumSidePanelWidth,
+            AppSettingsDefaults.MaximumSidePanelWidth);
 
         // 覚えたカーソル位置は古いものから捨てる（settings.json が青天井に太らないように）。
         if (settings.CaretPositions.Count > AppSettingsDefaults.MaximumCaretPositions)
@@ -303,12 +315,20 @@ public static class SettingsService
             }
         }
 
-        if (string.IsNullOrWhiteSpace(settings.UiFontFamily))
+        if (string.IsNullOrWhiteSpace(settings.UiFontFamily)
+            || string.Equals(
+                settings.UiFontFamily,
+                AppSettingsDefaults.LegacyUiFontFamily,
+                StringComparison.OrdinalIgnoreCase))
         {
             settings.UiFontFamily = AppSettingsDefaults.UiFontFamily;
         }
 
-        if (string.IsNullOrWhiteSpace(settings.FontFamily))
+        if (string.IsNullOrWhiteSpace(settings.FontFamily)
+            || string.Equals(
+                settings.FontFamily,
+                AppSettingsDefaults.LegacyEditorFontFamily,
+                StringComparison.OrdinalIgnoreCase))
         {
             settings.FontFamily = AppSettingsDefaults.FontFamily;
         }

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Fumilume.Models;
 
 namespace Fumilume.Services;
 
@@ -62,7 +63,7 @@ public static partial class OutlineService
         }
 
         var extension = filePath is null ? string.Empty : Path.GetExtension(filePath);
-        var lines = text.Split('\n');
+        var lines = DocumentNewLines.SplitLines(text);
         List<OutlineItem> items = MarkdownExtensions.Contains(extension) ? ParseMarkdown(lines)
             : BraceExtensions.Contains(extension) ? ParseBraces(lines)
             : [];

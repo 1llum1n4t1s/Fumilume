@@ -178,7 +178,13 @@ public static class SessionStateService
             var tab = state.Tabs[index];
             if (tab.Text is null)
             {
-                tab.BufferFile = null;
+                // 復元中の異常で本文だけ読めなかった未保存タブは、前回の参照を維持する。
+                // ここで参照を消すと、後段の掃除がまだ回収できる控えまで削除してしまう。
+                if (!tab.IsModified)
+                {
+                    tab.BufferFile = null;
+                }
+
                 continue;
             }
 

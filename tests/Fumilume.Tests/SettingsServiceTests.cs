@@ -44,7 +44,8 @@ public sealed class SettingsServiceTests
         Assert.True(loaded.ShowLineNumbers);
         Assert.Equal("System", loaded.ThemeMode);
         Assert.True(loaded.UseAcrylic);
-        Assert.Equal("Inter", loaded.UiFontFamily);
+        Assert.Equal(AppFontFamilies.IbmPlexSansJpName, loaded.UiFontFamily);
+        Assert.Equal(AppFontFamilies.UdevGothicJpDocName, loaded.FontFamily);
         Assert.Equal(14, loaded.UiFontSize);
     }
 
@@ -60,8 +61,22 @@ public sealed class SettingsServiceTests
 
         Assert.Equal("Consolas", loaded.FontFamily);
         Assert.Equal(18, loaded.FontSize);
-        Assert.Equal("Inter", loaded.UiFontFamily);
+        Assert.Equal(AppFontFamilies.IbmPlexSansJpName, loaded.UiFontFamily);
         Assert.Equal(14, loaded.UiFontSize);
+    }
+
+    [Fact]
+    public void LegacyDefaultFontsMigrateToTheBundledDefaults()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "settings.json"),
+            """{"UiFontFamily":"Inter","FontFamily":"'Cascadia Mono', Consolas, monospace"}""");
+
+        var loaded = SettingsService.Load();
+
+        Assert.Equal(AppFontFamilies.IbmPlexSansJpName, loaded.UiFontFamily);
+        Assert.Equal(AppFontFamilies.UdevGothicJpDocName, loaded.FontFamily);
     }
 
     [Fact]
@@ -87,11 +102,11 @@ public sealed class SettingsServiceTests
         var loaded = SettingsService.Load();
 
         Assert.Equal(48, loaded.FontSize);
-        Assert.Equal("Inter", loaded.UiFontFamily);
+        Assert.Equal(AppFontFamilies.IbmPlexSansJpName, loaded.UiFontFamily);
         Assert.Equal(8, loaded.UiFontSize);
         Assert.Equal(1, loaded.IndentationSize);
         Assert.Equal("System", loaded.ThemeMode);
-        Assert.Equal("'Cascadia Mono', Consolas, monospace", loaded.FontFamily);
+        Assert.Equal(AppFontFamilies.UdevGothicJpDocName, loaded.FontFamily);
     }
 
     /// <summary>設定項目を増やしたぶん、範囲外の値もそれぞれ丸められる必要がある。</summary>
@@ -101,13 +116,14 @@ public sealed class SettingsServiceTests
         using var storage = new TemporaryStorage();
         File.WriteAllText(
             Path.Combine(storage.Path, "settings.json"),
-            """{"ColumnRulerPosition":9999,"LineHeightFactor":0.1,"LargeFileThresholdMegabytes":0}""");
+            """{"ColumnRulerPosition":9999,"LineHeightFactor":0.1,"LargeFileThresholdMegabytes":0,"SidePanelWidth":9999}""");
 
         var loaded = SettingsService.Load();
 
         Assert.Equal(512, loaded.ColumnRulerPosition);
         Assert.Equal(0.8, loaded.LineHeightFactor);
         Assert.Equal(1, loaded.LargeFileThresholdMegabytes);
+        Assert.Equal(AppSettingsDefaults.MaximumSidePanelWidth, loaded.SidePanelWidth);
     }
 
     /// <summary>覚えたカーソル位置が青天井に増えて settings.json を太らせないこと。</summary>

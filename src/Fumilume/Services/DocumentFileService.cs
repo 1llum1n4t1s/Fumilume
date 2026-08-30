@@ -87,10 +87,23 @@ public sealed class DocumentFileService : IDocumentFileService
         }
         finally
         {
+            TryDeleteTemporaryFile(temporaryPath);
+        }
+    }
+
+    /// <summary>保存の後始末を試みる。後始末の失敗で、本来の保存例外を上書きしない。</summary>
+    internal static void TryDeleteTemporaryFile(string temporaryPath)
+    {
+        try
+        {
             if (File.Exists(temporaryPath))
             {
                 File.Delete(temporaryPath);
             }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.For<DocumentFileService>().Warn($"一時ファイルを削除できませんでした: {temporaryPath}", ex);
         }
     }
 

@@ -3,6 +3,7 @@
         xmlns:vm="using:Fumilume.ViewModels"
         xmlns:v="using:Fumilume.Views"
         xmlns:s="using:Fumilume.Services"
+        xmlns:m="using:Fumilume.Models"
         xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
         x:Class="Fumilume.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -71,17 +72,23 @@
         <!-- ぼかしの上に敷くテーマ色の膜。これが無いと壁紙の色に染まって本文の面から浮く。 -->
         <Border x:Name="AcrylicScrim" Background="{DynamicResource AcrylicScrimBrush}" IsHitTestVisible="False" />
 
-        <Grid RowDefinitions="32,*" ColumnDefinitions="190,*">
+        <Grid x:Name="WorkspaceGrid" RowDefinitions="32,*">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240" MinWidth="216" MaxWidth="480" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="*" MinWidth="480" />
+            </Grid.ColumnDefinitions>
 
             <!-- ===== タイトルバー =====
                  Background="Transparent" は必須。Avalonia は Background が未設定（null）の Panel を
                  ヒットテストの対象にしないため、これが無いと PointerPressed が発火せず
                  ウィンドウを掴んで動かせなくなる。 -->
-            <Grid x:Name="TitleBar" Grid.Row="0" Grid.ColumnSpan="2" ColumnDefinitions="Auto,*,Auto"
+            <Grid x:Name="TitleBar" Grid.Row="0" Grid.ColumnSpan="3" ColumnDefinitions="Auto,*,Auto"
                   Background="Transparent"
                   PointerPressed="TitleBar_PointerPressed"
                   DoubleTapped="TitleBar_DoubleTapped">
-                <Grid Grid.Column="0" Width="190" Margin="16,0,10,0" ColumnDefinitions="Auto,Auto,*"
+                <Grid Grid.Column="0" Width="{Binding #SidePanelRoot.Bounds.Width}"
+                      Margin="16,0,10,0" ColumnDefinitions="Auto,Auto,*"
                       IsHitTestVisible="False">
                     <TextBlock Grid.Column="0" Text="Fumilume" FontSize="12.5" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" />
@@ -116,25 +123,36 @@
                  タブ一覧・アウトライン・ブックマークを同じ場所で切り替える。1 枚に 1 つの
                  用途しか持たせないので、機能が増えても幅と優先度が崩れない。
                  フォルダ横断検索の結果だけは 1 行 1 一致で横幅が要るため、ここではなく
-                 中央のタブに出す（190px では場所と本文が同時に読めない）。 -->
-            <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*,Auto">
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10,0,10,4" Spacing="2">
-                    <Button Classes="panelswitch" Classes.active="{Binding IsTabsPanel}"
-                            Content="&#xE8A5;"
-                            Command="{Binding SelectSidePanelCommand}"
-                            CommandParameter="{x:Static vm:SidePanelKind.Tabs}"
-                            AutomationProperties.Name="開いているもの" ToolTip.Tip="開いているもの" />
-                    <Button Classes="panelswitch" Classes.active="{Binding IsOutlinePanel}"
-                            Content="&#xE8FD;"
-                            Command="{Binding SelectSidePanelCommand}"
-                            CommandParameter="{x:Static vm:SidePanelKind.Outline}"
-                            AutomationProperties.Name="アウトライン" ToolTip.Tip="アウトライン（見出し）" />
-                    <Button Classes="panelswitch" Classes.active="{Binding IsBookmarksPanel}"
-                            Content="&#xE735;"
-                            Command="{Binding SelectSidePanelCommand}"
-                            CommandParameter="{x:Static vm:SidePanelKind.Bookmarks}"
-                            AutomationProperties.Name="ブックマーク" ToolTip.Tip="ブックマーク (Ctrl+F2)" />
-                </StackPanel>
+                 中央のタブに出す（最小幅では場所と本文が同時に読めない）。 -->
+            <Grid x:Name="SidePanelRoot" Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*">
+                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="10,0,10,4">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                        <Button Classes="panelswitch" Classes.active="{Binding IsTabsPanel}"
+                                Content="&#xE8A5;"
+                                Command="{Binding SelectSidePanelCommand}"
+                                CommandParameter="{x:Static vm:SidePanelKind.Tabs}"
+                                AutomationProperties.Name="開いているもの" ToolTip.Tip="開いているもの" />
+                        <Button Classes="panelswitch" Classes.active="{Binding IsOutlinePanel}"
+                                Content="&#xE8FD;"
+                                Command="{Binding SelectSidePanelCommand}"
+                                CommandParameter="{x:Static vm:SidePanelKind.Outline}"
+                                AutomationProperties.Name="アウトライン" ToolTip.Tip="アウトライン（見出し）" />
+                        <Button Classes="panelswitch" Classes.active="{Binding IsBookmarksPanel}"
+                                Content="&#xE735;"
+                                Command="{Binding SelectSidePanelCommand}"
+                                CommandParameter="{x:Static vm:SidePanelKind.Bookmarks}"
+                                AutomationProperties.Name="ブックマーク" ToolTip.Tip="ブックマーク (Ctrl+F2)" />
+                    </StackPanel>
+                    <!-- 下端にあったファイル操作を、対象一覧へ目線がある位置へ移す。 -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0">
+                        <Button Classes="tabclose" Content="&#xE710;" Command="{Binding NewDocumentCommand}"
+                                AutomationProperties.Name="新しい文書" ToolTip.Tip="新しい文書 (Ctrl+N)" />
+                        <Button Classes="tabclose" Content="&#xE8E5;" Command="{Binding OpenCommand}"
+                                AutomationProperties.Name="ファイルを開く" ToolTip.Tip="ファイルを開く (Ctrl+O)" />
+                        <Button Classes="tabclose" Content="&#xE713;" Command="{Binding OpenSettingsCommand}"
+                                AutomationProperties.Name="設定" ToolTip.Tip="設定 (Ctrl+,)" />
+                    </StackPanel>
+                </Grid>
 
                 <Panel Grid.Row="1">
                     <!-- 開いているもの。文書タブと設定タブが同じ一覧に並ぶ。項目の型は
@@ -214,21 +232,18 @@
                     </Panel>
                 </Panel>
 
-                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="10,6,10,12" Spacing="4">
-                    <Button Classes="tabclose" Content="&#xE710;" Command="{Binding NewDocumentCommand}"
-                            AutomationProperties.Name="新しい文書" ToolTip.Tip="新しい文書 (Ctrl+N)" />
-                    <Button Classes="tabclose" Content="&#xE8E5;" Command="{Binding OpenCommand}"
-                            AutomationProperties.Name="ファイルを開く" ToolTip.Tip="ファイルを開く (Ctrl+O)" />
-                    <Button Classes="tabclose" Content="&#xE713;" Command="{Binding OpenSettingsCommand}"
-                            AutomationProperties.Name="設定" ToolTip.Tip="設定 (Ctrl+,)" />
-                </StackPanel>
             </Grid>
+
+            <GridSplitter Grid.Row="1" Grid.Column="1"
+                          ResizeDirection="Columns" Background="Transparent"
+                          AutomationProperties.Name="タブ領域の幅を変更"
+                          ToolTip.Tip="ドラッグしてタブ領域の幅を変更" />
 
             <!-- ===== コンテンツ島 ===== -->
             <!-- 角丸の切り抜きは ClipToBounds ではなくコードビハインドの Clip で行う
                  （RoundedClip の説明を参照）。ClipToBounds は矩形なので、下端のステータスバーが
                  島の角丸の枠線を塗りつぶして角が欠けて見える。 -->
-            <Border x:Name="ContentIsland" Grid.Row="1" Grid.Column="1" Margin="0,0,6,6"
+            <Border x:Name="ContentIsland" Grid.Row="1" Grid.Column="2" Margin="0,0,6,6"
                     Background="{DynamicResource ContentBg}"
                     BorderBrush="{DynamicResource Divider}" BorderThickness="1"
                     CornerRadius="14">
@@ -292,24 +307,34 @@
                                             IsVisible="{Binding SelectedDocument.CanShowMarkdownPreview}"
                                             AutomationProperties.Name="Markdown プレビュー切り替え"
                                             ToolTip.Tip="Markdown プレビュー (Ctrl+Shift+M)">
-                                        <TextBlock Classes="icon" Text="&#xE8A7;" />
+                                        <StackPanel Orientation="Horizontal" Spacing="7">
+                                            <Border Padding="4,1" CornerRadius="4"
+                                                    BorderBrush="{DynamicResource Divider}" BorderThickness="1">
+                                                <TextBlock Text="MD" FontSize="10" FontWeight="SemiBold" />
+                                            </Border>
+                                            <TextBlock Text="{Binding SelectedDocument.MarkdownPreviewToggleLabel}"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
                                     </Button>
                                 </StackPanel>
                             </Grid>
                         </Border>
 
                         <Border Grid.Row="1" Background="{DynamicResource EditorBg}">
-                            <Panel>
-                                <ae:TextEditor x:Name="Editor" Classes="editor"
+                            <Grid ColumnDefinitions="*,76">
+                                <ae:TextEditor x:Name="Editor" Grid.Column="0" Classes="editor"
                                                IsVisible="{Binding SelectedDocument.IsEditorVisible}"
                                                HorizontalScrollBarVisibility="Auto"
                                                VerticalScrollBarVisibility="Auto"
                                                Padding="14,12"
                                                AutomationProperties.Name="テキスト編集領域" />
-                                <v:MarkdownPreview Markdown="{Binding SelectedDocument.Text}"
+                                <v:EditorMinimap x:Name="EditorMinimap" Grid.Column="1"
+                                                 IsVisible="{Binding SelectedDocument.IsEditorVisible}"
+                                                 AutomationProperties.Name="スクロールマップ" />
+                                <v:MarkdownPreview Grid.ColumnSpan="2" Markdown="{Binding SelectedDocument.Text}"
                                                    IsVisible="{Binding SelectedDocument.IsMarkdownPreview}"
                                                    AutomationProperties.Name="Markdown プレビュー" />
-                            </Panel>
+                            </Grid>
                         </Border>
 
                         <Border Grid.Row="2" Background="{DynamicResource ContentBg}"
@@ -332,10 +357,36 @@
                                                Foreground="{DynamicResource TextSecondary}" />
                                     <TextBlock Text="{Binding SelectedDocument.StatisticsText}" FontSize="12"
                                                Foreground="{DynamicResource TextSecondary}" />
-                                    <TextBlock Text="{Binding SelectedDocument.EncodingLabel}" FontSize="12"
-                                               Foreground="{DynamicResource TextSecondary}" />
-                                    <TextBlock Text="{Binding SelectedDocument.NewLineLabel}" FontSize="12"
-                                               Foreground="{DynamicResource TextSecondary}" />
+                                    <Button Classes="statusitem" Content="{Binding SelectedDocument.EncodingLabel}"
+                                            AutomationProperties.Name="文字コードを変更"
+                                            ToolTip.Tip="文字コードを選択">
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuItem Header="UTF-8" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf8}" />
+                                                <MenuItem Header="UTF-8 with BOM" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf8Bom}" />
+                                                <MenuItem Header="UTF-16 LE" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf16LittleEndian}" />
+                                                <MenuItem Header="UTF-16 BE" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf16BigEndian}" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                    <Button Classes="statusitem" Content="{Binding SelectedDocument.NewLineLabel}"
+                                            AutomationProperties.Name="改行コードを変更"
+                                            ToolTip.Tip="改行コードを選択">
+                                        <Button.Flyout>
+                                            <MenuFlyout>
+                                                <MenuItem Header="CRLF" Command="{Binding SetDocumentNewLineCommand}"
+                                                          CommandParameter="{x:Static m:DocumentNewLines.CrLf}" />
+                                                <MenuItem Header="LF" Command="{Binding SetDocumentNewLineCommand}"
+                                                          CommandParameter="{x:Static m:DocumentNewLines.Lf}" />
+                                                <MenuItem Header="CR" Command="{Binding SetDocumentNewLineCommand}"
+                                                          CommandParameter="{x:Static m:DocumentNewLines.Cr}" />
+                                            </MenuFlyout>
+                                        </Button.Flyout>
+                                    </Button>
                                 </StackPanel>
                             </Grid>
                         </Border>

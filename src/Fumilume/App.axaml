@@ -5,6 +5,7 @@
          （ダイアログや設定タブなど複数のルートから同じキーを引くため）。 -->
     <Application.Resources>
         <ResourceDictionary>
+            <FontFamily x:Key="DefaultUiFont">fonts:Fumilume#IBM Plex Sans JP</FontFamily>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="TabStripBg" Color="#DEE1E6" />
@@ -87,6 +88,9 @@
 
     <Application.Styles>
         <FluentTheme />
+        <Style Selector="Window">
+            <Setter Property="FontFamily" Value="{StaticResource DefaultUiFont}" />
+        </Style>
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
         <StyleInclude Source="/Styles/CommonStyles.axaml" />
         <StyleInclude Source="/Styles/MainWindowStyles.axaml" />

@@ -5,6 +5,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
+using Fumilume.Models;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 using Fumilume.Views;
@@ -432,6 +433,111 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     });
 
     [Fact]
+    public void BundledFontsAreTheDefaultsAndAppearInThePickers() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var editor = scope.Window.FindControl<TextEditor>("Editor");
+        Assert.NotNull(editor);
+
+        Assert.Equal(AppFontFamilies.IbmPlexSansJpName, scope.ViewModel.Options.UiFontFamily);
+        Assert.Equal(AppFontFamilies.UdevGothicJpDocName, scope.ViewModel.Options.EditorFontFamily);
+        Assert.Contains(AppFontFamilies.IbmPlexSansJpName, scope.Window.FontFamily.ToString(), StringComparison.Ordinal);
+        Assert.Contains(AppFontFamilies.UdevGothicJpDocName, editor.FontFamily.ToString(), StringComparison.Ordinal);
+
+        scope.ViewModel.OpenSettingsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var settings = scope.Window.GetVisualDescendants().OfType<SettingsView>().Single();
+        var uiFonts = settings.FontFamilies.Select(font => font.Name).ToArray();
+        var editorFonts = settings.EditorFontFamilies.Select(font => font.Name).ToArray();
+        Assert.Contains(AppFontFamilies.IbmPlexSansJpName, uiFonts);
+        Assert.Contains(AppFontFamilies.UdevGothicJpDocName, editorFonts);
+    });
+
+    [Fact]
+    public void SidePanelCanResizeOnlyInsideItsSafeRange() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope(width: 720, height: 460);
+        var grid = scope.Window.FindControl<Grid>("WorkspaceGrid");
+        Assert.NotNull(grid);
+        var sidePanel = grid.ColumnDefinitions[0];
+
+        sidePanel.Width = new GridLength(1);
+        scope.Window.UpdateLayout();
+        Assert.True(sidePanel.ActualWidth >= AppSettingsDefaults.MinimumSidePanelWidth);
+
+        sidePanel.Width = new GridLength(1000);
+        scope.Window.UpdateLayout();
+        Assert.True(sidePanel.ActualWidth <= AppSettingsDefaults.MaximumSidePanelWidth);
+
+        Assert.Equal(720, scope.Window.Bounds.Width);
+        Assert.Equal(460, scope.Window.Bounds.Height);
+        Assert.True(sidePanel.ActualWidth >= AppSettingsDefaults.MinimumSidePanelWidth);
+        Assert.True(grid.ColumnDefinitions[2].ActualWidth >= 480);
+    });
+
+    [Fact]
+    public void MarkdownPreviewRendersTheCurrentDocumentAndUsesAnExplicitLabel() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\readme.md");
+        document.Text = "# 見出し\n\n本文\n\n7. 項目";
+
+        scope.ViewModel.ToggleMarkdownPreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var preview = scope.Window.GetVisualDescendants().OfType<MarkdownPreview>().Single();
+        var editor = scope.Window.FindControl<TextEditor>("Editor");
+        Assert.NotNull(editor);
+        Assert.True(preview.IsEffectivelyVisible);
+        Assert.False(editor.IsEffectivelyVisible);
+        Assert.Equal(3, preview.RenderedBlockCount);
+        Assert.All(
+            preview.GetVisualDescendants().OfType<SelectableTextBlock>(),
+            textBlock => Assert.NotNull(textBlock.Foreground));
+        Assert.Equal("編集へ戻る", document.MarkdownPreviewToggleLabel);
+    });
+
+    [Fact]
+    public void StatusCommandsChangeEncodingAndNewLines() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+
+        scope.ViewModel.SetDocumentEncodingCommand.Execute(DocumentEncoding.Utf16BigEndian);
+        scope.ViewModel.SetDocumentNewLineCommand.Execute(DocumentNewLines.Lf);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(DocumentEncoding.Utf16BigEndian, document.Encoding);
+        Assert.Equal("UTF-16 BE", document.EncodingLabel);
+        Assert.Equal(DocumentNewLines.Lf, document.NewLine);
+        Assert.Equal("LF", document.NewLineLabel);
+        Assert.True(document.IsModified);
+
+        var statusButtons = scope.Window.GetVisualDescendants()
+            .OfType<Button>()
+            .Where(button => button.Classes.Contains("statusitem"))
+            .ToArray();
+        Assert.Equal(2, statusButtons.Length);
+        Assert.All(statusButtons, button => Assert.NotNull(button.Flyout));
+    });
+
+    [Fact]
+    public void EditorShowsTheScrollMapBesideTheDocument() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var minimap = scope.Window.FindControl<EditorMinimap>("EditorMinimap");
+        Assert.NotNull(minimap);
+
+        scope.ViewModel.Documents.Single().Text = string.Join('\n', Enumerable.Range(1, 400));
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+
+        Assert.True(minimap.IsEffectivelyVisible);
+        Assert.Equal(76, minimap.Bounds.Width);
+    });
+
+    [Fact]
     public void SelectingAGrepResultTabShowsTheResultListInsteadOfTheEditor() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
@@ -607,11 +713,21 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     {
         private readonly TemporaryStorage _storage = new();
 
-        public WindowScope()
+        public WindowScope(double? width = null, double? height = null)
         {
             // 起動時の更新確認は外部通信になるためテストでは切る。
             Window = new MainWindow(new AppSettings { CheckUpdatesOnStartup = false });
             ViewModel = (MainWindowViewModel)Window.DataContext!;
+            if (width is not null)
+            {
+                Window.Width = width.Value;
+            }
+
+            if (height is not null)
+            {
+                Window.Height = height.Value;
+            }
+
             Window.Show();
             Dispatcher.UIThread.RunJobs();
         }

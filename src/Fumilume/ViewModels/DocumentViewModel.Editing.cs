@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Fumilume.Models;
 using Fumilume.Services;
 
 namespace Fumilume.ViewModels;
@@ -513,13 +514,7 @@ public sealed partial class DocumentViewModel
 
     /// <summary>末尾の改行を保ったまま、各行へ変換を当てる。</summary>
     private static string MapLines(string text, Func<string, string> transform)
-        => string.Join('\n', text.Split('\n').Select(line =>
-        {
-            // Split('\n') の各要素には CR が残りうるので、変換対象からは外して付け直す。
-            var hasCarriageReturn = line.EndsWith('\r');
-            var body = hasCarriageReturn ? line[..^1] : line;
-            return transform(body) + (hasCarriageReturn ? "\r" : string.Empty);
-        }));
+        => DocumentNewLines.TransformLines(text, transform);
 
     private static string Unindent(string line, string indent)
     {

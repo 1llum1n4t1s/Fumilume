@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Fumilume.Services;
 using Fumilume.Views;
 
@@ -18,7 +19,10 @@ public sealed class App : Application
             // ウィンドウ生成後にテーマを変えると、初回描画で既定テーマが一瞬見える。
             var settings = SettingsService.Load();
             ThemeService.Initialize(this, settings);
-            desktop.MainWindow = new MainWindow(settings);
+            var mainWindow = new MainWindow(settings);
+            desktop.MainWindow = mainWindow;
+            Program.SingleInstance?.SetArgumentsHandler(arguments =>
+                Dispatcher.UIThread.Post(() => mainWindow.OpenForwardedArguments(arguments)));
         }
 
         base.OnFrameworkInitializationCompleted();

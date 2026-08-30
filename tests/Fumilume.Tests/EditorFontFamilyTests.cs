@@ -8,6 +8,7 @@ public sealed class EditorFontFamilyTests
     [InlineData("'Cascadia Code', Consolas, monospace", "Cascadia Code, Consolas, monospace")]
     [InlineData("\"Fira Code\", 'MS Gothic'", "Fira Code, MS Gothic, Cascadia Mono, Consolas, monospace")]
     [InlineData("Consolas", "Consolas, Cascadia Mono, monospace")]
+    [InlineData("UDEV Gothic JPDOC", "fonts:Fumilume#UDEV Gothic JPDOC, Cascadia Mono, Consolas, monospace")]
     [InlineData("  ", "Cascadia Mono, Consolas, monospace")]
     public void VsCodeFontListsAreConvertedToAvaloniaFallbacks(string input, string expected)
         => Assert.Equal(expected, EditorFontFamily.ToAvalonia(input));

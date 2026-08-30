@@ -1,7 +1,8 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
-        xmlns:aer="clr-namespace:AvaloniaEdit.Rendering;assembly=AvaloniaEdit">
+        xmlns:aer="clr-namespace:AvaloniaEdit.Rendering;assembly=AvaloniaEdit"
+        xmlns:v="using:Fumilume.Views">
     <!-- メインウィンドウの見た目。MainWindow.axaml には構造だけを残し、体裁はここへ集約する。 -->
 
     <Styles.Resources>
@@ -136,13 +137,47 @@
         <Setter Property="Opacity" Value="0.4" />
     </Style>
 
+    <!-- VS Code と同じく、ステータスの文字コード・改行コードそのものを選択入口にする。 -->
+    <Style Selector="Button.statusitem">
+        <Setter Property="MinWidth" Value="38" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="7,0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+    </Style>
+    <Style Selector="Button.statusitem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+
+    <!-- コードから組み立てるプレビューにも動的リソースをスタイルとして適用する。
+         VisualTree へ付く前の TryFindResource は色を取得できず、ダークテーマで本文が黒くなる。 -->
+    <Style Selector="v|MarkdownPreview SelectableTextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="v|MarkdownPreview Border.markdownquote">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="v|MarkdownPreview Border.markdowncode">
+        <Setter Property="Background" Value="{DynamicResource SettingsPageBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+    </Style>
+    <Style Selector="v|MarkdownPreview Border.markdownrule">
+        <Setter Property="Background" Value="{DynamicResource Divider}" />
+    </Style>
+
     <!-- 全機能の入口。押すボタンではなく「名前を入れて引く欄」に見せたいので、
          検索欄と同じ角丸と枠を持たせる。 -->
     <Style Selector="Button.palette">
-        <Setter Property="Width" Value="340" />
+        <Setter Property="MinWidth" Value="120" />
+        <Setter Property="MaxWidth" Value="340" />
         <Setter Property="Height" Value="28" />
+        <Setter Property="Margin" Value="8,0" />
         <Setter Property="Padding" Value="12,0" />
-        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="Background" Value="Transparent" />

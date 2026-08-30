@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Fumilume.Models;
 
 namespace Fumilume.Services;
 
@@ -147,10 +148,9 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
         List<GrepMatch> matches)
     {
         var lineNumber = 0;
-        foreach (var rawLine in text.Split('\n'))
+        foreach (var line in DocumentNewLines.SplitLines(text))
         {
             lineNumber++;
-            var line = rawLine.TrimEnd('\r');
             if (matcher(line) is not { } column)
             {
                 continue;

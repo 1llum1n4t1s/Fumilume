@@ -19,6 +19,15 @@ public sealed class OutlineServiceTests
     }
 
     [Fact]
+    public void CrOnlyDocumentsKeepOutlineLineNumbers()
+    {
+        var items = OutlineService.Parse("notes.md", "# 表題\r本文\r## 節");
+
+        Assert.Equal([(1, "表題", 1), (2, "節", 3)],
+            items.Select(item => (item.Level, item.Title, item.LineNumber)));
+    }
+
+    [Fact]
     public void ClosingHashesAreNotPartOfTheTitle()
     {
         var items = OutlineService.Parse("notes.md", "## 節 ##\n");

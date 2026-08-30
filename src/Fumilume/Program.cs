@@ -8,6 +8,8 @@ internal static class Program
 {
     public static string[] StartupArgs { get; private set; } = [];
 
+    internal static SingleInstanceCoordinator? SingleInstance { get; private set; }
+
     [STAThread]
     public static void Main(string[] args)
     {
@@ -30,6 +32,15 @@ internal static class Program
                 .OnAfterUpdateFastCallback(_ => FileAssociationService.RefreshAssociatedFileTypes())
                 .OnBeforeUninstallFastCallback(_ => CleanupBeforeUninstall())
                 .Run();
+
+            using var singleInstance = SingleInstanceCoordinator.Create();
+            if (!singleInstance.IsPrimary)
+            {
+                _ = singleInstance.ForwardArgumentsAsync(NormalizeForwardedArguments(args)).GetAwaiter().GetResult();
+                return;
+            }
+
+            SingleInstance = singleInstance;
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
         catch (Exception ex)
@@ -39,6 +50,7 @@ internal static class Program
         }
         finally
         {
+            SingleInstance = null;
             log.Info("Fumilume を終了します。");
             AppLogger.Shutdown();
         }
@@ -47,8 +59,23 @@ internal static class Program
     internal static void CleanupBeforeUninstall(Func<bool>? disassociateAllFileTypes = null)
         => _ = (disassociateAllFileTypes ?? FileAssociationService.DisassociateAllFileTypes)();
 
+    /// <summary>後続プロセスの作業フォルダーを基準に解決し、既存プロセスへ曖昧な相対パスを渡さない。</summary>
+    internal static string[] NormalizeForwardedArguments(IEnumerable<string> arguments)
+        => arguments.Select(argument =>
+        {
+            try
+            {
+                return Path.GetFullPath(argument);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                return argument;
+            }
+        }).ToArray();
+
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
-            .WithInterFont();
+            .ConfigureFonts(fontManager =>
+                fontManager.AddFontCollection(new FumilumeFontCollection()));
 }

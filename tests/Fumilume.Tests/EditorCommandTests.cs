@@ -107,6 +107,18 @@ public sealed class EditorCommandTests
     }
 
     [Fact]
+    public void LineTransformsPreserveCrOnlyNewLines()
+    {
+        var document = CreateDocument("a\rb");
+        document.SelectionStart = 0;
+        document.SelectionLength = document.Text.Length;
+
+        document.IndentLines("\t");
+
+        Assert.Equal("\ta\r\tb", document.Text);
+    }
+
+    [Fact]
     public void DeleteToLineEdgesKeepsTheNewLine()
     {
         var document = CreateDocument("hello world\nnext");

@@ -1,4 +1,5 @@
 using System.Text;
+using Fumilume.Models;
 
 namespace Fumilume.Services;
 
@@ -13,7 +14,7 @@ public enum MarkdownBlockKind
     Rule,
 }
 
-public sealed record MarkdownBlock(MarkdownBlockKind Kind, string Text, int Level = 0);
+public sealed record MarkdownBlock(MarkdownBlockKind Kind, string Text, int Level = 0, int Number = 0);
 
 /// <summary>プレビュー用の軽量 Markdown ブロック解析。外部通信や HTML 実行は行わない。</summary>
 public static class MarkdownDocumentParser
@@ -25,9 +26,8 @@ public static class MarkdownDocumentParser
         var code = new StringBuilder();
         var inCode = false;
 
-        foreach (var rawLine in (markdown ?? string.Empty).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        foreach (var line in DocumentNewLines.SplitLines(markdown ?? string.Empty))
         {
-            var line = rawLine.TrimEnd('\r');
             if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
             {
                 FlushParagraph();
@@ -80,10 +80,13 @@ public static class MarkdownDocumentParser
                 FlushParagraph();
                 blocks.Add(new MarkdownBlock(MarkdownBlockKind.Bullet, StripInlineMarkup(trimmed[2..])));
             }
-            else if (TryGetNumberedItem(trimmed, out var numberedText))
+            else if (TryGetNumberedItem(trimmed, out var number, out var numberedText))
             {
                 FlushParagraph();
-                blocks.Add(new MarkdownBlock(MarkdownBlockKind.Numbered, StripInlineMarkup(numberedText)));
+                blocks.Add(new MarkdownBlock(
+                    MarkdownBlockKind.Numbered,
+                    StripInlineMarkup(numberedText),
+                    Number: number));
             }
             else
             {
@@ -194,7 +197,7 @@ public static class MarkdownDocumentParser
             || compact.Length >= 3 && compact.All(character => character == '*');
     }
 
-    private static bool TryGetNumberedItem(string text, out string body)
+    private static bool TryGetNumberedItem(string text, out int number, out string body)
     {
         var index = 0;
         while (index < text.Length && char.IsDigit(text[index]))
@@ -204,10 +207,12 @@ public static class MarkdownDocumentParser
 
         if (index > 0 && index + 1 < text.Length && text[index] == '.' && text[index + 1] == ' ')
         {
+            _ = int.TryParse(text.AsSpan(0, index), out number);
             body = text[(index + 2)..];
             return true;
         }
 
+        number = 0;
         body = string.Empty;
         return false;
     }

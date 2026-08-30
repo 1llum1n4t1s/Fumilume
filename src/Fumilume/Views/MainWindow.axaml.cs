@@ -23,11 +23,16 @@ public sealed partial class MainWindow : Window
     private readonly MainWindowViewModel _viewModel;
     private readonly AppOptionsViewModel _options;
     private readonly TextEditor _editor;
+    private readonly EditorMinimap _minimap;
     private readonly SearchPanel _searchPanel;
+    private readonly ColumnDefinition _sidePanelColumn;
     private DocumentViewModel? _boundDocument;
     private bool _closeConfirmed;
     private bool _closeCheckInProgress;
     private bool _syncingCaret;
+    private bool _opened;
+    private readonly Queue<IReadOnlyList<string>> _pendingForwardedArguments = [];
+    private Task _forwardedOpen = Task.CompletedTask;
 
     /// <summary>XAML ローダー用（プレビューア）。設定は自分で読み込む。</summary>
     public MainWindow()
@@ -48,8 +53,19 @@ public sealed partial class MainWindow : Window
         _options = _viewModel.Options;
         DataContext = _viewModel;
 
+        var workspaceGrid = this.FindControl<Grid>("WorkspaceGrid")
+            ?? throw new InvalidOperationException("ワークスペースを初期化できませんでした。");
+        _sidePanelColumn = workspaceGrid.ColumnDefinitions[0];
+        _sidePanelColumn.Width = new GridLength(Math.Clamp(
+            settings.SidePanelWidth,
+            AppSettingsDefaults.MinimumSidePanelWidth,
+            AppSettingsDefaults.MaximumSidePanelWidth));
+
         _editor = this.FindControl<TextEditor>("Editor")
             ?? throw new InvalidOperationException("エディタを初期化できませんでした。");
+        _minimap = this.FindControl<EditorMinimap>("EditorMinimap")
+            ?? throw new InvalidOperationException("スクロールマップを初期化できませんでした。");
+        _minimap.Attach(_editor);
         _searchPanel = SearchPanel.Install(_editor);
         _editor.TextArea.TextView.BackgroundRenderers.Add(new BookmarkRenderer(() => _boundDocument));
         ApplyUiFontOptions();
@@ -84,17 +100,52 @@ public sealed partial class MainWindow : Window
 
     private void OnOpened(object? sender, EventArgs args)
     {
+        _opened = true;
         UpdateMaximizeRestoreGlyph();
         // テーマ辞書はウィンドウが VisualRoot へ接続されたあとに確定する。
         ApplyUiFontOptions();
         ApplyEditorOptions();
         _ = _viewModel.InitializeAsync(Program.StartupArgs);
+        while (_pendingForwardedArguments.TryDequeue(out var arguments))
+        {
+            StartForwardedOpen(arguments);
+        }
+
         if (_options.CheckUpdatesOnStartup)
         {
             _ = UpdateService.CheckAsync(this, manually: false);
         }
 
         _editor.Focus();
+    }
+
+    /// <summary>別プロセスから転送されたファイルを開き、既存ウィンドウを前面へ戻す。</summary>
+    internal void OpenForwardedArguments(IReadOnlyList<string> arguments)
+    {
+        if (!_opened)
+        {
+            _pendingForwardedArguments.Enqueue(arguments);
+            return;
+        }
+
+        StartForwardedOpen(arguments);
+    }
+
+    private void StartForwardedOpen(IReadOnlyList<string> arguments)
+        => _forwardedOpen = OpenForwardedArgumentsAfterAsync(_forwardedOpen, arguments);
+
+    private async Task OpenForwardedArgumentsAfterAsync(
+        Task previous,
+        IReadOnlyList<string> arguments)
+    {
+        await previous;
+        await _viewModel.OpenForwardedPathsAsync(arguments);
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
     }
 
     // ===== エディタのオプション =====
@@ -171,7 +222,7 @@ public sealed partial class MainWindow : Window
     /// <summary>ウィンドウの継承フォントを変え、明示指定されたアイコンとエディタは各自の設定を保つ。</summary>
     private void ApplyUiFontOptions()
     {
-        FontFamily = new FontFamily(_options.UiFontFamily);
+        FontFamily = AppFontFamilies.ResolveUiFont(_options.UiFontFamily);
         FontSize = _options.UiFontSize;
     }
 
@@ -264,6 +315,10 @@ public sealed partial class MainWindow : Window
     private void SaveWindowBounds()
     {
         var settings = _options.Settings;
+        settings.SidePanelWidth = Math.Clamp(
+            _sidePanelColumn.ActualWidth,
+            AppSettingsDefaults.MinimumSidePanelWidth,
+            AppSettingsDefaults.MaximumSidePanelWidth);
         if (!settings.RememberWindowBounds)
         {
             return;
@@ -295,12 +350,14 @@ public sealed partial class MainWindow : Window
         {
             // 設定タブを選んでいる状態。エディタは隠れているので空の文書を差しておく。
             _editor.Document = new TextDocument();
+            _minimap.RefreshDocument();
             return;
         }
 
         _boundDocument.PropertyChanged += OnBoundDocumentPropertyChanged;
         _boundDocument.Bookmarks.Changed += OnBookmarksChanged;
         _editor.Document = _boundDocument.EditorDocument;
+        _minimap.RefreshDocument();
         ApplySyntaxHighlighting();
         RestoreCaretFromDocument(scrollIntoView: false);
         InvalidateBookmarks();
@@ -798,6 +855,17 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        if (RequiresSynchronousShutdownPersistence(args.CloseReason))
+        {
+            SaveWindowBounds();
+            if (!_viewModel.PersistSessionStateForShutdown())
+            {
+                AppLogger.For<MainWindow>().Warn("システム終了時にセッションを保存できませんでした。");
+            }
+
+            return;
+        }
+
         args.Cancel = true;
         if (_closeCheckInProgress)
         {
@@ -836,6 +904,9 @@ public sealed partial class MainWindow : Window
             _closeCheckInProgress = false;
         }
     }
+
+    internal static bool RequiresSynchronousShutdownPersistence(WindowCloseReason reason)
+        => reason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown;
 
     // ===== タイトルバー =====
 

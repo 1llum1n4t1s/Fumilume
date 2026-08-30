@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Fumilume.Models;
 using Fumilume.Services;
 
 namespace Fumilume.ViewModels;
@@ -95,6 +96,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public Task InitializeAsync(IEnumerable<string> startupArgs)
         => _initialization = InitializeCoreAsync(startupArgs);
 
+    /// <summary>別プロセスから転送された起動引数を、初回復元の完了後に開く。</summary>
+    public async Task OpenForwardedPathsAsync(IEnumerable<string> startupArgs)
+    {
+        await WaitForInitializationAsync();
+        await OpenPathsAsync(startupArgs.Where(File.Exists));
+    }
+
     private async Task InitializeCoreAsync(IEnumerable<string> startupArgs)
     {
         // 前回終了時のタブを先に戻し、起動引数のファイルはその上へ開く（引数のタブが前面に来る）。
@@ -142,9 +150,42 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public async Task<bool> PersistSessionStateAsync()
     {
+        // OnOpened より前は前回セッションがまだ正本。空の初期タブで上書きしてはいけない。
+        if (_initialization is null)
+        {
+            return true;
+        }
+
         // 復元の途中で書くと、まだ戻していないタブの控えを「使われていない」と判断して消してしまう。
         await WaitForInitializationAsync();
 
+        if (TryPersistSessionState())
+        {
+            return true;
+        }
+
+        // 失われるものが無ければ、保存できなくても終了は妨げない。
+        if (!Documents.Any(document => document.IsModified))
+        {
+            return true;
+        }
+
+        await _dialogs.ShowErrorAsync(
+            "未保存の内容を引き継げません",
+            $"作業中の内容を {AppStoragePaths.Directory} へ控えられませんでした。\n\n"
+            + "空き容量とアクセス権を確認するか、必要な文書を保存してから終了してください。");
+        return false;
+    }
+
+    /// <summary>
+    /// OS・アプリ終了ではダイアログや非同期待機を挟めないため、現在確定している状態を同期的に控える。
+    /// 初回復元が始まっていなければ、前回セッションを正本として触らない。
+    /// </summary>
+    internal bool PersistSessionStateForShutdown()
+        => _initialization is null || TryPersistSessionState();
+
+    private bool TryPersistSessionState()
+    {
         foreach (var document in Documents)
         {
             RememberCaretPosition(document);
@@ -164,16 +205,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return true;
         }
 
-        // 失われるものが無ければ、保存できなくても終了は妨げない。
-        if (!Documents.Any(document => document.IsModified))
-        {
-            return true;
-        }
-
-        await _dialogs.ShowErrorAsync(
-            "未保存の内容を引き継げません",
-            $"作業中の内容を {AppStoragePaths.Directory} へ控えられませんでした。\n\n"
-            + "空き容量とアクセス権を確認するか、必要な文書を保存してから終了してください。");
         return false;
     }
 
@@ -407,6 +438,32 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusMessage = SelectedDocument?.IsMarkdownPreview == true
             ? "Markdown プレビューを表示しました"
             : "Markdown の編集表示へ戻しました";
+    }
+
+    [RelayCommand]
+    private void SetDocumentEncoding(DocumentEncoding encoding)
+    {
+        if (SelectedDocument is not { } document || document.Encoding == encoding)
+        {
+            return;
+        }
+
+        document.Encoding = encoding;
+        StatusMessage = $"文字コードを {document.EncodingLabel} に変更しました";
+    }
+
+    [RelayCommand]
+    private void SetDocumentNewLine(string newLine)
+    {
+        if (SelectedDocument is not { } document
+            || !DocumentNewLines.IsSupported(newLine)
+            || string.Equals(document.NewLine, newLine, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        document.NewLine = newLine;
+        StatusMessage = $"改行コードを {document.NewLineLabel} に変更しました";
     }
 
     [RelayCommand]

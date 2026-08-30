@@ -14,6 +14,11 @@ public static class EditorFontFamily
     public static string ToAvalonia(string? value)
     {
         var families = Parse(value);
+        for (var index = 0; index < families.Count; index++)
+        {
+            families[index] = AppFontFamilies.ResolveEditorFont(families[index]);
+        }
+
         // generic family まで明示されている場合は、VS Code 側で指定した順序をそのまま尊重する。
         if (families.Contains("monospace", StringComparer.OrdinalIgnoreCase))
         {

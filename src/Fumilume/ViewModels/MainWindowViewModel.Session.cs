@@ -15,6 +15,11 @@ public sealed partial class MainWindowViewModel
     /// <summary>控えを読めなかった未保存タブの数。復元のあいだだけ数え、終わったら利用者へ知らせる。</summary>
     private int _sessionBuffersLost;
 
+    /// <summary>
+    /// 復元を完了できなかった未保存タブ。終了時の再保存へ混ぜ、前回の控えを次回も参照できるようにする。
+    /// </summary>
+    private readonly List<SessionTabState> _unrestoredSessionTabs = [];
+
     /// <summary>前回終了時のタブを戻す。1 枚も戻せなければ何もしない（起動直後の空文書が残る）。</summary>
     private async Task RestoreSessionAsync(SessionState session)
     {
@@ -24,6 +29,8 @@ public sealed partial class MainWindowViewModel
         }
 
         _sessionBuffersLost = 0;
+        _unrestoredSessionTabs.Clear();
+        _unrestoredSessionTabs.AddRange(session.Tabs.Where(tab => tab.IsModified));
 
         // コンストラクタが用意した空文書。復元できたぶんがあれば要らなくなる。
         var initial = Tabs.OfType<DocumentViewModel>().FirstOrDefault();
@@ -31,11 +38,19 @@ public sealed partial class MainWindowViewModel
         WorkspaceTabViewModel? selected = null;
         for (var index = 0; index < session.Tabs.Count; index++)
         {
-            var restored = await RestoreTabAsync(session.Tabs[index]);
+            var state = session.Tabs[index];
+            var restored = await RestoreTabAsync(state);
             if (restored is null)
             {
+                if (state.IsModified)
+                {
+                    _sessionBuffersLost++;
+                }
+
                 continue;
             }
+
+            _unrestoredSessionTabs.Remove(state);
 
             InsertContentTab(restored);
             if (index == session.SelectedTabIndex)
@@ -65,7 +80,7 @@ public sealed partial class MainWindowViewModel
         // 控えを失ったときは、1 枚も戻せなかった場合でも黙って空の画面を出さない。
         if (_sessionBuffersLost > 0)
         {
-            StatusMessage = $"未保存の内容を {_sessionBuffersLost:N0} 件復元できませんでした";
+            StatusMessage = $"未保存の内容を {_sessionBuffersLost:N0} 件復元できませんでした（残存する控えは保持しています）";
         }
         else if (restoredTabs.Length > 0)
         {
@@ -105,22 +120,23 @@ public sealed partial class MainWindowViewModel
         else if (state.IsModified)
         {
             // 未保存だったのに控えが読めない（外部から消された・読み取りに失敗した）。
-            // 保存済みファイルならディスクの内容で開き直すが、失われたことは黙らせない。
-            // 控えの無い未保存の新規文書は中身が何も残っていないので、タブごと諦める。
-            _sessionBuffersLost++;
+            // 控え自体が無ければ再試行しても戻らないため、保存済みファイルだけはディスクから開き直す。
             AppLogger.For<MainWindowViewModel>().Warn(
                 $"未保存の内容を復元できませんでした: {state.FilePath ?? state.UntitledName}");
-            if (state.FilePath is not { } lostPath || !File.Exists(lostPath))
+            if (state.FilePath is not { } lostPath ||
+                !File.Exists(lostPath) ||
+                !await ConfirmLargeFileAsync(lostPath))
             {
                 return null;
             }
 
             document.Load(lostPath, await _files.ReadAsync(lostPath));
+            _sessionBuffersLost++;
         }
         else if (state.FilePath is { } path)
         {
             // 未保存の変更が無いタブはディスクが正本。消えていればタブごと諦める。
-            if (!File.Exists(path))
+            if (!File.Exists(path) || !await ConfirmLargeFileAsync(path))
             {
                 return null;
             }
@@ -135,7 +151,9 @@ public sealed partial class MainWindowViewModel
 
     private async Task<PdfDocumentViewModel?> RestorePdfTabAsync(SessionTabState state)
     {
-        if (state.FilePath is not { } path || !File.Exists(path))
+        if (state.FilePath is not { } path ||
+            !File.Exists(path) ||
+            !await ConfirmLargeFileAsync(path))
         {
             return null;
         }
@@ -193,6 +211,16 @@ public sealed partial class MainWindowViewModel
 
         foreach (var tab in Tabs)
         {
+            // 復元が全部失敗したときにコンストラクタが残した空文書は、前回タブの代用品にすぎない。
+            // 失敗したタブと一緒に保存すると次回起動で空タブが増えるため、控えからは外す。
+            if (_unrestoredSessionTabs.Count > 0 &&
+                tab is DocumentViewModel placeholder &&
+                IsPristine(placeholder) &&
+                Tabs.OfType<DocumentViewModel>().Count() == 1)
+            {
+                continue;
+            }
+
             var captured = tab switch
             {
                 DocumentViewModel document => CaptureDocument(document),
@@ -213,8 +241,33 @@ public sealed partial class MainWindowViewModel
             session.Tabs.Add(captured);
         }
 
+        // 1 枚の復元失敗や、復元処理全体の例外が起きても、未保存の控えを一覧から落とさない。
+        foreach (var tab in _unrestoredSessionTabs)
+        {
+            session.Tabs.Add(CloneSessionTab(tab));
+        }
+
         return session;
     }
+
+    private static SessionTabState CloneSessionTab(SessionTabState tab) => new()
+    {
+        Kind = tab.Kind,
+        FilePath = tab.FilePath,
+        UntitledName = tab.UntitledName,
+        IsModified = tab.IsModified,
+        BufferFile = tab.BufferFile,
+        Encoding = tab.Encoding,
+        NewLine = tab.NewLine,
+        CaretIndex = tab.CaretIndex,
+        SelectionStart = tab.SelectionStart,
+        SelectionLength = tab.SelectionLength,
+        IsMarkdownPreview = tab.IsMarkdownPreview,
+        Bookmarks = tab.Bookmarks is null ? [] : [.. tab.Bookmarks],
+        PdfPage = tab.PdfPage,
+        PdfZoom = tab.PdfZoom,
+        Text = tab.Text,
+    };
 
     private static SessionTabState CaptureDocument(DocumentViewModel document) => new()
     {
