@@ -15,8 +15,9 @@
 - C# は nullable と暗黙 using を有効にし、ビルド警告をエラーとして解消する。
 - UI は Avalonia の compiled bindings を維持する。ViewModel の公開プロパティ名を変更するときは、AXAML の binding と Headless 統合テストも同時に更新する。
 - UI 状態と操作は `ViewModels/`、ファイル・設定・更新・関連付けなどの外部処理は `Services/` に置く。OS API やダイアログはサービス境界で隔離し、テストでは差し替え可能にする。
-- テキスト保存では、読込時の文字コードと改行コードを維持する。対応形式を増やす場合は `TextDocumentContent`、`DocumentFileService`、README、テストを同じ変更で揃える。
+- テキスト保存では、利用者がステータスバーから変更しない限り、読込時の文字コードと改行コードを維持する。対応形式や変換操作を増やす場合は `TextDocumentContent`、`DocumentFileService`、README、テストを同じ変更で揃える。
 - 設定は `%LocalAppData%\Fumilume\settings.json` を正本とし、既存プロパティ名との互換性、範囲補正、破損時の既定値フォールバック、原子的な保存を維持する。
+- 起動・セッション経路を変更するときは、同じユーザーの通常起動を単一プロセスへ集約し、後続起動のファイル引数を初回セッション復元後に開く順序を維持する。相対パスは送信側プロセスで絶対化する。
 - ワークスペースには文書・PDF・検索結果・設定を `WorkspaceTabViewModel` 派生型として載せる。設定タブは1個だけで末尾に置き、文書・PDF・検索結果が0件になると空文書を補う。
 - フォルダ横断検索は `IDocumentFileService` 経由で読み、文字コード判定を文書と一致させる。読めないファイルと上限超過は数えて飛ばし、検索全体を止めない。検索結果タブは中央に出し、左サイドパネルへ移さない。
 - 機能を足すときの入口は `EditorCommandCatalog` とコマンドパレット（`MainWindowViewModel.EnumeratePaletteEntries`）にする。常時出すツールバーのボタンを増やさない。
