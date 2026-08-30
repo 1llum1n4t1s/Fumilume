@@ -15,6 +15,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly IDocumentFileService _files;
     private readonly IEditorDialogService _dialogs;
     private readonly IGrepService _grep;
+    private readonly SemaphoreSlim _openPathsGate = new(1, 1);
     private int _untitledSequence;
 
     /// <summary>起動時の復元処理。終了時はこれの完了を待ってからセッションを書き直す。</summary>
@@ -314,6 +315,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public async Task OpenPathsAsync(IEnumerable<string> paths)
     {
+        // 起動引数・ファイル選択・grep・別プロセス転送が同時に来ても、
+        // 先行する読み込みがタブへ反映されてから重複判定できるよう直列化する。
+        await _openPathsGate.WaitAsync();
+        try
+        {
+            await OpenPathsCoreAsync(paths);
+        }
+        finally
+        {
+            _openPathsGate.Release();
+        }
+    }
+
+    private async Task OpenPathsCoreAsync(IEnumerable<string> paths)
+    {
         foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var fullPath = Path.GetFullPath(path);
@@ -326,6 +342,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             if (existing is not null)
             {
                 SelectedTab = existing;
+                StatusMessage = $"{Path.GetFileName(fullPath)} は既に開かれています";
                 continue;
             }
 

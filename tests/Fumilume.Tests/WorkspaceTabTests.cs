@@ -119,6 +119,43 @@ public sealed class WorkspaceTabTests
         Assert.Contains("●", document.TabTitle);
     }
 
+    [Fact]
+    public async Task OpeningAnOpenFileSelectsItsExistingTab()
+    {
+        var viewModel = CreateViewModel();
+        var path = Path.Combine(Path.GetTempPath(), "Fumilume", "already-open.txt");
+
+        await viewModel.OpenPathsAsync([path]);
+        var opened = viewModel.SelectedDocument!;
+        viewModel.NewDocumentCommand.Execute(null);
+
+        await viewModel.OpenPathsAsync([path.ToUpperInvariant()]);
+
+        Assert.Same(opened, viewModel.SelectedTab);
+        Assert.Single(
+            viewModel.Documents,
+            document => string.Equals(document.FilePath, path, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ConcurrentOpenRequestsDoNotCreateDuplicateTabs()
+    {
+        var files = new BlockingFileService();
+        var viewModel = new MainWindowViewModel(files, new StubDialogService());
+        var path = Path.Combine(Path.GetTempPath(), "Fumilume", "concurrent.txt");
+
+        var firstOpen = viewModel.OpenPathsAsync([path]);
+        var secondOpen = viewModel.OpenPathsAsync([path]);
+        files.ReleaseRead();
+
+        await Task.WhenAll(firstOpen, secondOpen);
+
+        var opened = Assert.Single(
+            viewModel.Documents,
+            document => string.Equals(document.FilePath, path, StringComparison.OrdinalIgnoreCase));
+        Assert.Same(opened, viewModel.SelectedTab);
+    }
+
     /// <summary>
     /// 関連付けは別ダイアログをやめて設定タブへ直接並べた。一覧が
     /// <see cref="FileAssociationService.SupportedTypes"/> と 1 対 1 で対応していないと、
@@ -155,6 +192,26 @@ public sealed class WorkspaceTabTests
             bool createBackup = false,
             CancellationToken cancellationToken = default)
             => Task.CompletedTask;
+    }
+
+    private sealed class BlockingFileService : IDocumentFileService
+    {
+        private readonly TaskCompletionSource<TextDocumentContent> _read = new();
+
+        public Task<TextDocumentContent> ReadAsync(
+            string path,
+            CancellationToken cancellationToken = default)
+            => _read.Task;
+
+        public Task WriteAsync(
+            string path,
+            TextDocumentContent content,
+            bool createBackup = false,
+            CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
+        public void ReleaseRead()
+            => _read.SetResult(new TextDocumentContent(string.Empty, DocumentEncoding.Utf8, Environment.NewLine));
     }
 
     private sealed class StubDialogService : IEditorDialogService
