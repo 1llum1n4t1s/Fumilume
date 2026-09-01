@@ -74,7 +74,7 @@
 
         <Grid x:Name="WorkspaceGrid" RowDefinitions="32,*">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240" MinWidth="216" MaxWidth="480" />
+                <ColumnDefinition Width="240" MinWidth="176" MaxWidth="480" />
                 <ColumnDefinition Width="4" />
                 <ColumnDefinition Width="*" MinWidth="480" />
             </Grid.ColumnDefinitions>
@@ -143,14 +143,10 @@
                                 CommandParameter="{x:Static vm:SidePanelKind.Bookmarks}"
                                 AutomationProperties.Name="ブックマーク" ToolTip.Tip="ブックマーク (Ctrl+F2)" />
                     </StackPanel>
-                    <!-- 下端にあったファイル操作を、対象一覧へ目線がある位置へ移す。 -->
+                    <!-- 新しい文書だけは、追加先であるタブ一覧の近くに置く。 -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0">
                         <Button Classes="tabclose" Content="&#xE710;" Command="{Binding NewDocumentCommand}"
                                 AutomationProperties.Name="新しい文書" ToolTip.Tip="新しい文書 (Ctrl+N)" />
-                        <Button Classes="tabclose" Content="&#xE8E5;" Command="{Binding OpenCommand}"
-                                AutomationProperties.Name="ファイルを開く" ToolTip.Tip="ファイルを開く (Ctrl+O)" />
-                        <Button Classes="tabclose" Content="&#xE713;" Command="{Binding OpenSettingsCommand}"
-                                AutomationProperties.Name="設定" ToolTip.Tip="設定 (Ctrl+,)" />
                     </StackPanel>
                 </Grid>
 
@@ -257,8 +253,12 @@
 
                     <Grid RowDefinitions="48,*,36" IsVisible="{Binding IsDocumentSelected}">
                         <Border Grid.Row="0" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
-                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,4">
+                            <Grid x:Name="DocumentToolbar" ColumnDefinitions="Auto,*,Auto" Margin="8,4">
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                                    <Button x:Name="OpenToolbarButton" Classes="command" Command="{Binding OpenCommand}"
+                                            AutomationProperties.Name="ファイルを開く" ToolTip.Tip="ファイルを開く (Ctrl+O)">
+                                        <TextBlock Classes="icon" Text="&#xE8E5;" />
+                                    </Button>
                                     <Button Classes="command" Command="{Binding SaveCommand}" ToolTip.Tip="保存 (Ctrl+S)">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <TextBlock Classes="icon" Text="&#xE74E;" />
@@ -315,6 +315,11 @@
                                             <TextBlock Text="{Binding SelectedDocument.MarkdownPreviewToggleLabel}"
                                                        VerticalAlignment="Center" />
                                         </StackPanel>
+                                    </Button>
+                                    <Button x:Name="SettingsToolbarButton" Classes="command"
+                                            Command="{Binding OpenSettingsCommand}"
+                                            AutomationProperties.Name="設定" ToolTip.Tip="設定 (Ctrl+,)">
+                                        <TextBlock Classes="icon" Text="&#xE713;" />
                                     </Button>
                                 </StackPanel>
                             </Grid>

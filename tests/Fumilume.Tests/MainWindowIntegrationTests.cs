@@ -33,6 +33,28 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     });
 
     [Fact]
+    public void OpenAndSettingsActionsAreInTheDocumentToolbar() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+
+        var toolbar = scope.Window.FindControl<Grid>("DocumentToolbar");
+        var sidePanel = scope.Window.FindControl<Grid>("SidePanelRoot");
+        var open = scope.Window.FindControl<Button>("OpenToolbarButton");
+        var settings = scope.Window.FindControl<Button>("SettingsToolbarButton");
+
+        Assert.NotNull(toolbar);
+        Assert.NotNull(sidePanel);
+        Assert.NotNull(open);
+        Assert.NotNull(settings);
+        Assert.Contains(open, toolbar.GetVisualDescendants());
+        Assert.Contains(settings, toolbar.GetVisualDescendants());
+        Assert.DoesNotContain(open, sidePanel.GetVisualDescendants());
+        Assert.DoesNotContain(settings, sidePanel.GetVisualDescendants());
+        Assert.Same(scope.ViewModel.OpenCommand, open.Command);
+        Assert.Same(scope.ViewModel.OpenSettingsCommand, settings.Command);
+    });
+
+    [Fact]
     public void OpeningSettingsShowsTheSettingsViewAndHidesTheEditor() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
@@ -491,7 +513,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 
         sidePanel.Width = new GridLength(1);
         scope.Window.UpdateLayout();
-        Assert.True(sidePanel.ActualWidth >= AppSettingsDefaults.MinimumSidePanelWidth);
+        Assert.Equal(AppSettingsDefaults.MinimumSidePanelWidth, sidePanel.ActualWidth, precision: 1);
 
         sidePanel.Width = new GridLength(1000);
         scope.Window.UpdateLayout();

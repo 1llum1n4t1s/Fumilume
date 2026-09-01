@@ -196,7 +196,7 @@ internal static class AppSettingsDefaults
     /// <summary>Kiriha と同じ縦タブ高さの契約。</summary>
     public const double MinimumTabHeight = 26;
     public const double MaximumTabHeight = 60;
-    public const double MinimumSidePanelWidth = 216;
+    public const double MinimumSidePanelWidth = 176;
     public const double MaximumSidePanelWidth = 480;
 
     /// <summary>覚えておくカーソル位置の件数。無制限だと settings.json が延々と太る。</summary>

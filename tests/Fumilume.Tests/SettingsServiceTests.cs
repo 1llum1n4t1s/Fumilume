@@ -126,6 +126,20 @@ public sealed class SettingsServiceTests
         Assert.Equal(AppSettingsDefaults.MaximumSidePanelWidth, loaded.SidePanelWidth);
     }
 
+    [Fact]
+    public void SidePanelWidthIsClampedToTheSmallerMinimumOnLoad()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "settings.json"),
+            """{"SidePanelWidth":1}""");
+
+        var loaded = SettingsService.Load();
+
+        Assert.Equal(176, AppSettingsDefaults.MinimumSidePanelWidth);
+        Assert.Equal(AppSettingsDefaults.MinimumSidePanelWidth, loaded.SidePanelWidth);
+    }
+
     /// <summary>覚えたカーソル位置が青天井に増えて settings.json を太らせないこと。</summary>
     [Fact]
     public void RememberedCaretPositionsAreCapped()
