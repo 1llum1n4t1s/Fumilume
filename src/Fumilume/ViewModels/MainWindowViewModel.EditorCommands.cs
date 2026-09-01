@@ -261,6 +261,9 @@ public sealed partial class MainWindowViewModel
                 break;
 
             // ===== 編集系（選択が無ければカーソル行が対象） =====
+            case EditorCommandId.FormatDocument:
+                FormatDocument(document);
+                break;
             case EditorCommandId.TrimLineStarts:
                 document.TransformSelectedLines(TextTransforms.TrimLineStarts);
                 StatusMessage = $"{title}しました";
@@ -397,6 +400,32 @@ public sealed partial class MainWindowViewModel
 
         document.InsertText(fullPath ? path : Path.GetFileName(path));
         StatusMessage = fullPath ? "フルパスを挿入しました" : "ファイル名を挿入しました";
+    }
+
+    private void FormatDocument(DocumentViewModel document)
+    {
+        var result = DocumentFormattingService.Format(
+            document.FilePath,
+            document.Text,
+            document.NewLine,
+            document.Encoding,
+            Options.IndentationSize,
+            Options.ConvertTabsToSpaces);
+
+        switch (result.Outcome)
+        {
+            case DocumentFormatOutcome.Success:
+                StatusMessage = document.ReplaceWholeDocument(result.Text!)
+                    ? "文書全体を書式整形しました"
+                    : "文書は既に整形されています";
+                break;
+            case DocumentFormatOutcome.Invalid:
+                StatusMessage = result.Message ?? "構文を解釈できないため書式整形できませんでした";
+                break;
+            default:
+                StatusMessage = result.Message ?? "このファイル形式の書式整形には対応していません";
+                break;
+        }
     }
 
     /// <summary>変換系の結果を伝える。選択が無い／変換できないときは黙って失敗させない。</summary>

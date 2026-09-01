@@ -30,6 +30,7 @@ public enum EditorCommandId
     UrlDecode,
 
     // ===== 編集系（行） =====
+    FormatDocument,
     TrimLineStarts,
     TrimLineEnds,
     SortLinesAscending,
@@ -114,6 +115,7 @@ public static class EditorCommandCatalog
         new(EditorCommandId.UrlEncode, ConvertCategory, "URL エンコード"),
         new(EditorCommandId.UrlDecode, ConvertCategory, "URL デコード"),
 
+        new(EditorCommandId.FormatDocument, EditCategory, "文書全体を書式整形", "Ctrl+K, Ctrl+D"),
         new(EditorCommandId.DuplicateLine, EditCategory, "行の二重化", "Ctrl+I"),
         new(EditorCommandId.DeleteLine, EditCategory, "行削除", "Ctrl+Shift+E"),
         new(EditorCommandId.SelectLine, EditCategory, "1 行選択"),

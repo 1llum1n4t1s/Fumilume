@@ -82,6 +82,35 @@ public sealed partial class DocumentViewModel
         ReplaceAndSelect(offset, length, transform(EditorDocument.GetText(offset, length)));
     }
 
+    /// <summary>
+    /// 文書全体を1回のUndo操作で置き換え、カーソルを元と同じ行・列へ戻す。
+    /// 書式整形のように文書全体へ作用するコマンドで使う。
+    /// </summary>
+    public bool ReplaceWholeDocument(string replacement)
+    {
+        if (string.Equals(EditorDocument.Text, replacement, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var caret = ClampOffset(CaretIndex);
+        var currentLine = EditorDocument.GetLineByOffset(caret);
+        var lineNumber = currentLine.LineNumber;
+        var column = caret - currentLine.Offset;
+        var originalIndentLength = CountLeadingIndent(EditorDocument.GetText(currentLine));
+        var contentColumn = Math.Max(0, column - originalIndentLength);
+
+        EditorDocument.Replace(0, EditorDocument.TextLength, replacement);
+
+        var restoredLine = EditorDocument.GetLineByNumber(Math.Min(lineNumber, EditorDocument.LineCount));
+        var restoredIndentLength = CountLeadingIndent(EditorDocument.GetText(restoredLine));
+        var restoredColumn = column <= originalIndentLength
+            ? Math.Min(column, restoredIndentLength)
+            : restoredIndentLength + contentColumn;
+        SetSelection(restoredLine.Offset + Math.Min(restoredColumn, restoredLine.Length), 0);
+        return true;
+    }
+
     /// <summary>対象行の直後に同じ内容をもう一度差し込む（sakura の F_DUPLICATELINE 相当）。</summary>
     public void DuplicateLines()
     {
@@ -530,5 +559,16 @@ public sealed partial class DocumentViewModel
         }
 
         return line.StartsWith(' ') || line.StartsWith('\t') ? line[1..] : line;
+    }
+
+    private static int CountLeadingIndent(string line)
+    {
+        var length = 0;
+        while (length < line.Length && line[length] is ' ' or '\t')
+        {
+            length++;
+        }
+
+        return length;
     }
 }

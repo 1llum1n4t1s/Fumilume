@@ -341,6 +341,34 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     });
 
     [Fact]
+    public void ControlKControlDFormatsTheWholeDocument() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        const string source = "class Sample\n{\nvoid Run()\n{\n}\n}";
+        document.Load(
+            @"C:\tmp\Sample.cs",
+            new TextDocumentContent(source, DocumentEncoding.Utf8, DocumentNewLines.Lf));
+        var editor = scope.Window.FindControl<TextEditor>("Editor");
+        Assert.NotNull(editor);
+        editor.Focus();
+        Dispatcher.UIThread.RunJobs();
+
+        PressKey(editor, Key.K, KeyModifiers.Control);
+
+        Assert.Equal(source, document.Text);
+        Assert.Contains("Ctrl+D", scope.ViewModel.StatusMessage);
+
+        PressKey(editor, Key.D, KeyModifiers.Control);
+
+        Assert.Equal("class Sample\n{\n\tvoid Run()\n\t{\n\t}\n}", document.Text);
+        Assert.Equal("文書全体を書式整形しました", scope.ViewModel.StatusMessage);
+
+        document.EditorDocument.UndoStack.Undo();
+        Assert.Equal(source, document.Text);
+    });
+
+    [Fact]
     public void CommandPaletteOpensFiltersAndRuns() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
@@ -523,18 +551,29 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     });
 
     [Fact]
-    public void EditorShowsTheScrollMapBesideTheDocument() => fixture.Run(() =>
+    public void DocumentStatusTextIsVerticallyCentered() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
-        var minimap = scope.Window.FindControl<EditorMinimap>("EditorMinimap");
-        Assert.NotNull(minimap);
+        var lineColumn = scope.Window.FindControl<TextBlock>("LineColumnStatus");
+        var statistics = scope.Window.FindControl<TextBlock>("DocumentStatisticsStatus");
 
-        scope.ViewModel.Documents.Single().Text = string.Join('\n', Enumerable.Range(1, 400));
-        Dispatcher.UIThread.RunJobs();
-        scope.Window.UpdateLayout();
+        Assert.NotNull(lineColumn);
+        Assert.NotNull(statistics);
+        Assert.Equal(Avalonia.Layout.VerticalAlignment.Center, lineColumn.VerticalAlignment);
+        Assert.Equal(Avalonia.Layout.VerticalAlignment.Center, statistics.VerticalAlignment);
+    });
 
-        Assert.True(minimap.IsEffectivelyVisible);
-        Assert.Equal(76, minimap.Bounds.Width);
+    [Fact]
+    public void EditorKeepsTheStandardScrollBarWithoutAScrollMap() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var editor = scope.Window.FindControl<TextEditor>("Editor");
+        Assert.NotNull(editor);
+        Assert.Equal(
+            global::Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            editor.VerticalScrollBarVisibility);
+        var editorHost = Assert.IsType<Grid>(editor.Parent);
+        Assert.Empty(editorHost.ColumnDefinitions);
     });
 
     [Fact]

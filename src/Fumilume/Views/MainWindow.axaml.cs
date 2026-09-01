@@ -23,7 +23,6 @@ public sealed partial class MainWindow : Window
     private readonly MainWindowViewModel _viewModel;
     private readonly AppOptionsViewModel _options;
     private readonly TextEditor _editor;
-    private readonly EditorMinimap _minimap;
     private readonly SearchPanel _searchPanel;
     private readonly ColumnDefinition _sidePanelColumn;
     private DocumentViewModel? _boundDocument;
@@ -31,6 +30,7 @@ public sealed partial class MainWindow : Window
     private bool _closeCheckInProgress;
     private bool _syncingCaret;
     private bool _opened;
+    private bool _formatDocumentChordPending;
     private readonly Queue<IReadOnlyList<string>> _pendingForwardedArguments = [];
     private Task _forwardedOpen = Task.CompletedTask;
 
@@ -63,9 +63,6 @@ public sealed partial class MainWindow : Window
 
         _editor = this.FindControl<TextEditor>("Editor")
             ?? throw new InvalidOperationException("エディタを初期化できませんでした。");
-        _minimap = this.FindControl<EditorMinimap>("EditorMinimap")
-            ?? throw new InvalidOperationException("スクロールマップを初期化できませんでした。");
-        _minimap.Attach(_editor);
         _searchPanel = SearchPanel.Install(_editor);
         _editor.TextArea.TextView.BackgroundRenderers.Add(new BookmarkRenderer(() => _boundDocument));
         ApplyUiFontOptions();
@@ -209,8 +206,8 @@ public sealed partial class MainWindow : Window
     private void ApplyTabHeight() => Resources["TabItemHeight"] = _options.TabHeight;
 
     /// <summary>
-    /// 今の文書に合う強調表示を当てる。同梱の定義はライト前提の配色なので、
-    /// 当てる前に今のテーマへ合わせて色を整える。
+    /// 今の文書に合う強調表示を当てる。同梱定義の役割名をOne Dark／One Lightの
+    /// 共通パレットへ割り当ててから、現在のテーマへ適用する。
     /// </summary>
     private void ApplySyntaxHighlighting()
         => _editor.SyntaxHighlighting = _options.EnableSyntaxHighlighting
@@ -350,14 +347,12 @@ public sealed partial class MainWindow : Window
         {
             // 設定タブを選んでいる状態。エディタは隠れているので空の文書を差しておく。
             _editor.Document = new TextDocument();
-            _minimap.RefreshDocument();
             return;
         }
 
         _boundDocument.PropertyChanged += OnBoundDocumentPropertyChanged;
         _boundDocument.Bookmarks.Changed += OnBookmarksChanged;
         _editor.Document = _boundDocument.EditorDocument;
-        _minimap.RefreshDocument();
         ApplySyntaxHighlighting();
         RestoreCaretFromDocument(scrollIntoView: false);
         InvalidateBookmarks();
@@ -677,6 +672,28 @@ public sealed partial class MainWindow : Window
 
     private void OnGlobalKeyDown(object? sender, KeyEventArgs args)
     {
+        var controlOnly = args.KeyModifiers == KeyModifiers.Control;
+        if (_formatDocumentChordPending)
+        {
+            _formatDocumentChordPending = false;
+            if (controlOnly && args.Key == Key.D && _viewModel.IsDocumentSelected)
+            {
+                _viewModel.RunEditorCommandCommand.Execute(EditorCommandId.FormatDocument);
+                args.Handled = true;
+                return;
+            }
+        }
+
+        // Avalonia の KeyBinding は複数ストロークを表現できないため、Visual Studio の
+        // Edit.FormatDocument と同じ Ctrl+K, Ctrl+D だけをここで状態として受ける。
+        if (controlOnly && args.Key == Key.K && _viewModel.IsDocumentSelected)
+        {
+            _formatDocumentChordPending = true;
+            _viewModel.StatusMessage = "Ctrl+K が押されました。Ctrl+D で文書全体を書式整形します";
+            args.Handled = true;
+            return;
+        }
+
         // フォルダ横断検索はどのタブを見ていても始められる（結果タブからの再検索を含む）。
         if (args.KeyModifiers.HasFlag(KeyModifiers.Control)
             && args.KeyModifiers.HasFlag(KeyModifiers.Shift)

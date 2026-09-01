@@ -159,6 +159,19 @@ public sealed class EditorCommandTests
         Assert.Equal("abc", document.Text);
     }
 
+    [Fact]
+    public void WholeDocumentReplacementIsOneUndoableEditAndKeepsTheCaretLine()
+    {
+        var document = CreateDocument("one\ntwo\nthree");
+        document.CaretIndex = 5;
+
+        Assert.True(document.ReplaceWholeDocument("one\n  two\nthree"));
+        Assert.Equal(7, document.CaretIndex);
+
+        document.EditorDocument.UndoStack.Undo();
+        Assert.Equal("one\ntwo\nthree", document.Text);
+    }
+
     /// <summary>メニュー・パレット・キー割り当てが同じカタログを読んでいることの確認。</summary>
     [Fact]
     public void EveryCommandIdHasACatalogEntry()
