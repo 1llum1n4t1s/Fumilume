@@ -8,8 +8,116 @@ namespace Fumilume.Tests;
 /// 「保存していないタブがあってもそのまま閉じられ、次に開くと前回終了時の状態から続けられる」契約。
 /// 保存側（<c>PersistSessionState</c>）と復元側（<c>InitializeAsync</c>）を実際に往復させて確かめる。
 /// </summary>
-public sealed class SessionRestoreTests
+[Collection(HeadlessAppCollection.Name)]
+public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
 {
+    [Fact]
+    public async Task DuplicateSavedPathsRestoreOnlyOnce()
+    {
+        using var storage = new TemporaryStorage();
+        var path = Path.Combine(storage.Path, "duplicate.txt");
+        File.WriteAllText(path, "disk");
+        Assert.True(SessionStateService.Save(new SessionState
+        {
+            Tabs = [new() { FilePath = path }, new() { FilePath = path.ToUpperInvariant() }],
+            SelectedTabIndex = 1,
+        }));
+        var files = new FakeFileService { ReadText = "disk" };
+        var viewModel = new MainWindowViewModel(files, new StubDialogService());
+
+        await viewModel.InitializeAsync([]);
+
+        Assert.Same(Assert.Single(viewModel.Documents), viewModel.SelectedTab);
+        Assert.Equal(1, files.Reads);
+    }
+
+    [Fact]
+    public void OpeningDuringRestoreUsesTheRestoredTab() => fixture.Run(() =>
+    {
+        using var storage = new TemporaryStorage();
+        var path = Path.Combine(storage.Path, "concurrent.txt");
+        File.WriteAllText(path, "disk");
+        Assert.True(SessionStateService.Save(new SessionState { Tabs = [new() { FilePath = path }] }));
+        var gate = new TaskCompletionSource();
+        var files = new FakeFileService { ReadText = "disk", ReadGate = gate.Task };
+        var viewModel = new MainWindowViewModel(files, new StubDialogService());
+        var restore = viewModel.InitializeAsync([]);
+        var open = viewModel.OpenPathsAsync([path]);
+        gate.SetResult();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(restore.IsCompleted);
+        Assert.True(open.IsCompleted);
+        restore.GetAwaiter().GetResult();
+        open.GetAwaiter().GetResult();
+
+        Assert.Same(Assert.Single(viewModel.Documents), viewModel.SelectedTab);
+        Assert.Equal(1, files.Reads);
+    });
+
+    [Fact]
+    public async Task DuplicateUnsavedPathsKeepBothBuffersWithoutSharingASaveTarget()
+    {
+        using var storage = new TemporaryStorage();
+        var path = Path.Combine(storage.Path, "duplicate.txt");
+        Assert.True(SessionStateService.Save(new SessionState
+        {
+            Tabs =
+            [
+                new() { FilePath = path, IsModified = true, Text = "first" },
+                new() { FilePath = path.ToUpperInvariant(), IsModified = true, Text = "second" },
+            ],
+            SelectedTabIndex = 1,
+        }));
+        var files = new FakeFileService();
+        var viewModel = new MainWindowViewModel(files, new StubDialogService());
+        await viewModel.InitializeAsync([]);
+
+        Assert.Equal(2, viewModel.Documents.Count());
+        Assert.Single(viewModel.Documents, document => document.FilePath is not null);
+        Assert.Equal("second", viewModel.SelectedDocument!.Text);
+        Assert.Null(viewModel.SelectedDocument.FilePath);
+        Assert.All(viewModel.Documents, document => Assert.True(document.IsModified));
+        Assert.Equal(0, files.Reads);
+
+        Assert.True(await viewModel.PersistSessionStateAsync());
+        var restoredAgain = CreateViewModel();
+        await restoredAgain.InitializeAsync([]);
+        Assert.Equal(new[] { "first", "second" }, restoredAgain.Documents.Select(document => document.Text));
+        Assert.Single(restoredAgain.Documents, document => document.FilePath is not null);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MetadataChangesSurviveUndoAndSessionRestore(bool encoding)
+    {
+        using var storage = new TemporaryStorage();
+        var first = CreateViewModel("disk");
+        await first.InitializeAsync([]);
+        var document = first.SelectedDocument!;
+        document.Load(Path.Combine(storage.Path, "metadata.txt"),
+            new TextDocumentContent("disk", DocumentEncoding.Utf8, "\n"));
+        if (encoding)
+        {
+            document.Encoding = DocumentEncoding.Utf8Bom;
+        }
+        else
+        {
+            document.NewLine = "\r\n";
+        }
+        document.EditorDocument.Insert(0, "x");
+        document.EditorDocument.UndoStack.Undo();
+        Assert.True(await first.PersistSessionStateAsync());
+
+        var second = CreateViewModel();
+        await second.InitializeAsync([]);
+        var restored = Assert.Single(second.Documents);
+        Assert.Equal("disk", restored.Text);
+        Assert.Equal(document.Encoding, restored.Encoding);
+        Assert.Equal(document.NewLine, restored.NewLine);
+        Assert.True(restored.IsModified);
+    }
+
     [Fact]
     public async Task UnsavedTabsSurviveClosingAndComeBackOnTheNextStart()
     {

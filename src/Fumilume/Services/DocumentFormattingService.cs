@@ -72,7 +72,8 @@ public static class DocumentFormattingService
 
         if (BraceLanguageExtensions.Contains(extension))
         {
-            return TryFormatBraceLanguage(text, newLine, indent, out var formatted)
+            var supportsLineComments = !string.Equals(extension, ".css", StringComparison.OrdinalIgnoreCase);
+            return TryFormatBraceLanguage(text, newLine, indent, supportsLineComments, out var formatted)
                 ? new(DocumentFormatOutcome.Success, formatted)
                 : new(
                     DocumentFormatOutcome.Invalid,
@@ -168,6 +169,7 @@ public static class DocumentFormattingService
         string text,
         string newLine,
         string indent,
+        bool supportsLineComments,
         out string formatted)
     {
         var lines = DocumentNewLines.SplitLines(text);
@@ -203,7 +205,7 @@ public static class DocumentFormattingService
                 builder.Append(newLine);
             }
 
-            if (!ScanCodeLine(content, state))
+            if (!ScanCodeLine(content, state, supportsLineComments))
             {
                 formatted = text;
                 return false;
@@ -249,7 +251,7 @@ public static class DocumentFormattingService
         return new(braces, parentheses, brackets);
     }
 
-    private static bool ScanCodeLine(string line, CodeScanState state)
+    private static bool ScanCodeLine(string line, CodeScanState state, bool supportsLineComments)
     {
         for (var index = 0; index < line.Length; index++)
         {
@@ -317,7 +319,7 @@ public static class DocumentFormattingService
             var character = line[index];
             if (character == '/' && index + 1 < line.Length)
             {
-                if (line[index + 1] == '/')
+                if (supportsLineComments && line[index + 1] == '/')
                 {
                     return true;
                 }

@@ -15,6 +15,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly IDocumentFileService _files;
     private readonly IEditorDialogService _dialogs;
     private readonly IGrepService _grep;
+    // 開く・復元・保存先の確定を直列化し、同一パスを複数タブへ割り当てない。
     private readonly SemaphoreSlim _openPathsGate = new(1, 1);
     private int _untitledSequence;
 
@@ -333,12 +334,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var fullPath = Path.GetFullPath(path);
-            var existing = Tabs.FirstOrDefault(tab => tab switch
-            {
-                DocumentViewModel document => string.Equals(document.FilePath, fullPath, StringComparison.OrdinalIgnoreCase),
-                PdfDocumentViewModel pdf => string.Equals(pdf.FilePath, fullPath, StringComparison.OrdinalIgnoreCase),
-                _ => false,
-            });
+            var existing = FindOpenFileTab(fullPath);
             if (existing is not null)
             {
                 SelectedTab = existing;
@@ -630,8 +626,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
         }
 
+        await _openPathsGate.WaitAsync();
         try
         {
+            path = Path.GetFullPath(path);
+            if (FindOpenFileTab(path, document) is { } existing)
+            {
+                SelectedTab = existing;
+                StatusMessage = $"{Path.GetFileName(path)} は別のタブで開かれているため保存できません";
+                await _dialogs.ShowErrorAsync("保存先は既に開かれています",
+                    "別の保存先を選ぶか、保存先のタブを閉じてからもう一度保存してください。編集内容は保持しています。");
+                return false;
+            }
+
             await _files.WriteAsync(path, document.CreateSaveContent(), Options.CreateBackupOnSave);
             document.MarkSaved(path);
             RememberCaretPosition(document);
@@ -647,7 +654,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 $"{path}\n\n{ex.Message}");
             return false;
         }
+        finally
+        {
+            _openPathsGate.Release();
+        }
     }
+
+    private WorkspaceTabViewModel? FindOpenFileTab(string fullPath, WorkspaceTabViewModel? except = null)
+        => Tabs.FirstOrDefault(tab => !ReferenceEquals(tab, except) && (tab switch
+        {
+            DocumentViewModel document => string.Equals(document.FilePath, fullPath, StringComparison.OrdinalIgnoreCase),
+            PdfDocumentViewModel pdf => string.Equals(pdf.FilePath, fullPath, StringComparison.OrdinalIgnoreCase),
+            _ => false,
+        }));
 
     /// <summary>終了時の確認（sakura の m_bExitConfirm）。設定が OFF ならビュー側から呼ばれない。</summary>
     public Task<bool> ConfirmExitAsync()

@@ -4,8 +4,101 @@ using Fumilume.ViewModels;
 
 namespace Fumilume.Tests;
 
-public sealed class MainWindowFileCommandTests
+[Collection(HeadlessAppCollection.Name)]
+public sealed class MainWindowFileCommandTests(HeadlessAppFixture fixture)
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ConcurrentSaveAndOpenKeepOneTabForThePath(bool openFirst) => fixture.Run(() =>
+    {
+        const string path = @"C:\tmp\concurrent.txt";
+        var gate = new TaskCompletionSource();
+        var files = new RecordingFileService
+        {
+            ReadGate = openFirst ? gate.Task : null,
+            WriteGate = openFirst ? null : gate.Task,
+        };
+        var viewModel = new MainWindowViewModel(files, new StubDialogService([path]));
+        var document = viewModel.SelectedDocument!;
+        document.Text = "unsaved";
+        Task open;
+        Task save;
+        if (openFirst)
+        {
+            open = viewModel.OpenPathsAsync([path]);
+            save = viewModel.SaveAsCommand.ExecuteAsync(null);
+        }
+        else
+        {
+            save = viewModel.SaveAsCommand.ExecuteAsync(null);
+            open = viewModel.OpenPathsAsync([path]);
+        }
+        gate.SetResult();
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Assert.True(open.IsCompleted);
+        Assert.True(save.IsCompleted);
+        open.GetAwaiter().GetResult();
+        save.GetAwaiter().GetResult();
+
+        Assert.Single(viewModel.Documents, item => item.FilePath is not null);
+        Assert.Equal(openFirst ? 0 : 1, files.Writes.Count);
+        Assert.Equal(openFirst ? 1 : 0, files.Reads);
+        Assert.Equal(openFirst, document.IsModified);
+    });
+
+    [Fact]
+    public async Task SaveAsRefusesAnotherOpenDocumentsPathWithoutWriting()
+    {
+        const string path = @"C:\tmp\existing.txt";
+        var files = new RecordingFileService { ReadText = "disk" };
+        var viewModel = new MainWindowViewModel(files, new StubDialogService([path.ToUpperInvariant()]));
+        await viewModel.OpenPathsAsync([path]);
+        var existing = viewModel.SelectedDocument!;
+        existing.Text = "first unsaved";
+        viewModel.NewDocumentCommand.Execute(null);
+        var other = viewModel.SelectedDocument!;
+        other.Text = "second unsaved";
+
+        await viewModel.SaveAsCommand.ExecuteAsync(null);
+
+        Assert.Empty(files.Writes);
+        Assert.Null(other.FilePath);
+        Assert.True(other.IsModified);
+        Assert.Equal("first unsaved", existing.Text);
+        Assert.True(existing.IsModified);
+        Assert.Equal(2, viewModel.Documents.Count());
+    }
+
+    [Fact]
+    public async Task SaveAsRefusesAnOpenPdfPath()
+    {
+        const string path = @"C:\tmp\existing.pdf";
+        var files = new RecordingFileService();
+        var viewModel = new MainWindowViewModel(files, new StubDialogService([path]));
+        using var pdf = new PdfDocumentViewModel(path, new UnusedPdfRenderer(), _ => Task.CompletedTask);
+        viewModel.Tabs.Add(pdf);
+        var document = viewModel.SelectedDocument!;
+        document.Text = "unsaved";
+
+        await viewModel.SaveAsCommand.ExecuteAsync(null);
+
+        Assert.Empty(files.Writes);
+        Assert.Null(document.FilePath);
+        Assert.True(document.IsModified);
+        Assert.Same(pdf, viewModel.SelectedTab);
+    }
+
+    private sealed class UnusedPdfRenderer : IPdfRenderer
+    {
+        public int PageCount => 1;
+        public Avalonia.Size GetPageSize(int pageIndex) => new(100, 100);
+        public Task<Avalonia.Media.Imaging.Bitmap> RenderAsync(
+            int pageIndex, double zoom, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("パス照合では描画しない");
+        public void Dispose() { }
+    }
+
     [Fact]
     public async Task SaveAllWritesEveryModifiedDocument()
     {
@@ -59,20 +152,33 @@ public sealed class MainWindowFileCommandTests
     private sealed class RecordingFileService : IDocumentFileService
     {
         public string ReadText { get; init; } = string.Empty;
+        public Task? ReadGate { get; init; }
+        public Task? WriteGate { get; init; }
+        public int Reads { get; private set; }
 
         public List<string> Writes { get; } = [];
 
-        public Task<TextDocumentContent> ReadAsync(string path, CancellationToken cancellationToken = default)
-            => Task.FromResult(new TextDocumentContent(ReadText, DocumentEncoding.Utf8, Environment.NewLine));
+        public async Task<TextDocumentContent> ReadAsync(string path, CancellationToken cancellationToken = default)
+        {
+            Reads++;
+            if (ReadGate is { } gate)
+            {
+                await gate;
+            }
+            return new TextDocumentContent(ReadText, DocumentEncoding.Utf8, Environment.NewLine);
+        }
 
-        public Task WriteAsync(
+        public async Task WriteAsync(
             string path,
             TextDocumentContent content,
             bool createBackup = false,
             CancellationToken cancellationToken = default)
         {
             Writes.Add(path);
-            return Task.CompletedTask;
+            if (WriteGate is { } gate)
+            {
+                await gate;
+            }
         }
     }
 

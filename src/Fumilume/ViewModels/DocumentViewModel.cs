@@ -8,6 +8,8 @@ namespace Fumilume.ViewModels;
 public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 {
     private bool _isLoading;
+    private DocumentEncoding _savedEncoding = DocumentEncoding.Utf8;
+    private string _savedNewLine = Environment.NewLine;
 
     /// <summary>前回終了時の未保存内容から復元した文書か（保存するまで未保存のまま扱う）。</summary>
     private bool _restoredUnsaved;
@@ -156,6 +158,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             FilePath = Path.GetFullPath(path);
             Encoding = content.Encoding;
             NewLine = content.NewLine;
+            _savedEncoding = Encoding;
+            _savedNewLine = NewLine;
             Text = content.Text;
             CaretIndex = 0;
             _restoredUnsaved = false;
@@ -200,6 +204,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     public void MarkSaved(string path)
     {
         FilePath = Path.GetFullPath(path);
+        _savedEncoding = Encoding;
+        _savedNewLine = NewLine;
         EditorDocument.UndoStack.MarkAsOriginalFile();
         _restoredUnsaved = false;
         IsModified = false;
@@ -225,7 +231,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     {
         if (!_isLoading)
         {
-            IsModified = true;
+            UpdateModifiedState();
         }
     }
 
@@ -233,7 +239,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     {
         if (!_isLoading)
         {
-            IsModified = true;
+            UpdateModifiedState();
         }
     }
 
@@ -272,9 +278,13 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
         if (!_isLoading && args.PropertyName == nameof(UndoStack.IsOriginalFile))
         {
-            IsModified = _restoredUnsaved || !EditorDocument.UndoStack.IsOriginalFile;
+            UpdateModifiedState();
         }
     }
+
+    private void UpdateModifiedState()
+        => IsModified = _restoredUnsaved || !EditorDocument.UndoStack.IsOriginalFile
+            || Encoding != _savedEncoding || NewLine != _savedNewLine;
 
     private void UpdateTextStatistics()
     {

@@ -23,6 +23,19 @@ public sealed partial class MainWindowViewModel
     /// <summary>前回終了時のタブを戻す。1 枚も戻せなければ何もしない（起動直後の空文書が残る）。</summary>
     private async Task RestoreSessionAsync(SessionState session)
     {
+        await _openPathsGate.WaitAsync();
+        try
+        {
+            await RestoreSessionCoreAsync(session);
+        }
+        finally
+        {
+            _openPathsGate.Release();
+        }
+    }
+
+    private async Task RestoreSessionCoreAsync(SessionState session)
+    {
         if (session.Tabs.Count == 0)
         {
             return;
@@ -52,7 +65,10 @@ public sealed partial class MainWindowViewModel
 
             _unrestoredSessionTabs.Remove(state);
 
-            InsertContentTab(restored);
+            if (!Tabs.Contains(restored))
+            {
+                InsertContentTab(restored);
+            }
             if (index == session.SelectedTabIndex)
             {
                 selected = restored;
@@ -92,6 +108,25 @@ public sealed partial class MainWindowViewModel
     {
         try
         {
+            if (state.FilePath is { } path && FindOpenFileTab(Path.GetFullPath(path)) is { } existing)
+            {
+                if (!state.IsModified)
+                {
+                    return existing;
+                }
+
+                // 旧セッションの重複した未保存本文を捨てず、保存先の無い文書として救出する。
+                if (state.Text is null)
+                {
+                    return null;
+                }
+
+                var recovered = CloneSessionTab(state);
+                recovered.FilePath = null;
+                recovered.UntitledName = $"{Path.GetFileName(path)}（復元した未保存内容）";
+                return await RestoreDocumentTabAsync(recovered);
+            }
+
             return string.Equals(state.Kind, SessionTabKinds.Pdf, StringComparison.Ordinal)
                 ? await RestorePdfTabAsync(state)
                 : await RestoreDocumentTabAsync(state);

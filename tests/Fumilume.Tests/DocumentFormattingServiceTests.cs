@@ -5,6 +5,20 @@ namespace Fumilume.Tests;
 
 public sealed class DocumentFormattingServiceTests
 {
+    [Theory]
+    [InlineData("http://example.com/a.png")]
+    [InlineData("https://example.com/a.png")]
+    [InlineData("//example.com/a.png")]
+    public void CssUrlsAreNotLineComments(string url)
+    {
+        var result = DocumentFormattingService.Format("style.CSS",
+            $".image {{\nbackground: url({url}); /* }} */\n}}", "\n",
+            DocumentEncoding.Utf8, 2, true);
+
+        Assert.Equal(DocumentFormatOutcome.Success, result.Outcome);
+        Assert.Equal($".image {{\n  background: url({url}); /* }} */\n}}", result.Text);
+    }
+
     [Fact]
     public void JsonUsesConfiguredSpacesAndPreservesTheNewLine()
     {

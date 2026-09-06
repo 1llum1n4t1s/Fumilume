@@ -5,6 +5,34 @@ namespace Fumilume.Tests;
 
 public sealed class DocumentViewModelTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MetadataChangesSurviveTextUndoAndResetAfterSaving(bool encoding)
+    {
+        var document = new DocumentViewModel("無題", _ => Task.CompletedTask);
+        const string path = @"C:\tmp\metadata.txt";
+        document.Load(path, new TextDocumentContent("hello", DocumentEncoding.Utf8, "\n"));
+        if (encoding)
+        {
+            document.Encoding = DocumentEncoding.Utf8Bom;
+        }
+        else
+        {
+            document.NewLine = "\r\n";
+        }
+
+        document.EditorDocument.Insert(0, "x");
+        document.EditorDocument.UndoStack.Undo();
+        Assert.Equal("hello", document.Text);
+        Assert.True(document.IsModified);
+
+        document.MarkSaved(path);
+        document.EditorDocument.Insert(0, "x");
+        document.EditorDocument.UndoStack.Undo();
+        Assert.False(document.IsModified);
+    }
+
     [Fact]
     public void EditingUpdatesDirtyStateAndStatistics()
     {
@@ -18,6 +46,24 @@ public sealed class DocumentViewModelTests
         Assert.Equal(10, document.CharacterCount);
         Assert.Equal("行 2、列 3", document.LineColumnText);
         Assert.Contains("●", document.DisplayTitle);
+    }
+
+    [Fact]
+    public void RestoringSavedMetadataDoesNotHideTextChanges()
+    {
+        var document = new DocumentViewModel("無題", _ => Task.CompletedTask);
+        document.Load(@"C:\tmp\metadata.txt", new TextDocumentContent("text", DocumentEncoding.Utf8, "\n"));
+        document.Encoding = DocumentEncoding.Utf8Bom;
+        document.NewLine = "\r\n";
+        document.Encoding = DocumentEncoding.Utf8;
+        Assert.True(document.IsModified);
+        document.NewLine = "\n";
+        Assert.False(document.IsModified);
+
+        document.EditorDocument.Insert(0, "x");
+        document.NewLine = "\r\n";
+        document.NewLine = "\n";
+        Assert.True(document.IsModified);
     }
 
     [Theory]
