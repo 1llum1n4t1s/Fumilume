@@ -1,6 +1,8 @@
+using Avalonia;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Fumilume.Models;
 using Fumilume.Services;
 
 namespace Fumilume.ViewModels;
@@ -10,6 +12,8 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
     private readonly IPdfRenderer _renderer;
     private CancellationTokenSource? _renderCancellation;
     private bool _disposed;
+    private Size _viewport;
+    private Size _pageSize;
 
     internal PdfDocumentViewModel(
         string filePath,
@@ -52,7 +56,16 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ZoomText))]
+    [NotifyPropertyChangedFor(nameof(PageWidth))]
+    [NotifyPropertyChangedFor(nameof(PageHeight))]
     private double _zoom = 1.0;
+
+    [ObservableProperty]
+    private PdfZoomMode _zoomMode = PdfZoomMode.FitWidth;
+
+    public double PageWidth => _pageSize.Width * Zoom;
+
+    public double PageHeight => _pageSize.Height * Zoom;
 
     [ObservableProperty]
     private bool _isLoading;
@@ -87,6 +100,42 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
     [RelayCommand]
     private Task ActualSizeAsync() => ChangeZoomAsync(1.0);
 
+    [RelayCommand]
+    private Task FitWidthAsync() => FitAsync(PdfZoomMode.FitWidth);
+
+    [RelayCommand]
+    private Task FitHeightAsync() => FitAsync(PdfZoomMode.FitHeight);
+
+    private Task FitAsync(PdfZoomMode mode)
+    {
+        ZoomMode = mode;
+        return RenderCurrentPageAsync();
+    }
+
+    internal Task UpdateViewportAsync(Size viewport)
+    {
+        if (_disposed || !double.IsFinite(viewport.Width) || !double.IsFinite(viewport.Height)
+            || viewport.Width <= 0 || viewport.Height <= 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        _viewport = viewport;
+        return ZoomMode != PdfZoomMode.Manual
+            && ((PageImage is null && !IsLoading) || Math.Abs(GetFitZoom() - Zoom) > 0.000000001)
+            ? RenderCurrentPageAsync()
+            : Task.CompletedTask;
+    }
+
+    private double GetFitZoom() => ZoomMode switch
+    {
+        PdfZoomMode.FitWidth when _viewport.Width > 0 && _pageSize.Width > 0
+            => _viewport.Width / _pageSize.Width,
+        PdfZoomMode.FitHeight when _viewport.Height > 0 && _pageSize.Height > 0
+            => _viewport.Height / _pageSize.Height,
+        _ => Zoom,
+    };
+
     internal async Task NavigateAsync(int page)
     {
         var target = Math.Clamp(page, 1, PageCount);
@@ -101,6 +150,7 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
     private async Task ChangeZoomAsync(double zoom)
     {
+        ZoomMode = PdfZoomMode.Manual;
         var target = Math.Clamp(zoom, 0.25, 4.0);
         if (Math.Abs(target - Zoom) < 0.001)
         {
@@ -123,6 +173,10 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         NotifyCommandStates();
         try
         {
+            _pageSize = _renderer.GetPageSize(CurrentPage - 1);
+            Zoom = GetFitZoom();
+            OnPropertyChanged(nameof(PageWidth));
+            OnPropertyChanged(nameof(PageHeight));
             var bitmap = await _renderer.RenderAsync(CurrentPage - 1, Zoom, token);
             if (token.IsCancellationRequested)
             {

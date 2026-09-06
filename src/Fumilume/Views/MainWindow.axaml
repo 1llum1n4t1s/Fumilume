@@ -143,11 +143,6 @@
                                 CommandParameter="{x:Static vm:SidePanelKind.Bookmarks}"
                                 AutomationProperties.Name="ブックマーク" ToolTip.Tip="ブックマーク (Ctrl+F2)" />
                     </StackPanel>
-                    <!-- 新しい文書だけは、追加先であるタブ一覧の近くに置く。 -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0">
-                        <Button Classes="tabclose" Content="&#xE710;" Command="{Binding NewDocumentCommand}"
-                                AutomationProperties.Name="新しい文書" ToolTip.Tip="新しい文書 (Ctrl+N)" />
-                    </StackPanel>
                 </Grid>
 
                 <Panel Grid.Row="1">
@@ -255,6 +250,10 @@
                         <Border Grid.Row="0" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
                             <Grid x:Name="DocumentToolbar" ColumnDefinitions="Auto,*,Auto" Margin="8,4">
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                                    <Button x:Name="NewDocumentToolbarButton" Classes="command" Command="{Binding NewDocumentCommand}"
+                                            AutomationProperties.Name="新しい文書" ToolTip.Tip="新しい文書 (Ctrl+N)">
+                                        <TextBlock Classes="icon" Text="&#xE710;" />
+                                    </Button>
                                     <Button x:Name="OpenToolbarButton" Classes="command" Command="{Binding OpenCommand}"
                                             AutomationProperties.Name="ファイルを開く" ToolTip.Tip="ファイルを開く (Ctrl+O)">
                                         <TextBlock Classes="icon" Text="&#xE8E5;" />
@@ -424,7 +423,7 @@
                                             AutomationProperties.Name="縮小" ToolTip.Tip="縮小">
                                         <TextBlock Classes="icon" Text="&#xE71F;" />
                                     </Button>
-                                    <Button Classes="command" Command="{Binding SelectedPdf.ActualSizeCommand}"
+                                    <Button x:Name="PdfZoomButton" Classes="command" Command="{Binding SelectedPdf.ActualSizeCommand}"
                                             ToolTip.Tip="100% に戻す">
                                         <TextBlock MinWidth="48" HorizontalAlignment="Center"
                                                    Text="{Binding SelectedPdf.ZoomText}" />
@@ -433,15 +432,29 @@
                                             AutomationProperties.Name="拡大" ToolTip.Tip="拡大">
                                         <TextBlock Classes="icon" Text="&#xE8A3;" />
                                     </Button>
+                                    <Button x:Name="PdfFitHeightButton" Classes="command"
+                                            Command="{Binding SelectedPdf.FitHeightCommand}"
+                                            AutomationProperties.Name="高さに合わせる" ToolTip.Tip="高さに合わせる">
+                                        <Path Width="18" Height="18" Stroke="{DynamicResource TextPrimary}" StrokeThickness="1.5"
+                                              Data="M 2,1 L 16,1 M 2,17 L 16,17 M 9,4 L 9,14 M 5,8 L 9,4 L 13,8 M 5,10 L 9,14 L 13,10" />
+                                    </Button>
+                                    <Button x:Name="PdfFitWidthButton" Classes="command"
+                                            Command="{Binding SelectedPdf.FitWidthCommand}"
+                                            AutomationProperties.Name="幅に合わせる" ToolTip.Tip="幅に合わせる">
+                                        <Path Width="18" Height="18" Stroke="{DynamicResource TextPrimary}" StrokeThickness="1.5"
+                                              Data="M 1,2 L 1,16 M 17,2 L 17,16 M 4,9 L 14,9 M 8,5 L 4,9 L 8,13 M 10,5 L 14,9 L 10,13" />
+                                    </Button>
                                 </StackPanel>
                             </Grid>
                         </Border>
-                        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                        <ScrollViewer x:Name="PdfScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                                      ScrollChanged="OnPdfScrollChanged"
                                       VerticalScrollBarVisibility="Auto" Background="{DynamicResource SettingsPageBg}">
-                            <Grid Margin="24">
+                            <Grid x:Name="PdfPageContainer" Margin="24">
                                 <Border HorizontalAlignment="Center" VerticalAlignment="Top"
                                         Background="White" BoxShadow="0 4 18 0 #40000000">
-                                    <Image Source="{Binding SelectedPdf.PageImage}" Stretch="None" />
+                                    <Image x:Name="PdfPageImage" Source="{Binding SelectedPdf.PageImage}" Stretch="Fill"
+                                           Width="{Binding SelectedPdf.PageWidth}" Height="{Binding SelectedPdf.PageHeight}" />
                                 </Border>
                                 <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
                                            IsVisible="{Binding SelectedPdf.IsLoading}"

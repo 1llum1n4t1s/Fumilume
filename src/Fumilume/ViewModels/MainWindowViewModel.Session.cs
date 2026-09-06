@@ -172,6 +172,11 @@ public sealed partial class MainWindowViewModel
     /// </summary>
     internal static async Task ApplyPdfViewStateAsync(PdfDocumentViewModel pdf, SessionTabState state)
     {
+        pdf.ZoomMode = Enum.TryParse<PdfZoomMode>(state.PdfZoomMode, out var mode) && Enum.IsDefined(mode)
+            ? mode
+            : state.PdfZoomMode is null && state.PdfZoom > 0
+                ? PdfZoomMode.Manual
+                : PdfZoomMode.FitWidth;
         if (state.PdfZoom > 0)
         {
             pdf.Zoom = Math.Clamp(state.PdfZoom, 0.25, 4.0);
@@ -266,6 +271,7 @@ public sealed partial class MainWindowViewModel
         Bookmarks = tab.Bookmarks is null ? [] : [.. tab.Bookmarks],
         PdfPage = tab.PdfPage,
         PdfZoom = tab.PdfZoom,
+        PdfZoomMode = tab.PdfZoomMode,
         Text = tab.Text,
     };
 
@@ -292,6 +298,7 @@ public sealed partial class MainWindowViewModel
         FilePath = pdf.FilePath,
         PdfPage = pdf.CurrentPage,
         PdfZoom = pdf.Zoom,
+        PdfZoomMode = pdf.ZoomMode.ToString(),
     };
 
     private static DocumentEncoding ParseEncoding(string value)

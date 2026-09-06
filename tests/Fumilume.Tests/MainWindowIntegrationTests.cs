@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.TextInput;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -33,18 +34,25 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     });
 
     [Fact]
-    public void OpenAndSettingsActionsAreInTheDocumentToolbar() => fixture.Run(() =>
+    public void NewOpenAndSettingsActionsAreInTheDocumentToolbar() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
 
         var toolbar = scope.Window.FindControl<Grid>("DocumentToolbar");
         var sidePanel = scope.Window.FindControl<Grid>("SidePanelRoot");
         var open = scope.Window.FindControl<Button>("OpenToolbarButton");
+        var create = scope.Window.FindControl<Button>("NewDocumentToolbarButton");
         var settings = scope.Window.FindControl<Button>("SettingsToolbarButton");
 
         Assert.NotNull(toolbar);
         Assert.NotNull(sidePanel);
         Assert.NotNull(open);
+        Assert.NotNull(create);
+        Assert.Contains(create, toolbar.GetVisualDescendants());
+        Assert.DoesNotContain(create, sidePanel.GetVisualDescendants());
+        Assert.Same(scope.ViewModel.NewDocumentCommand, create.Command);
+        Assert.Same(create.Parent, open.Parent);
+        Assert.True(create.Bounds.X < open.Bounds.X);
         Assert.NotNull(settings);
         Assert.Contains(open, toolbar.GetVisualDescendants());
         Assert.Contains(settings, toolbar.GetVisualDescendants());
@@ -52,6 +60,78 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.DoesNotContain(settings, sidePanel.GetVisualDescendants());
         Assert.Same(scope.ViewModel.OpenCommand, open.Command);
         Assert.Same(scope.ViewModel.OpenSettingsCommand, settings.Command);
+    });
+
+    [Fact]
+    public void PdfFitsTheViewportAndExposesFitButtonsBesideZoom() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope(width: 1100, height: 750);
+        using var pdf = new PdfDocumentViewModel(@"C:\tmp\guide.pdf",
+            new PdfDocumentViewModelTests.StubPdfRenderer(2), _ => Task.CompletedTask);
+        scope.ViewModel.Tabs.Add(pdf);
+        scope.ViewModel.SelectedTab = pdf;
+        Dispatcher.UIThread.RunJobs();
+
+        var viewer = scope.Window.FindControl<ScrollViewer>("PdfScrollViewer")!;
+        var image = scope.Window.FindControl<Image>("PdfPageImage")!;
+        var zoom = scope.Window.FindControl<Button>("PdfZoomButton")!;
+        var height = scope.Window.FindControl<Button>("PdfFitHeightButton")!;
+        var width = scope.Window.FindControl<Button>("PdfFitWidthButton")!;
+        Assert.True(viewer.IsEffectivelyVisible);
+        Assert.Same(pdf.FitHeightCommand, height.Command);
+        Assert.Same(pdf.FitWidthCommand, width.Command);
+        Assert.Same(zoom.Parent, height.Parent);
+        Assert.Same(zoom.Parent, width.Parent);
+        Assert.True(height.Bounds.X > zoom.Bounds.X);
+        Assert.True(width.Bounds.X > height.Bounds.X);
+        Assert.Equal(PdfZoomMode.FitWidth, pdf.ZoomMode);
+        Assert.InRange(Math.Abs(image.Bounds.Width + 48 - viewer.Viewport.Width), 0, 1);
+        Assert.InRange(viewer.Extent.Width - viewer.Viewport.Width, 0, 1);
+
+        var originalWidth = image.Bounds.Width;
+        scope.Window.Width = 950;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(image.Bounds.Width < originalWidth);
+        Assert.InRange(Math.Abs(image.Bounds.Width + 48 - viewer.Viewport.Width), 0, 1);
+
+        height.Command!.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(PdfZoomMode.FitHeight, pdf.ZoomMode);
+        Assert.InRange(Math.Abs(image.Bounds.Height + 48 - viewer.Viewport.Height), 0, 1);
+        scope.Window.Height = 650;
+        Dispatcher.UIThread.RunJobs();
+        Assert.InRange(Math.Abs(image.Bounds.Height + 48 - viewer.Viewport.Height), 0, 1);
+
+        var state = scope.ViewModel.CaptureSession().Tabs.Single(tab => tab.Kind == SessionTabKinds.Pdf);
+        Assert.Equal("FitHeight", state.PdfZoomMode);
+        Assert.True(SessionStateService.Save(new SessionState { Tabs = [state] }));
+        Assert.Equal("FitHeight", Assert.Single(SessionStateService.Load().Tabs).PdfZoomMode);
+        scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Contains(scope.ViewModel.CommandPaletteResults, entry => entry.Title == "PDF を幅に合わせる");
+    });
+
+    [Fact]
+    public void SwitchingPdfTabsRecalculatesFitWithoutAWindowResize() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        using var first = new PdfDocumentViewModel(@"C:\tmp\first.pdf",
+            new PdfDocumentViewModelTests.StubPdfRenderer(2), _ => Task.CompletedTask);
+        using var second = new PdfDocumentViewModel(@"C:\tmp\second.pdf",
+            new PdfDocumentViewModelTests.StubPdfRenderer(2), _ => Task.CompletedTask);
+        second.CurrentPage = 2;
+        scope.ViewModel.Tabs.Add(first);
+        scope.ViewModel.Tabs.Add(second);
+        scope.ViewModel.SelectedTab = first;
+        Dispatcher.UIThread.RunJobs();
+        scope.ViewModel.SelectedTab = second;
+        Dispatcher.UIThread.RunJobs();
+
+        var viewer = scope.Window.FindControl<ScrollViewer>("PdfScrollViewer")!;
+        var image = scope.Window.FindControl<Image>("PdfPageImage")!;
+        Assert.Same(second.PageImage, image.Source);
+        Assert.InRange(Math.Abs(image.Bounds.Width + 48 - viewer.Viewport.Width), 0, 1);
+        Assert.Equal(0.75, second.PageHeight / second.PageWidth, precision: 10);
     });
 
     [Fact]
@@ -746,6 +826,91 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.Equal(0, scope.ViewModel.RecordedStepCount);
         Assert.False(scope.ViewModel.IsRecordingMacro);
     });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ImePreeditIsDrawnWithoutEditingTheDocument(bool dark) => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        scope.Window.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        editor.Focus();
+        Dispatcher.UIThread.RunJobs();
+        var client = RequestImeClient(editor);
+        Assert.True(client.SupportsPreedit);
+        var initialCaret = client.CursorRectangle;
+        var version = editor.Document.Version;
+        scope.ViewModel.ToggleMacroRecordingCommand.Execute(null);
+
+        client.SetPreeditText("にほんご", 2);
+        Assert.NotEmpty(DrawPreedit(editor).Children);
+        Assert.True(client.CursorRectangle.X > initialCaret.X);
+        Assert.Equal("", editor.Text);
+        Assert.Same(version, editor.Document.Version);
+        Assert.False(editor.Document.UndoStack.CanUndo);
+        Assert.Equal(0, scope.ViewModel.RecordedStepCount);
+
+        client.SetPreeditText("日本語", 1);
+        Assert.NotEmpty(DrawPreedit(editor).Children);
+        client.SetPreeditText(null, null);
+        Assert.Empty(DrawPreedit(editor).Children);
+        Assert.Equal(initialCaret, client.CursorRectangle);
+        Assert.Equal("", editor.Text);
+
+        client.SetPreeditText("日本語", 3);
+        TypeInto(editor, "日本語");
+        Assert.Empty(DrawPreedit(editor).Children);
+        Assert.Equal("日本語", editor.Text);
+        Assert.Equal(1, scope.ViewModel.RecordedStepCount);
+        editor.Undo();
+        Assert.Equal("", editor.Text);
+    });
+
+    [Fact]
+    public void ImePreeditClearsOnDocumentAndFocusChanges() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        editor.Focus();
+        Dispatcher.UIThread.RunJobs();
+        var client = RequestImeClient(editor);
+        client.SetPreeditText("未確定", int.MaxValue);
+        Assert.NotEmpty(DrawPreedit(editor).Children);
+        scope.ViewModel.NewDocumentCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(DrawPreedit(editor).Children);
+        Assert.All(scope.ViewModel.Documents, document => Assert.Equal("", document.Text));
+
+        Assert.True(editor.TextArea.Focus());
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(editor.TextArea.IsFocused);
+        client = RequestImeClient(editor);
+        client.SetPreeditText("入力中", -1);
+        Assert.NotEmpty(DrawPreedit(editor).Children);
+        scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(DrawPreedit(editor).Children);
+    });
+
+    private static TextInputMethodClient RequestImeClient(TextEditor editor)
+    {
+        var args = new TextInputMethodClientRequestedEventArgs
+        {
+            RoutedEvent = InputElement.TextInputMethodClientRequestedEvent,
+        };
+        editor.TextArea.RaiseEvent(args);
+        return Assert.IsAssignableFrom<TextInputMethodClient>(args.Client);
+    }
+
+    private static DrawingGroup DrawPreedit(TextEditor editor)
+    {
+        var layer = editor.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "EditorPreeditLayer");
+        var drawing = new DrawingGroup();
+        using (var context = drawing.Open())
+            layer.Render(context);
+        return drawing;
+    }
 
     private static void TypeInto(TextEditor editor, string text)
     {

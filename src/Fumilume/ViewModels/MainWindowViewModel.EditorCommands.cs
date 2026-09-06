@@ -124,6 +124,11 @@ public sealed partial class MainWindowViewModel
         }
 
         yield return Entry(ViewCategory, "設定を開く", "Ctrl+,", () => EnsureSettingsTab(select: true));
+        if (SelectedPdf is { } pdf)
+        {
+            yield return Entry(ViewCategory, "PDF を高さに合わせる", null, () => pdf.FitHeightCommand.ExecuteAsync(null));
+            yield return Entry(ViewCategory, "PDF を幅に合わせる", null, () => pdf.FitWidthCommand.ExecuteAsync(null));
+        }
         yield return Entry(ViewCategory, "更新を確認", null, () => _dialogs.CheckForUpdatesAsync(manually: true));
 
         yield return Entry(MacroCategory, MacroRecordingTitle, "Shift+F1", ToggleMacroRecording);

@@ -9,6 +9,8 @@ public interface IPdfRenderer : IDisposable
 {
     int PageCount { get; }
 
+    Avalonia.Size GetPageSize(int pageIndex);
+
     Task<Bitmap> RenderAsync(int pageIndex, double zoom, CancellationToken cancellationToken = default);
 }
 
@@ -21,6 +23,14 @@ public sealed class WindowsPdfRenderer : IPdfRenderer
     private WindowsPdfRenderer(PdfDocument document) => _document = document;
 
     public int PageCount => checked((int)_document.PageCount);
+
+    public Avalonia.Size GetPageSize(int pageIndex)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(pageIndex);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(pageIndex, PageCount);
+        using var page = _document.GetPage(checked((uint)pageIndex));
+        return new Avalonia.Size(page.Size.Width, page.Size.Height);
+    }
 
     public static async Task<WindowsPdfRenderer> OpenAsync(string path)
     {
@@ -42,7 +52,8 @@ public sealed class WindowsPdfRenderer : IPdfRenderer
 
         using var page = _document.GetPage(checked((uint)pageIndex));
         using var randomAccessStream = new InMemoryRandomAccessStream();
-        var safeZoom = Math.Clamp(zoom, 0.25, 4.0);
+        // フィット表示では 25% 未満も必要になる。画像の確保量は従来の上限で抑える。
+        var safeZoom = Math.Clamp(zoom, 0.001, 4.0);
         var destinationWidth = (uint)Math.Clamp(
             Math.Round(page.Size.Width * safeZoom),
             1,

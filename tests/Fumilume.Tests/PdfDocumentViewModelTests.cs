@@ -23,6 +23,13 @@ public sealed class PdfDocumentViewModelTests(HeadlessAppFixture fixture)
             Assert.Equal(1, renderer.PageCount);
             Assert.True(bitmap.PixelSize.Width > 0);
             Assert.True(bitmap.PixelSize.Height > 0);
+            var size = renderer.GetPageSize(0);
+            Assert.True(size.Width > 0 && size.Height > 0);
+            Assert.Throws<ArgumentOutOfRangeException>(() => renderer.GetPageSize(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => renderer.GetPageSize(1));
+            using var small = await renderer.RenderAsync(0, 0.1, TestContext.Current.CancellationToken);
+            // Headless の Bitmap は固定サイズの代替画像なので、描画成功を確認する。
+            Assert.True(small.PixelSize.Width > 0);
         }
         finally
         {
@@ -80,9 +87,94 @@ public sealed class PdfDocumentViewModelTests(HeadlessAppFixture fixture)
         Assert.Equal(4.0, document.Zoom);
     }
 
-    private sealed class StubPdfRenderer(int pageCount) : IPdfRenderer
+    [Fact]
+    public async Task WidthFitFollowsViewportAndDifferentPageSizes()
+    {
+        fixture.Run(() => { });
+        using var document = new PdfDocumentViewModel(@"C:\tmp\guide.pdf", new StubPdfRenderer(2), _ => Task.CompletedTask);
+
+        await document.UpdateViewportAsync(new(300, 500));
+        Assert.Equal(PdfZoomMode.FitWidth, document.ZoomMode);
+        Assert.Equal(0.5, document.Zoom);
+        Assert.Equal(300, document.PageWidth);
+        Assert.Equal(400, document.PageHeight);
+
+        await document.NavigateAsync(2);
+        Assert.Equal(300, document.PageWidth);
+        Assert.Equal(225, document.PageHeight);
+        await document.UpdateViewportAsync(new(480, 500));
+        Assert.Equal(480, document.PageWidth);
+        Assert.Equal(360, document.PageHeight);
+    }
+
+    [Fact]
+    public async Task HeightFitAndManualZoomSwitchWithoutLosingTheirMeaning()
+    {
+        fixture.Run(() => { });
+        using var document = new PdfDocumentViewModel(@"C:\tmp\guide.pdf", new StubPdfRenderer(2), _ => Task.CompletedTask);
+        await document.UpdateViewportAsync(new(600, 400));
+        await document.FitHeightCommand.ExecuteAsync(null);
+        Assert.Equal(PdfZoomMode.FitHeight, document.ZoomMode);
+        Assert.Equal(400, document.PageHeight);
+        await document.NavigateAsync(2);
+        Assert.Equal(400, document.PageHeight);
+
+        await document.ActualSizeCommand.ExecuteAsync(null);
+        await document.UpdateViewportAsync(new(300, 200));
+        Assert.Equal(PdfZoomMode.Manual, document.ZoomMode);
+        Assert.Equal(1, document.Zoom);
+        await document.FitWidthCommand.ExecuteAsync(null);
+        Assert.Equal(300, document.PageWidth);
+        await document.ZoomInCommand.ExecuteAsync(null);
+        Assert.Equal(PdfZoomMode.Manual, document.ZoomMode);
+        Assert.Equal(0.46875, document.Zoom);
+    }
+
+    [Fact]
+    public async Task FitHandlesSmallViewportsAndIgnoresInvalidOrUnchangedSizes()
+    {
+        fixture.Run(() => { });
+        using var renderer = new StubPdfRenderer(1);
+        using var document = new PdfDocumentViewModel(@"C:\tmp\guide.pdf", renderer, _ => Task.CompletedTask);
+        await document.UpdateViewportAsync(new(60, 80));
+        Assert.Equal(0.1, document.Zoom);
+        var count = renderer.Renders.Count;
+        await document.UpdateViewportAsync(new(60, 80));
+        await document.UpdateViewportAsync(new(0, 0));
+        await document.UpdateViewportAsync(new(double.NaN, 80));
+        await document.UpdateViewportAsync(new(60, double.PositiveInfinity));
+        Assert.Equal(count, renderer.Renders.Count);
+        await document.UpdateViewportAsync(new(3000, 4000));
+        Assert.Equal(5, document.Zoom);
+        Assert.Equal(3000, document.PageWidth);
+
+        // 同じ倍率への切り替えでもフィットを解除する。
+        await document.UpdateViewportAsync(new(600, 800));
+        await document.ActualSizeCommand.ExecuteAsync(null);
+        await document.UpdateViewportAsync(new(300, 400));
+        Assert.Equal(1, document.Zoom);
+    }
+
+    [Theory]
+    [InlineData("FitWidth", 300, 225)]
+    [InlineData("FitHeight", 400, 300)]
+    [InlineData("unknown", 300, 225)]
+    public async Task RestoredFitUsesTheCurrentViewport(string mode, double width, double height)
+    {
+        fixture.Run(() => { });
+        using var document = new PdfDocumentViewModel(@"C:\tmp\guide.pdf", new StubPdfRenderer(2), _ => Task.CompletedTask);
+        await MainWindowViewModel.ApplyPdfViewStateAsync(document,
+            new SessionTabState { PdfPage = 2, PdfZoom = 2, PdfZoomMode = mode });
+        await document.UpdateViewportAsync(new(300, 300));
+        Assert.Equal(width, document.PageWidth);
+        Assert.Equal(height, document.PageHeight);
+    }
+
+    internal sealed class StubPdfRenderer(int pageCount) : IPdfRenderer
     {
         public int PageCount { get; } = pageCount;
+
+        public Avalonia.Size GetPageSize(int pageIndex) => pageIndex == 0 ? new(600, 800) : new(800, 600);
 
         /// <summary>描画要求の記録。復元が実際に描き直したかを見るために使う。</summary>
         public List<(int PageIndex, double Zoom)> Renders { get; } = [];

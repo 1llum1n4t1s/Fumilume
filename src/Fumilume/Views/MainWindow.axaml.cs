@@ -64,6 +64,7 @@ public sealed partial class MainWindow : Window
         _editor = this.FindControl<TextEditor>("Editor")
             ?? throw new InvalidOperationException("エディタを初期化できませんでした。");
         _searchPanel = SearchPanel.Install(_editor);
+        _ = new EditorInputMethod(_editor);
         _editor.TextArea.TextView.BackgroundRenderers.Add(new BookmarkRenderer(() => _boundDocument));
         ApplyUiFontOptions();
         ApplyEditorOptions();
@@ -380,6 +381,27 @@ public sealed partial class MainWindow : Window
         {
             _editor.Focus();
         }
+        if (_viewModel.IsPdfSelected)
+        {
+            // タブ切り替えだけでは Viewport が変わらない場合もあるため、選択時にも渡す。
+            Dispatcher.UIThread.Post(UpdatePdfViewport, DispatcherPriority.Loaded);
+        }
+    }
+
+    private void OnPdfScrollChanged(object? sender, ScrollChangedEventArgs args) => UpdatePdfViewport();
+
+    private void UpdatePdfViewport()
+    {
+        if (_viewModel.SelectedPdf is not { } pdf
+            || this.FindControl<ScrollViewer>("PdfScrollViewer") is not { } viewer
+            || this.FindControl<Grid>("PdfPageContainer") is not { } container)
+        {
+            return;
+        }
+
+        _ = pdf.UpdateViewportAsync(new Size(
+            viewer.Viewport.Width - container.Margin.Left - container.Margin.Right,
+            viewer.Viewport.Height - container.Margin.Top - container.Margin.Bottom));
     }
 
     private void OnEditorCaretPositionChanged(object? sender, EventArgs args)

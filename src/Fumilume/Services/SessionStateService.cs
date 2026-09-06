@@ -63,6 +63,9 @@ public sealed class SessionTabState
     /// <summary>PDF タブの拡大率。0 以下なら既定へ落とす。</summary>
     public double PdfZoom { get; set; }
 
+    /// <summary>PDF のフィット方式。null は旧形式のセッション。</summary>
+    public string? PdfZoomMode { get; set; }
+
     /// <summary>
     /// 未保存の本文。JSON へは書かず、<see cref="SessionStateService"/> が
     /// <see cref="BufferFile"/> の指す別ファイルへ出し入れする。
