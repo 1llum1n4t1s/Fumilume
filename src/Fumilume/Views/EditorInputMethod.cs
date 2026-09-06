@@ -124,7 +124,7 @@ internal sealed class EditorInputMethod : TextInputMethodClient
                 return;
             var origin = owner.GetOrigin();
             using var layout = owner.CreateLayout(origin);
-            var background = owner._editor.FindResource("EditorBg") as IBrush ?? Brushes.White;
+            var background = owner._editor.FindResource(owner._editor.ActualThemeVariant, "EditorBg") as IBrush ?? Brushes.Transparent;
             context.FillRectangle(background, new Rect(origin, new Size(layout.WidthIncludingTrailingWhitespace, layout.Height)));
             layout.Draw(context, origin);
             var caret = layout.HitTestTextPosition(owner._cursor);

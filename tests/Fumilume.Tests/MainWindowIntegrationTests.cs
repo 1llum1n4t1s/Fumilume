@@ -845,6 +845,18 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 
         client.SetPreeditText("にほんご", 2);
         Assert.NotEmpty(DrawPreedit(editor).Children);
+        var preeditBackground = Assert.IsType<GeometryDrawing>(DrawPreedit(editor).Children[0]);
+        Assert.Equal(Color.Parse(dark ? "#242528" : "#FBFBFC"),
+            Assert.IsAssignableFrom<ISolidColorBrush>(preeditBackground.Brush).Color);
+        var foreground = Assert.IsAssignableFrom<ISolidColorBrush>(editor.Foreground).Color;
+        Assert.True(ContrastRatio(foreground, Assert.IsAssignableFrom<ISolidColorBrush>(preeditBackground.Brush).Color) >= 4.5);
+
+        // 変換中にテーマを切り替えても、未確定文字を再送せず背景色が追従する。
+        scope.Window.RequestedThemeVariant = dark ? ThemeVariant.Light : ThemeVariant.Dark;
+        Dispatcher.UIThread.RunJobs();
+        var switchedBackground = Assert.IsType<GeometryDrawing>(DrawPreedit(editor).Children[0]);
+        Assert.Equal(Color.Parse(dark ? "#FBFBFC" : "#242528"),
+            Assert.IsAssignableFrom<ISolidColorBrush>(switchedBackground.Brush).Color);
         Assert.True(client.CursorRectangle.X > initialCaret.X);
         Assert.Equal("", editor.Text);
         Assert.Same(version, editor.Document.Version);
