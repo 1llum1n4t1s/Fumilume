@@ -4,7 +4,7 @@ Fumilume（フミルメ）は、複数の文書を Chrome のような垂直タ�
 
 [公式サイト](https://fumilume.kagayoi.com/) ・ [Windows x64 版をダウンロード](https://fumilume.kagayoi.com/Fumilume-win-Setup.exe) ・ [Windows ARM64 版をダウンロード](https://fumilume.kagayoi.com/Fumilume-win-arm64-Setup.exe)
 
-![Fumilume の画面](web/hero-app.png)
+![Fumilume の画面](https://fumilume.kagayoi.com/hero-app.png)
 
 ## 主な機能
 

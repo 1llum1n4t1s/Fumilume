@@ -7,7 +7,7 @@
 - `src/Fumilume/`: Windows 向け Avalonia デスクトップアプリ
 - `tests/Fumilume.Tests/`: xUnit v3 と Avalonia.Headless による単体・統合テスト
 - `scripts/release-local.ps1`: x64 / ARM64 の Native AOT、署名、Velopack パッケージ化、R2 配布、公開検証
-- `web/`: `fumilume.kagayoi.com` のランディングページと Cloudflare Worker
+- `../vps-web/lp/fumilume/`: `fumilume.kagayoi.com` のVPS配信のランディングページ
 - `Directory.Build.props`: 対象フレームワーク、版番号、対応プラットフォーム、警告・lock file 方針の正本
 
 ## 実装規約
@@ -67,3 +67,9 @@ pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 - アーキテクチャ、不変条件、主要データフロー: [DESIGN.md](DESIGN.md)
 - 利用者向け機能、インストール、設定、トラブルシュート: [README.md](README.md)
 - 利用者向け変更履歴: [CHANGELOG.md](CHANGELOG.md)
+
+## 製品ページの配信先
+
+製品ページの配信HTMLは `../vps-web/lp/fumilume/`（編集元は `../vps-web/tools/lp/templates/`）、公開実体はVPSの `/srv/www/lp/fumilume/`。
+Cloudflare側の中継設定は `../vps-web/deploy/lp-gateways/fumilume/` に置く。
+公開URLと既存のR2・ライセンス通信を維持し、配信は `vps-web/deploy/deploy-lp.ps1` へ統一する。

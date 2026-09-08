@@ -17,7 +17,7 @@ Fumilume は、複数のテキスト文書を垂直タブで扱う Windows 専�
 | PDFモデル | `PdfDocumentViewModel` | PDFの読込、ページ範囲、拡大率、非同期レンダリング、画像ライフタイム |
 | 設定モデル | `AppOptionsViewModel`, `SettingsTabViewModel` | UIへ公開する設定、値の即時反映、永続化、関連付け操作 |
 | サービス | `Services/` | 文書I/O、設定、ログ、更新、ダイアログ、テーマ、関連付け、Markdown解析、PDFレンダリング、フォルダ横断検索、構文ハイライト、書式整形、アウトライン解析、キーボードマクロ |
-| 配布 | `scripts/release-local.ps1`, `web/` | 署名付きVelopack成果物、R2配信、更新マニフェスト、ランディングページ |
+| 配布 | `scripts/release-local.ps1`, `../vps-web/lp/fumilume/` | 署名付きVelopack成果物、R2配信、更新マニフェスト、ランディングページ |
 
 ViewModel は状態と操作を持ち、View は表示とAvalonia固有の接続を担当します。ファイルシステム、Windows API、更新UIなどの副作用はサービスへ分離し、ViewModelテストから代替実装を渡せる境界を保ちます。
 
@@ -166,3 +166,9 @@ IME の未確定文字は `EditorInputMethod` が AvaloniaEdit の入力クラ�
 - **共有更新・ログライブラリの薄い統合**: 更新UIとログ出力を共通ライブラリへ集約し、Fumilume固有コードは起動、設定、エラー表示の接着に限定する。
 
 実装変更時の必須コマンドと作業規約は [AGENTS.md](AGENTS.md)、利用者から見える現在の機能は [README.md](README.md) を正本とします。
+
+## 製品ページの配信先
+
+製品ページの配信HTMLは `../vps-web/lp/fumilume/`（編集元は `../vps-web/tools/lp/templates/`）、公開実体はVPSの `/srv/www/lp/fumilume/`。
+Cloudflare側の中継設定は `../vps-web/deploy/lp-gateways/fumilume/` に置く。
+公開URLと既存のR2・ライセンス通信を維持し、配信は `vps-web/deploy/deploy-lp.ps1` へ統一する。
