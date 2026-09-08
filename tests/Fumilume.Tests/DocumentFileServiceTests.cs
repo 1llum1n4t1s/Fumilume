@@ -7,6 +7,54 @@ namespace Fumilume.Tests;
 public sealed class DocumentFileServiceTests
 {
     [Theory]
+    [InlineData(DocumentEncoding.Utf8, "")]
+    [InlineData(DocumentEncoding.Utf8, "ログ一行目\r\n")]
+    [InlineData(DocumentEncoding.Utf8Bom, "ログ一行目\r\n")]
+    [InlineData(DocumentEncoding.Utf16LittleEndian, "ログ一行目\r\n")]
+    [InlineData(DocumentEncoding.Utf16BigEndian, "ログ一行目\r\n")]
+    public async Task ReadWhileWriterIsOpenPreservesContentAndAllowsFurtherWrites(
+        DocumentEncoding encoding, string text)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"Fumilume-{Guid.NewGuid():N}.log");
+        try
+        {
+            var service = new DocumentFileService();
+            await service.WriteAsync(path, new TextDocumentContent(text, encoding, "\r\n"),
+                cancellationToken: TestContext.Current.CancellationToken);
+            await using var writer = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.Read);
+            writer.Seek(0, SeekOrigin.End);
+
+            var loaded = await service.ReadAsync(path, TestContext.Current.CancellationToken);
+
+            Assert.Equal(text, loaded.Text);
+            Assert.Equal(encoding, loaded.Encoding);
+            Assert.Equal(text.Length == 0 ? Environment.NewLine : "\r\n", loaded.NewLine);
+            await writer.WriteAsync(new byte[] { 0x0A }, TestContext.Current.CancellationToken);
+            await writer.FlushAsync(TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ReadRejectsExclusivelyLockedFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"Fumilume-{Guid.NewGuid():N}.log");
+        try
+        {
+            await using var writer = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            await Assert.ThrowsAsync<IOException>(() =>
+                new DocumentFileService().ReadAsync(path, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
     [InlineData(DocumentEncoding.Utf8, false)]
     [InlineData(DocumentEncoding.Utf8Bom, true)]
     [InlineData(DocumentEncoding.Utf16LittleEndian, true)]

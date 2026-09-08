@@ -11,7 +11,7 @@ public sealed class DocumentFileService : IDocumentFileService
         string path,
         CancellationToken cancellationToken = default)
     {
-        var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+        var bytes = await ReadSharedBytesAsync(path, cancellationToken);
         var (encoding, preambleLength, decoder) = DetectEncoding(bytes);
 
         string text;
@@ -27,6 +27,32 @@ public sealed class DocumentFileService : IDocumentFileService
         }
 
         return new TextDocumentContent(text, encoding, DetectNewLine(text));
+    }
+
+    private static async Task<byte[]> ReadSharedBytesAsync(string path, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // 書き込み中のログを読み、ログローテーションによる削除・置換も妨げない。
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete, bufferSize: 4096,
+            options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var length = stream.Length;
+        if (length > Array.MaxLength)
+        {
+            throw new IOException("ファイルが大きすぎるため読み込めませんでした。");
+        }
+
+        // 読み込み開始時の長さまでに限定し、追記が続いても読み終えられるようにする。
+        var bytes = new byte[(int)length];
+        var count = await stream.ReadAtLeastAsync(bytes, bytes.Length,
+            throwOnEndOfStream: false, cancellationToken);
+        if (count < bytes.Length)
+        {
+            // 読み込み中に切り詰められた場合は、実際に読めた部分だけをデコードする。
+            Array.Resize(ref bytes, count);
+        }
+
+        return bytes;
     }
 
     public async Task WriteAsync(
