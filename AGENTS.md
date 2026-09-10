@@ -37,7 +37,7 @@
 
 ## 必須検証
 
-通常のコード変更では、リポジトリルートから次を順番に実行します。
+`global.json` が指定する .NET SDK を用意します。SDK は `rollForward: disable` で固定されているため、指定版で検証します。通常のコード変更では、リポジトリルートから次を順番に実行します。
 
 ```powershell
 dotnet restore Fumilume.slnx --locked-mode
@@ -45,6 +45,7 @@ dotnet test Fumilume.slnx -c Release --no-restore
 ```
 
 - UI、binding、テーマ、タブ状態を変更した場合は `MainWindowIntegrationTests` を含む全テストを実行する。
+- ファイルのドロップ経路を変更するときは、[DESIGN.md の入力境界](DESIGN.md#ファイルのドロップ)を維持し、`MainWindowIntegrationTests` で未知の拡張子・拡張子なし・重複ドロップ・フォルダ除外・文字ドラッグ設定の両状態を確認する。
 - ファイルI/O、設定永続化、文字変換、Markdown、PDFを変更した場合は対応するサービステストに正常系と境界条件を追加する。
 - NuGet依存関係を変更した場合は、アプリとテストの `packages.lock.json` を同時に更新し、locked restore を通す。
 - Native AOT、RID依存API、配布物へ影響する変更では、リリース前に両アーキテクチャを検証する。直接発行する場合は `win-x64` に `PlatformTarget=x64`、`win-arm64` に `PlatformTarget=ARM64` を対応させる。
@@ -59,6 +60,7 @@ pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 ```
 
 - 署名付きローカル成果物までの確認には `-SkipUpload` を使う。完全なリリースは引数なしで1回だけ実行し、x64 / ARM64 の発行・署名・R2アップロード・キャッシュパージ・公開ハッシュ検証を同じ処理で完走させる。
+- リリース出力の清掃は `local-release/` 内の `artifacts`、`remote-verification`、`publish-win-x64`、`publish-win-arm64` を対象とし、`build-*` 内の `bin` / `obj` とその親ディレクトリを保持する。
 - リリーススクリプトが読む証明書・Cloudflare認証情報はリポジトリ外の正本を使う。秘密値をコード、ログ、fixture、Git差分へ出力しない。
 - GitHub Actions のリリースCIは存在しないため、ローカル検証と `scripts/release-local.ps1` の成功結果を出荷判定にする。
 
@@ -70,6 +72,4 @@ pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 
 ## 製品ページの配信先
 
-製品ページの配信HTMLは `../vps-web/lp/fumilume/`（編集元は `../vps-web/tools/lp/templates/`）、公開実体はVPSの `/srv/www/lp/fumilume/`。
-Cloudflare側の中継設定は `../vps-web/deploy/lp-gateways/fumilume/` に置く。
-公開URLと既存のR2・ライセンス通信を維持し、配信は `vps-web/deploy/deploy-lp.ps1` へ統一する。
+[DESIGN.md の配信先](DESIGN.md#製品ページの配信先)を参照し、公開URLと既存のR2・ライセンス通信を維持する。製品ページの配信には `../vps-web/deploy/deploy-lp.ps1` を使う。
