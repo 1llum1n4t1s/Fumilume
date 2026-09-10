@@ -35,7 +35,7 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
         {
             Title = "ファイルを開く",
             AllowMultiple = true,
-            FileTypeFilter = [SupportedFileType, FilePickerFileTypes.All],
+            FileTypeFilter = [FilePickerFileTypes.All, SupportedFileType],
         });
 
         return files

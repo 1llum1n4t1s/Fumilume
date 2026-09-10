@@ -6,11 +6,13 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
+using AvaloniaEdit.Editing;
 using AvaloniaEdit.Rendering;
 using AvaloniaEdit.Search;
 using Fumilume.Services;
@@ -20,6 +22,17 @@ namespace Fumilume.Views;
 
 public sealed partial class MainWindow : Window
 {
+    static MainWindow()
+    {
+        // DragDrop は Bubble のみ。クラスハンドラーで AvaloniaEdit の文字ドロップより先に受ける。
+        DragDrop.DragEnterEvent.AddClassHandler<TextArea>((area, args) =>
+            area.FindAncestorOfType<MainWindow>()?.OnFileDragOver(area, args));
+        DragDrop.DragOverEvent.AddClassHandler<TextArea>((area, args) =>
+            area.FindAncestorOfType<MainWindow>()?.OnFileDragOver(area, args));
+        DragDrop.DropEvent.AddClassHandler<TextArea>((area, args) =>
+            area.FindAncestorOfType<MainWindow>()?.OnFileDrop(area, args));
+    }
+
     private readonly MainWindowViewModel _viewModel;
     private readonly AppOptionsViewModel _options;
     private readonly TextEditor _editor;
@@ -86,6 +99,10 @@ public sealed partial class MainWindow : Window
         _editor.TextArea.AddHandler(KeyDownEvent, OnEditorKeyDownForMacro, RoutingStrategies.Tunnel);
         _editor.TextArea.TextEntered += OnEditorTextEnteredForMacro;
         AddHandler(KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragEnterEvent, OnFileDragOver);
+        AddHandler(DragDrop.DragOverEvent, OnFileDragOver);
+        AddHandler(DragDrop.DropEvent, OnFileDrop);
         // システムのライト・ダーク切り替えにも強調表示の配色を追従させる。
         ActualThemeVariantChanged += (_, _) => ApplySyntaxHighlighting();
         BindSelectedDocument();
@@ -95,6 +112,46 @@ public sealed partial class MainWindow : Window
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    private static string[] GetDroppedFilePaths(DragEventArgs args)
+        => args.DataTransfer.TryGetFiles()?
+            .OfType<IStorageFile>()
+            .Select(file => file.TryGetLocalPath())
+            .OfType<string>()
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray() ?? [];
+
+    private void OnFileDragOver(object? sender, DragEventArgs args)
+    {
+        if (!args.DataTransfer.Contains(DataFormat.File))
+        {
+            return;
+        }
+
+        args.DragEffects = GetDroppedFilePaths(args).Length > 0
+            ? args.DragEffects & DragDropEffects.Copy
+            : DragDropEffects.None;
+        args.Handled = true;
+    }
+
+    private void OnFileDrop(object? sender, DragEventArgs args)
+    {
+        if (!args.DataTransfer.Contains(DataFormat.File))
+        {
+            return;
+        }
+
+        // エディタへの文字挿入より先に受け取り、初回復元と既存の直列オープンを経由する。
+        var paths = GetDroppedFilePaths(args);
+        args.Handled = true;
+        args.DragEffects = paths.Length > 0
+            ? args.DragEffects & DragDropEffects.Copy
+            : DragDropEffects.None;
+        if (paths.Length > 0 && args.DragEffects != DragDropEffects.None)
+        {
+            OpenForwardedArguments(paths);
+        }
+    }
 
     private void OnOpened(object? sender, EventArgs args)
     {
@@ -172,6 +229,8 @@ public sealed partial class MainWindow : Window
         _editor.Options.EnableRectangularSelection = _options.EnableRectangularSelection;
         _editor.Options.EnableVirtualSpace = _options.EnableVirtualSpace;
         _editor.Options.EnableTextDragDrop = _options.EnableTextDragDrop;
+        // 文字のドラッグ設定を切っても、ファイルのドロップは有効に保つ。
+        DragDrop.SetAllowDrop(_editor.TextArea, true);
         _editor.Options.CutCopyWholeLine = _options.CutCopyWholeLine;
         _editor.Options.AllowScrollBelowDocument = _options.AllowScrollBelowDocument;
         _editor.Options.AllowToggleOverstrikeMode = _options.AllowToggleOverstrikeMode;

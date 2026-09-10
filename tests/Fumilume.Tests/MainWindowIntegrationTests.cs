@@ -22,6 +22,90 @@ namespace Fumilume.Tests;
 [Collection(HeadlessAppCollection.Name)]
 public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FileDropOpensUnknownAndExtensionlessFilesWithoutInsertingText(bool enableTextDragDrop) => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        scope.ViewModel.Options.EnableTextDragDrop = enableTextDragDrop;
+        Assert.True(DragDrop.GetAllowDrop(editor.TextArea));
+        var original = scope.ViewModel.SelectedDocument!;
+        using var data = new DataTransfer();
+        foreach (var name in new[] { "sample.unlisted-format", "no-extension" })
+        {
+            var path = Path.Combine(scope.StoragePath, name);
+            File.WriteAllText(path, "ドロップした文書");
+            var file = scope.Window.StorageProvider.TryGetFileFromPathAsync(new Uri(path)).GetAwaiter().GetResult();
+            data.Add(DataTransferItem.CreateFile(Assert.IsAssignableFrom<Avalonia.Platform.Storage.IStorageFile>(file)));
+        }
+        data.Add(DataTransferItem.CreateText("挿入しない文字列"));
+
+        Assert.True(DragDrop.GetAllowDrop(scope.Window));
+        var over = new DragEventArgs(DragDrop.DragOverEvent, data, editor.TextArea, default, KeyModifiers.None)
+        {
+            DragEffects = DragDropEffects.Copy | DragDropEffects.Move,
+        };
+        editor.TextArea.RaiseEvent(over);
+        Assert.True(over.Handled);
+        Assert.Equal(DragDropEffects.Copy, over.DragEffects);
+
+        void DropFiles()
+        {
+            var drop = new DragEventArgs(DragDrop.DropEvent, data, editor.TextArea, default, KeyModifiers.None)
+            {
+                DragEffects = DragDropEffects.Copy,
+            };
+            editor.TextArea.RaiseEvent(drop);
+            Assert.True(drop.Handled);
+            var timeout = System.Diagnostics.Stopwatch.StartNew();
+            while (scope.ViewModel.SelectedDocument?.FilePath != Path.Combine(scope.StoragePath, "no-extension")
+                && timeout.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Yield();
+            }
+        }
+
+        DropFiles();
+        Assert.Equal(2, scope.ViewModel.Documents.Count(document => document.FilePath is not null));
+        Assert.All(scope.ViewModel.Documents.Where(document => document.FilePath is not null),
+            document => Assert.Equal("ドロップした文書", document.Text));
+        Assert.Equal(string.Empty, original.Text);
+        var opened = scope.ViewModel.SelectedDocument;
+        scope.ViewModel.SelectedTab = original;
+        DropFiles();
+        Assert.Same(opened, scope.ViewModel.SelectedDocument);
+        Assert.Equal(2, scope.ViewModel.Documents.Count(document => document.FilePath is not null));
+    });
+
+    [Fact]
+    public void FileDropRejectsFoldersAndLeavesPlainTextToTheEditor() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        using var folders = new DataTransfer();
+        var folder = scope.Window.StorageProvider.TryGetFolderFromPathAsync(new Uri(scope.StoragePath)).GetAwaiter().GetResult();
+        folders.Add(DataTransferItem.CreateFile(Assert.IsAssignableFrom<Avalonia.Platform.Storage.IStorageFolder>(folder)));
+        foreach (var routedEvent in new[] { DragDrop.DragEnterEvent, DragDrop.DragOverEvent, DragDrop.DropEvent })
+        {
+            var args = new DragEventArgs(routedEvent, folders, scope.Window, default, KeyModifiers.None)
+            {
+                DragEffects = DragDropEffects.Copy,
+            };
+            scope.Window.RaiseEvent(args);
+            Assert.True(args.Handled);
+            Assert.Equal(DragDropEffects.None, args.DragEffects);
+        }
+
+        using var text = new DataTransfer();
+        text.Add(DataTransferItem.CreateText("文字列"));
+        var textDrop = new DragEventArgs(DragDrop.DropEvent, text, scope.Window, default, KeyModifiers.None);
+        scope.Window.RaiseEvent(textDrop);
+        Assert.False(textDrop.Handled);
+        Assert.Single(scope.ViewModel.Documents);
+    });
+
     [Fact]
     public void WindowLoadsWithADocumentTabAndAnEditor() => fixture.Run(() =>
     {
@@ -971,6 +1055,8 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         }
 
         public MainWindow Window { get; }
+
+        public string StoragePath => _storage.Path;
 
         public MainWindowViewModel ViewModel { get; }
 
