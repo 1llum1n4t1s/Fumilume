@@ -95,7 +95,13 @@ function Remove-WorkDirectory {
     if (-not $resolved.StartsWith($RepoRoot + [IO.Path]::DirectorySeparatorChar)) {
         throw "作業ディレクトリがリポジトリ外です: $resolved"
     }
-    Remove-Item -LiteralPath $resolved -Recurse -Force
+    # build-* 内の bin/obj は保持し、配布・配信検証の出力だけを作り直す。
+    foreach ($name in @('artifacts', 'remote-verification', 'publish-win-x64', 'publish-win-arm64')) {
+        $outputPath = Join-Path $resolved $name
+        if (Test-Path -LiteralPath $outputPath) {
+            Remove-Item -LiteralPath $outputPath -Recurse -Force
+        }
+    }
 }
 
 Write-Host '== プリフライト ==' -ForegroundColor Cyan
