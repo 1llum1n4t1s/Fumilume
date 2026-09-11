@@ -32,7 +32,7 @@ $AccountId = '10901bfadbf1005164774a7350082985'
 $SecretsPath = 'C:\Users\IMT\dev\Secret\secrets.json'
 $CertSubjectName = 'Open Source Developer Yuichiro Shinozaki'
 $SignParams = "/n `"$CertSubjectName`" /fd SHA256 /td SHA256 /tr http://time.certum.pl"
-$WranglerVersion = '4.110.0'
+$WranglerVersion = '4.131.1'
 $RuntimeMatrix = @{
     'win-x64'   = @{ PlatformTarget = 'x64';   Channel = 'win' }
     'win-arm64' = @{ PlatformTarget = 'ARM64'; Channel = 'win-arm64' }
