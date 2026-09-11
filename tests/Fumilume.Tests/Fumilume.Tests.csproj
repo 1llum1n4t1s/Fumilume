@@ -16,7 +16,7 @@
     </PackageReference>
     <!-- タイトルバーのヒットテストのように、実際のコントロールツリーへ入力を流さないと
          確かめられない挙動の検証に使う（ウィンドウは開かずプロセス内で完結する）。 -->
-    <PackageReference Include="Avalonia.Headless" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.2" />
   </ItemGroup>
 
   <ItemGroup>
