@@ -8,7 +8,7 @@ using Fumilume.Services;
 namespace Fumilume.Views;
 
 /// <summary>安全なローカル描画だけを行う Markdown プレビュー。</summary>
-public sealed class MarkdownPreview : ScrollViewer
+public sealed class MarkdownPreview : UserControl
 {
     public static readonly StyledProperty<string?> MarkdownProperty =
         AvaloniaProperty.Register<MarkdownPreview, string?>(nameof(Markdown));
@@ -25,9 +25,19 @@ public sealed class MarkdownPreview : ScrollViewer
 
     public MarkdownPreview()
     {
-        HorizontalScrollBarVisibility = global::Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled;
-        VerticalScrollBarVisibility = global::Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
-        Content = _content;
+        // ScrollViewer を継承したカスタム型には Fluent テーマのテンプレートが当たらず、
+        // Extent / Viewport が作られない。組み込み型を内包してテーマとスクロール入力を有効にする。
+        var scrollViewer = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = global::Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = global::Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            Content = new Border
+            {
+                Background = Brushes.Transparent,
+                Child = _content,
+            },
+        };
+        Content = scrollViewer;
         ScheduleRender();
     }
 

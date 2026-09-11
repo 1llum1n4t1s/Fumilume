@@ -1,4 +1,6 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Input.TextInput;
 using Avalonia.Media;
@@ -710,6 +712,62 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
             preview.GetVisualDescendants().OfType<SelectableTextBlock>(),
             textBlock => Assert.NotNull(textBlock.Foreground));
         Assert.Equal("編集へ戻る", document.MarkdownPreviewToggleLabel);
+    });
+
+    [Fact]
+    public void MarkdownPreviewExposesAScrollableViewportForLongDocuments() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope(width: 720, height: 460);
+        var document = scope.ViewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\readme.md");
+        document.Text = string.Join("\n\n", Enumerable.Range(1, 80).Select(number => $"段落 {number}"));
+
+        scope.ViewModel.ToggleMarkdownPreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+
+        var preview = scope.Window.GetVisualDescendants().OfType<MarkdownPreview>().Single();
+        var scrollViewer = preview.GetVisualDescendants().OfType<ScrollViewer>().Single();
+        Assert.True(
+            scrollViewer.Extent.Height > scrollViewer.Viewport.Height,
+            $"Extent={scrollViewer.Extent.Height}, Viewport={scrollViewer.Viewport.Height}, Bounds={scrollViewer.Bounds.Height}");
+        scrollViewer.Offset = new Vector(0, 120);
+        scope.Window.UpdateLayout();
+
+        Assert.Equal(120, scrollViewer.Offset.Y);
+    });
+
+    [Fact]
+    public void MarkdownPreviewRespondsToTheMouseWheel() => fixture.Run(() =>
+    {
+        var preview = new MarkdownPreview
+        {
+            Markdown = string.Join("\n\n", Enumerable.Range(1, 80).Select(number => $"段落 {number}")),
+        };
+        var window = new Window
+        {
+            Width = 400,
+            Height = 300,
+            Content = preview,
+        };
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            var scrollViewer = preview.GetVisualDescendants().OfType<ScrollViewer>().Single();
+            Assert.True(scrollViewer.Extent.Height > scrollViewer.Viewport.Height);
+
+            window.MouseWheel(new Point(100, 100), new Vector(0, -3), RawInputModifiers.None);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(scrollViewer.Offset.Y > 0);
+        }
+        finally
+        {
+            window.Close();
+        }
     });
 
     [Fact]
