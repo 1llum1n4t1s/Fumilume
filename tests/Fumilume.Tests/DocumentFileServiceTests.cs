@@ -12,6 +12,11 @@ public sealed class DocumentFileServiceTests
     [InlineData(DocumentEncoding.Utf8Bom, "ログ一行目\r\n")]
     [InlineData(DocumentEncoding.Utf16LittleEndian, "ログ一行目\r\n")]
     [InlineData(DocumentEncoding.Utf16BigEndian, "ログ一行目\r\n")]
+    [InlineData(DocumentEncoding.Utf32LittleEndian, "ログ一行目\r\n")]
+    [InlineData(DocumentEncoding.Utf32BigEndian, "ログ一行目\r\n")]
+    [InlineData(DocumentEncoding.ShiftJis, "ログ一行目\r\n")]
+    [InlineData(DocumentEncoding.EucJp, "ログ一行目\r\n")]
+    [InlineData(DocumentEncoding.Iso2022Jp, "ログ一行目\r\n")]
     public async Task ReadWhileWriterIsOpenPreservesContentAndAllowsFurtherWrites(
         DocumentEncoding encoding, string text)
     {
@@ -59,6 +64,11 @@ public sealed class DocumentFileServiceTests
     [InlineData(DocumentEncoding.Utf8Bom, true)]
     [InlineData(DocumentEncoding.Utf16LittleEndian, true)]
     [InlineData(DocumentEncoding.Utf16BigEndian, true)]
+    [InlineData(DocumentEncoding.Utf32LittleEndian, true)]
+    [InlineData(DocumentEncoding.Utf32BigEndian, true)]
+    [InlineData(DocumentEncoding.ShiftJis, false)]
+    [InlineData(DocumentEncoding.EucJp, false)]
+    [InlineData(DocumentEncoding.Iso2022Jp, false)]
     public async Task WriteThenReadPreservesEncodingAndNewLines(DocumentEncoding encoding, bool hasPreamble)
     {
         var path = Path.Combine(Path.GetTempPath(), $"Fumilume-{Guid.NewGuid():N}.txt");
@@ -83,16 +93,112 @@ public sealed class DocumentFileServiceTests
     }
 
     [Fact]
-    public async Task ReadRejectsInvalidUtf8()
+    public async Task ReadRejectsBytesInvalidAsSupportedEncodings()
     {
         var path = Path.Combine(Path.GetTempPath(), $"Fumilume-{Guid.NewGuid():N}.txt");
         try
         {
-            await File.WriteAllBytesAsync(path, [0xC3, 0x28], TestContext.Current.CancellationToken);
+            await File.WriteAllBytesAsync(path, [0x81, 0x20], TestContext.Current.CancellationToken);
             var service = new DocumentFileService();
 
             await Assert.ThrowsAsync<InvalidDataException>(() =>
                 service.ReadAsync(path, TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData(DocumentEncoding.Utf16LittleEndianNoBom)]
+    [InlineData(DocumentEncoding.Utf16BigEndianNoBom)]
+    [InlineData(DocumentEncoding.Utf32LittleEndianNoBom)]
+    [InlineData(DocumentEncoding.Utf32BigEndianNoBom)]
+    public async Task ReadDetectsBomlessUnicodeWhenNullLayoutIsUnambiguous(DocumentEncoding encoding)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"Fumilume-{Guid.NewGuid():N}.txt");
+        try
+        {
+            Encoding encoder = encoding switch
+            {
+                DocumentEncoding.Utf16LittleEndianNoBom => new UnicodeEncoding(false, false, true),
+                DocumentEncoding.Utf16BigEndianNoBom => new UnicodeEncoding(true, false, true),
+                DocumentEncoding.Utf32LittleEndianNoBom => new UTF32Encoding(false, false, true),
+                DocumentEncoding.Utf32BigEndianNoBom => new UTF32Encoding(true, false, true),
+                _ => throw new ArgumentOutOfRangeException(nameof(encoding)),
+            };
+            await File.WriteAllBytesAsync(
+                path,
+                encoder.GetBytes("plain text\r\nsecond line"),
+                TestContext.Current.CancellationToken);
+
+            var loaded = await new DocumentFileService().ReadAsync(path, TestContext.Current.CancellationToken);
+
+            Assert.Equal(encoding, loaded.Encoding);
+            Assert.Equal("plain text\r\nsecond line", loaded.Text);
+
+            await new DocumentFileService().WriteAsync(path, loaded,
+                cancellationToken: TestContext.Current.CancellationToken);
+            var saved = await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken);
+            var bom = encoding switch
+            {
+                DocumentEncoding.Utf16LittleEndianNoBom => new UnicodeEncoding(false, true).GetPreamble(),
+                DocumentEncoding.Utf16BigEndianNoBom => new UnicodeEncoding(true, true).GetPreamble(),
+                DocumentEncoding.Utf32LittleEndianNoBom => new UTF32Encoding(false, true).GetPreamble(),
+                DocumentEncoding.Utf32BigEndianNoBom => new UTF32Encoding(true, true).GetPreamble(),
+                _ => throw new ArgumentOutOfRangeException(nameof(encoding)),
+            };
+            Assert.False(saved.AsSpan().StartsWith(bom));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ReadRetriesWhenAUtf8CharacterIsCompletedDuringTheRead()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"Fumilume-{Guid.NewGuid():N}.txt");
+        try
+        {
+            await File.WriteAllBytesAsync(path, [0xE3, 0x81], TestContext.Current.CancellationToken);
+            var read = new DocumentFileService().ReadAsync(path, TestContext.Current.CancellationToken);
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+            await using (var writer = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+            {
+                await writer.WriteAsync(new byte[] { 0x82 }, TestContext.Current.CancellationToken);
+                await writer.FlushAsync(TestContext.Current.CancellationToken);
+            }
+
+            var loaded = await read;
+
+            Assert.Equal(DocumentEncoding.Utf8, loaded.Encoding);
+            Assert.Equal("あ", loaded.Text);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task WriteDoesNotReplaceTheOriginalWhenTextCannotBeEncoded()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"Fumilume-{Guid.NewGuid():N}.txt");
+        try
+        {
+            await File.WriteAllTextAsync(path, "original", TestContext.Current.CancellationToken);
+            var content = new TextDocumentContent("emoji 😀", DocumentEncoding.ShiftJis, DocumentNewLines.Lf);
+
+            await Assert.ThrowsAsync<EncoderFallbackException>(() =>
+                new DocumentFileService().WriteAsync(
+                    path,
+                    content,
+                    cancellationToken: TestContext.Current.CancellationToken));
+
+            Assert.Equal("original", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -125,6 +231,8 @@ public sealed class DocumentFileServiceTests
             DocumentEncoding.Utf8Bom => Encoding.UTF8.GetPreamble(),
             DocumentEncoding.Utf16LittleEndian => Encoding.Unicode.GetPreamble(),
             DocumentEncoding.Utf16BigEndian => Encoding.BigEndianUnicode.GetPreamble(),
+            DocumentEncoding.Utf32LittleEndian => new UTF32Encoding(false, true).GetPreamble(),
+            DocumentEncoding.Utf32BigEndian => new UTF32Encoding(true, true).GetPreamble(),
             _ => [],
         };
         return preamble.Length > 0 && bytes.AsSpan().StartsWith(preamble);

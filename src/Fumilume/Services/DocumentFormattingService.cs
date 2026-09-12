@@ -493,12 +493,7 @@ public static class DocumentFormattingService
         => text.EndsWith('\r') || text.EndsWith('\n');
 
     private static Encoding ResolveEncoding(DocumentEncoding encoding)
-        => encoding switch
-        {
-            DocumentEncoding.Utf16LittleEndian => Encoding.Unicode,
-            DocumentEncoding.Utf16BigEndian => Encoding.BigEndianUnicode,
-            _ => Encoding.UTF8,
-        };
+        => DocumentEncodingService.GetEncoding(encoding);
 
     private sealed class EncodingStringWriter(StringBuilder builder, Encoding encoding)
         : StringWriter(builder, CultureInfo.InvariantCulture)

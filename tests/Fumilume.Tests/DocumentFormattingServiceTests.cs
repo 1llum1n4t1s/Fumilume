@@ -53,6 +53,21 @@ public sealed class DocumentFormattingServiceTests
     }
 
     [Fact]
+    public void XmlUsesTheSelectedLegacyJapaneseEncodingName()
+    {
+        var result = DocumentFormattingService.Format(
+            @"C:\tmp\view.xml",
+            "<?xml version=\"1.0\" encoding=\"shift_jis\"?><Root />",
+            DocumentNewLines.Lf,
+            DocumentEncoding.ShiftJis,
+            indentationSize: 2,
+            convertTabsToSpaces: true);
+
+        Assert.Equal(DocumentFormatOutcome.Success, result.Outcome);
+        Assert.StartsWith("<?xml version=\"1.0\" encoding=\"shift_jis\"?>\n", result.Text);
+    }
+
+    [Fact]
     public void BraceLanguageIgnoresBracesInsideStringsAndComments()
     {
         const string source = "class Sample\n{\nvoid Write(\nstring value)\n{\n// } はコメント\nConsole.WriteLine(\"{value}\");\n}\n}";

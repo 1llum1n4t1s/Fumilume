@@ -381,6 +381,24 @@
                                                           CommandParameter="{x:Static m:DocumentEncoding.Utf16LittleEndian}" />
                                                 <MenuItem Header="UTF-16 BE" Command="{Binding SetDocumentEncodingCommand}"
                                                           CommandParameter="{x:Static m:DocumentEncoding.Utf16BigEndian}" />
+                                                <MenuItem Header="UTF-16 LE (BOMなし)" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf16LittleEndianNoBom}" />
+                                                <MenuItem Header="UTF-16 BE (BOMなし)" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf16BigEndianNoBom}" />
+                                                <MenuItem Header="UTF-32 LE" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf32LittleEndian}" />
+                                                <MenuItem Header="UTF-32 BE" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf32BigEndian}" />
+                                                <MenuItem Header="UTF-32 LE (BOMなし)" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf32LittleEndianNoBom}" />
+                                                <MenuItem Header="UTF-32 BE (BOMなし)" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Utf32BigEndianNoBom}" />
+                                                <MenuItem Header="Shift_JIS" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.ShiftJis}" />
+                                                <MenuItem Header="EUC-JP" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.EucJp}" />
+                                                <MenuItem Header="ISO-2022-JP" Command="{Binding SetDocumentEncodingCommand}"
+                                                          CommandParameter="{x:Static m:DocumentEncoding.Iso2022Jp}" />
                                             </MenuFlyout>
                                         </Button.Flyout>
                                     </Button>

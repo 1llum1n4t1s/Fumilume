@@ -100,6 +100,15 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         DocumentEncoding.Utf8Bom => "UTF-8 BOM",
         DocumentEncoding.Utf16LittleEndian => "UTF-16 LE",
         DocumentEncoding.Utf16BigEndian => "UTF-16 BE",
+        DocumentEncoding.Utf16LittleEndianNoBom => "UTF-16 LE (BOMなし)",
+        DocumentEncoding.Utf16BigEndianNoBom => "UTF-16 BE (BOMなし)",
+        DocumentEncoding.Utf32LittleEndian => "UTF-32 LE",
+        DocumentEncoding.Utf32BigEndian => "UTF-32 BE",
+        DocumentEncoding.Utf32LittleEndianNoBom => "UTF-32 LE (BOMなし)",
+        DocumentEncoding.Utf32BigEndianNoBom => "UTF-32 BE (BOMなし)",
+        DocumentEncoding.ShiftJis => "Shift_JIS",
+        DocumentEncoding.EucJp => "EUC-JP",
+        DocumentEncoding.Iso2022Jp => "ISO-2022-JP",
         _ => "UTF-8",
     };
 

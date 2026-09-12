@@ -6,6 +6,15 @@ public enum DocumentEncoding
     Utf8Bom,
     Utf16LittleEndian,
     Utf16BigEndian,
+    Utf16LittleEndianNoBom,
+    Utf16BigEndianNoBom,
+    Utf32LittleEndian,
+    Utf32BigEndian,
+    Utf32LittleEndianNoBom,
+    Utf32BigEndianNoBom,
+    ShiftJis,
+    EucJp,
+    Iso2022Jp,
 }
 
 /// <summary>保存時に選べる改行コード。文字列の正本を XAML のコマンド引数でも共有する。</summary>

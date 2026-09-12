@@ -236,9 +236,9 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         var content = head[..stream.Read(head)];
 
-        // UTF-16 のテキストは NUL を含む。BOM が付いていれば中身では判断しない。
-        if (content.Length >= 2 &&
-            ((content[0] == 0xFF && content[1] == 0xFE) || (content[0] == 0xFE && content[1] == 0xFF)))
+        // UTF-16 / UTF-32 は本文に NUL を含む。BOMまたは安全なバイト配置で判定できれば
+        // バイナリ扱いせず、文書と同じ厳密なデコーダーへ渡す。
+        if (DocumentEncodingService.HasRecognizableUnicodeLayout(content))
         {
             return false;
         }

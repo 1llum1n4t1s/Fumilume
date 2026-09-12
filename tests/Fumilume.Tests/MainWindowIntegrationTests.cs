@@ -891,12 +891,12 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         using var scope = new WindowScope();
         var document = scope.ViewModel.Documents.Single();
 
-        scope.ViewModel.SetDocumentEncodingCommand.Execute(DocumentEncoding.Utf16BigEndian);
+        scope.ViewModel.SetDocumentEncodingCommand.Execute(DocumentEncoding.ShiftJis);
         scope.ViewModel.SetDocumentNewLineCommand.Execute(DocumentNewLines.Lf);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(DocumentEncoding.Utf16BigEndian, document.Encoding);
-        Assert.Equal("UTF-16 BE", document.EncodingLabel);
+        Assert.Equal(DocumentEncoding.ShiftJis, document.Encoding);
+        Assert.Equal("Shift_JIS", document.EncodingLabel);
         Assert.Equal(DocumentNewLines.Lf, document.NewLine);
         Assert.Equal("LF", document.NewLineLabel);
         Assert.True(document.IsModified);

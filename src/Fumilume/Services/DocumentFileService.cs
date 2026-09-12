@@ -1,33 +1,68 @@
-using System.Text;
 using Fumilume.Models;
 
 namespace Fumilume.Services;
 
 public sealed class DocumentFileService : IDocumentFileService
 {
-    private static readonly UTF8Encoding Utf8Strict = new(false, true);
+    private const int DecodeRetryDelayMilliseconds = 40;
+    private const int ReadRetryCount = 2;
 
     public async Task<TextDocumentContent> ReadAsync(
         string path,
         CancellationToken cancellationToken = default)
     {
-        var bytes = await ReadSharedBytesAsync(path, cancellationToken);
-        var (encoding, preambleLength, decoder) = DetectEncoding(bytes);
-
-        string text;
+        var bytes = await ReadSharedBytesWithRetryAsync(path, cancellationToken);
         try
         {
-            text = decoder.GetString(bytes, preambleLength, bytes.Length - preambleLength);
-        }
-        catch (DecoderFallbackException ex)
-        {
-            throw new InvalidDataException(
-                "対応している文字コード（UTF-8 / UTF-16）として読み込めませんでした。",
-                ex);
-        }
+            var content = DocumentEncodingService.Decode(bytes);
+            if (content.Encoding is DocumentEncoding.ShiftJis or DocumentEncoding.EucJp
+                && DocumentEncodingService.HasIncompleteUtf8Tail(bytes))
+            {
+                // 末尾が「未完のUTF-8」と「成立する旧来形式」の両方に見える場合は、短時間だけ
+                // 書込みの続きを待つ。変化がなければ最初の判定を採用する。
+                await Task.Delay(DecodeRetryDelayMilliseconds, cancellationToken);
+                var retriedBytes = await ReadSharedBytesWithRetryAsync(path, cancellationToken);
+                return bytes.AsSpan().SequenceEqual(retriedBytes)
+                    ? content
+                    : DocumentEncodingService.Decode(retriedBytes);
+            }
 
-        return new TextDocumentContent(text, encoding, DetectNewLine(text));
+            return content;
+        }
+        catch (InvalidDataException)
+        {
+            // 追記中のログはマルチバイト文字の途中まで見える瞬間がある。短時間後に内容が
+            // 変わった場合だけ再判定し、安定している不正データを無限に読み直さない。
+            await Task.Delay(DecodeRetryDelayMilliseconds, cancellationToken);
+            var retriedBytes = await ReadSharedBytesWithRetryAsync(path, cancellationToken);
+            if (bytes.AsSpan().SequenceEqual(retriedBytes))
+            {
+                throw;
+            }
+
+            return DocumentEncodingService.Decode(retriedBytes);
+        }
     }
+
+    private static async Task<byte[]> ReadSharedBytesWithRetryAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await ReadSharedBytesAsync(path, cancellationToken);
+            }
+            catch (IOException ex) when (attempt < ReadRetryCount && IsSharingViolation(ex))
+            {
+                await Task.Delay(20 * (attempt + 1), cancellationToken);
+            }
+        }
+    }
+
+    private static bool IsSharingViolation(IOException exception)
+        => (exception.HResult & 0xFFFF) is 32 or 33;
 
     private static async Task<byte[]> ReadSharedBytesAsync(string path, CancellationToken cancellationToken)
     {
@@ -67,7 +102,7 @@ public sealed class DocumentFileService : IDocumentFileService
         Directory.CreateDirectory(directory);
 
         var normalizedText = NormalizeNewLines(content.Text, content.NewLine);
-        var encoder = GetEncoding(content.Encoding);
+        var encoder = DocumentEncodingService.GetEncoding(content.Encoding);
         var preamble = encoder.GetPreamble();
         var body = encoder.GetBytes(normalizedText);
         var payload = new byte[preamble.Length + body.Length];
@@ -137,54 +172,4 @@ public sealed class DocumentFileService : IDocumentFileService
         => text.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n')
             .Replace("\n", newLine, StringComparison.Ordinal);
-
-    private static (DocumentEncoding Kind, int PreambleLength, Encoding Decoder) DetectEncoding(
-        ReadOnlySpan<byte> bytes)
-    {
-        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-        {
-            return (DocumentEncoding.Utf8Bom, 3, new UTF8Encoding(false, true));
-        }
-
-        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-        {
-            return (DocumentEncoding.Utf16LittleEndian, 2, new UnicodeEncoding(false, false, true));
-        }
-
-        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-        {
-            return (DocumentEncoding.Utf16BigEndian, 2, new UnicodeEncoding(true, false, true));
-        }
-
-        return (DocumentEncoding.Utf8, 0, Utf8Strict);
-    }
-
-    private static Encoding GetEncoding(DocumentEncoding encoding)
-        => encoding switch
-        {
-            DocumentEncoding.Utf8 => new UTF8Encoding(false, true),
-            DocumentEncoding.Utf8Bom => new UTF8Encoding(true, true),
-            DocumentEncoding.Utf16LittleEndian => new UnicodeEncoding(false, true, true),
-            DocumentEncoding.Utf16BigEndian => new UnicodeEncoding(true, true, true),
-            _ => throw new ArgumentOutOfRangeException(nameof(encoding)),
-        };
-
-    private static string DetectNewLine(string text)
-    {
-        var crlf = text.IndexOf("\r\n", StringComparison.Ordinal);
-        var lf = text.IndexOf('\n');
-        var cr = text.IndexOf('\r');
-
-        if (crlf >= 0 && crlf <= (lf < 0 ? int.MaxValue : lf) && crlf <= (cr < 0 ? int.MaxValue : cr))
-        {
-            return "\r\n";
-        }
-
-        if (lf >= 0 && (cr < 0 || lf < cr))
-        {
-            return "\n";
-        }
-
-        return cr >= 0 ? "\r" : Environment.NewLine;
-    }
 }

@@ -116,6 +116,24 @@ public sealed class GrepTests
         Assert.Single(result.Matches);
     }
 
+    [Theory]
+    [InlineData(DocumentEncoding.Utf32BigEndian)]
+    [InlineData(DocumentEncoding.ShiftJis)]
+    [InlineData(DocumentEncoding.EucJp)]
+    [InlineData(DocumentEncoding.Iso2022Jp)]
+    public async Task AdditionalTextEncodingsAreStillSearched(DocumentEncoding encoding)
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "encoded.txt"),
+            "検索できる",
+            DocumentEncodingService.GetEncoding(encoding));
+
+        var result = await Search(storage, "検索できる");
+
+        Assert.Single(result.Matches);
+    }
+
     [Fact]
     public async Task CancellingStopsTheSearch()
     {
