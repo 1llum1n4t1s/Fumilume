@@ -57,6 +57,20 @@ function Invoke-Native {
     }
 }
 
+function Invoke-Download {
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][string]$Destination,
+        [int]$TimeoutSeconds = 180
+    )
+
+    Invoke-Native "配信物の取得 ($([IO.Path]::GetFileName($Destination)))" {
+        curl.exe --fail --silent --show-error --location --http1.1 `
+            --retry 2 --retry-delay 2 --connect-timeout 20 --max-time $TimeoutSeconds `
+            --header 'Cache-Control: no-cache' --output $Destination $Uri
+    }
+}
+
 function Initialize-Wrangler {
     New-Item -ItemType Directory -Path $WranglerToolDir -Force | Out-Null
     Invoke-Native 'Wrangler の準備' {
@@ -143,6 +157,11 @@ if (-not $vpkInstalled) {
     Invoke-Native 'vpk のインストール' { dotnet tool install --global vpk --version $VpkVersion }
 }
 Write-Host "vpk: $VpkVersion"
+
+if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
+    throw '配信確認に必要な curl.exe が見つかりません'
+}
+Write-Host "curl: $(& curl.exe --version | Select-Object -First 1)"
 
 # Cloudflare トークン (アップロード時のみ必要)
 # zone 解決もここで行う: トークンに zone:read / cache purge 権限が無い場合に
@@ -308,9 +327,8 @@ foreach ($runtime in $Runtimes) {
     $localManifest = Join-Path $ArtifactsDir $manifestName
     if (-not (Test-Path $localManifest)) { throw "$manifestName が生成されませんでした" }
     $remoteManifest = Join-Path $verifyDir $manifestName
-    $response = Invoke-WebRequest -Uri "$BaseUrl/$manifestName`?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" `
-        -Headers @{ 'Cache-Control' = 'no-cache' } -OutFile $remoteManifest -PassThru -TimeoutSec 30
-    if ($response.StatusCode -ne 200) { throw "releases.$channel.json の配信確認に失敗しました" }
+    Invoke-Download -Uri "$BaseUrl/$manifestName`?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" `
+        -Destination $remoteManifest -TimeoutSeconds 30
     $localManifestHash = (Get-FileHash $localManifest -Algorithm SHA256).Hash
     $remoteManifestHash = (Get-FileHash $remoteManifest -Algorithm SHA256).Hash
     if ($localManifestHash -ne $remoteManifestHash) { throw "$manifestName の配信内容がローカル成果物と一致しません" }
@@ -319,7 +337,7 @@ foreach ($runtime in $Runtimes) {
     foreach ($asset in $manifest.Assets) {
         if ($asset.Version -ne $version) { throw "$manifestName のバージョンが不正です: $($asset.Version)" }
         $remoteAsset = Join-Path $verifyDir $asset.FileName
-        Invoke-WebRequest -Uri "$BaseUrl/$($asset.FileName)" -OutFile $remoteAsset -TimeoutSec 180
+        Invoke-Download -Uri "$BaseUrl/$($asset.FileName)" -Destination $remoteAsset
         if ((Get-Item $remoteAsset).Length -ne [long]$asset.Size) { throw "$($asset.FileName) のサイズが一致しません" }
         if ((Get-FileHash $remoteAsset -Algorithm SHA256).Hash -ne $asset.SHA256) { throw "$($asset.FileName) のSHA256が一致しません" }
     }
@@ -328,7 +346,7 @@ foreach ($runtime in $Runtimes) {
 
 foreach ($setup in Get-ChildItem $ArtifactsDir -Filter '*-Setup.exe') {
     $remoteSetup = Join-Path $verifyDir $setup.Name
-    Invoke-WebRequest -Uri "$BaseUrl/$($setup.Name)" -OutFile $remoteSetup -TimeoutSec 180
+    Invoke-Download -Uri "$BaseUrl/$($setup.Name)" -Destination $remoteSetup
     if ((Get-FileHash $setup.FullName -Algorithm SHA256).Hash -ne (Get-FileHash $remoteSetup -Algorithm SHA256).Hash) {
         throw "$($setup.Name) の配信内容がローカル成果物と一致しません"
     }
