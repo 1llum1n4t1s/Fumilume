@@ -15,6 +15,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly IDocumentFileService _files;
     private readonly IEditorDialogService _dialogs;
     private readonly IGrepService _grep;
+    private readonly IExternalFileChangeMonitor? _fileChangeMonitor;
+    private readonly HashSet<string> _reportedExternalReloadErrors = new(StringComparer.OrdinalIgnoreCase);
     // 開く・復元・保存先の確定を直列化し、同一パスを複数タブへ割り当てない。
     private readonly SemaphoreSlim _openPathsGate = new(1, 1);
     private int _untitledSequence;
@@ -26,12 +28,14 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IDocumentFileService files,
         IEditorDialogService dialogs,
         AppSettings? settings = null,
-        IGrepService? grep = null)
+        IGrepService? grep = null,
+        IExternalFileChangeMonitor? fileChangeMonitor = null)
     {
         _files = files;
         _dialogs = dialogs;
         // 検索は読み込みの経路を文書と揃えたいので、既定では同じファイルサービスの上に組む。
         _grep = grep ?? new GrepService(files);
+        _fileChangeMonitor = fileChangeMonitor;
         Options = new AppOptionsViewModel(settings ?? new AppSettings());
 
         // 生成プロパティ経由で入れると設定へ書き戻しが走るため、ここは補助フィールドへ直接入れる。
@@ -108,7 +112,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private async Task InitializeCoreAsync(IEnumerable<string> startupArgs)
     {
         // 前回終了時のタブを先に戻し、起動引数のファイルはその上へ開く（引数のタブが前面に来る）。
-        var session = Options.RestoreSession ? SessionStateService.Load() : new SessionState();
+        var sessionLoad = Options.RestoreSession
+            ? SessionStateService.LoadWithStatus()
+            : new SessionLoadResult(new SessionState(), Failed: false);
+        var session = sessionLoad.State;
+        _sessionLoadFailed = sessionLoad.Failed;
+        _sessionRecoveryDeferred = sessionLoad.RecoveryDeferred;
+        _pendingSettingsTabOpen = session.SettingsTabOpen;
         await RestoreSessionAsync(session);
 
         var paths = startupArgs.Where(File.Exists).ToArray();
@@ -121,6 +131,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (session.SettingsTabOpen)
         {
             EnsureSettingsTab(select: false);
+        }
+
+        _pendingSettingsTabOpen = false;
+        if (_sessionLoadFailed)
+        {
+            StatusMessage = "前回のセッション一覧を読み込めませんでした（既存の控えは保護しています）";
+        }
+        else if (_sessionRecoveryDeferred)
+        {
+            StatusMessage = "回復用セッションを一時的に読み込めませんでした（既存の控えは保護しています）";
         }
     }
 
@@ -180,8 +200,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// OS・アプリ終了ではダイアログや非同期待機を挟めないため、現在確定している状態を同期的に控える。
-    /// 初回復元が始まっていなければ、前回セッションを正本として触らない。
+    /// OS・アプリ終了ではダイアログや非同期待機を挟めないため、現在の状態を同期的に控える。
+    /// 初回復元中は、現在の編集内容へ未処理の前回タブを混ぜてどちらも欠落させない。
     /// </summary>
     internal bool PersistSessionStateForShutdown()
         => _initialization is null || TryPersistSessionState();
@@ -198,11 +218,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (!Options.RestoreSession)
         {
             // 復元しない設定へ切り替えたあとに古い控えが残らないようにする。
+            _sessionLoadFailed = false;
+            _sessionRecoveryDeferred = false;
             SessionStateService.Clear();
             return true;
         }
 
-        if (SessionStateService.Save(CaptureSession()))
+        if (_sessionLoadFailed)
+        {
+            // 読めない主一覧と、それが参照している控えには触れず、今回の編集を別一覧へ退避する。
+            return SessionStateService.SaveRecovery(
+                CaptureSession(),
+                replaceExisting: !_sessionRecoveryDeferred);
+        }
+
+        if (SessionStateService.Save(CaptureSession(), clearRecovery: !_sessionRecoveryDeferred))
         {
             return true;
         }
@@ -342,14 +372,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 continue;
             }
 
-            if (!await ConfirmLargeFileAsync(fullPath))
+            var isPdf = string.Equals(Path.GetExtension(fullPath), ".pdf", StringComparison.OrdinalIgnoreCase);
+            if (!await ConfirmLargeFileAsync(fullPath, requireTextReader: !isPdf))
             {
                 continue;
             }
 
             try
             {
-                if (string.Equals(Path.GetExtension(fullPath), ".pdf", StringComparison.OrdinalIgnoreCase))
+                if (isPdf)
                 {
                     var pdf = await PdfDocumentViewModel.OpenAsync(fullPath, CloseTabCoreAsync);
                     InsertContentTab(pdf);
@@ -415,30 +446,51 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanReload))]
     private async Task ReloadAsync()
     {
-        if (SelectedDocument is not { FilePath: { } path } document)
+        var document = SelectedDocument;
+        if (document is null)
         {
             return;
         }
 
-        if (document.IsModified && !await _dialogs.ConfirmAsync(
-                "ファイルを開き直す",
-                $"{document.DisplayName} の未保存の変更を破棄して、ディスクから開き直しますか？"))
-        {
-            return;
-        }
-
-        var caret = document.CaretIndex;
+        await _openPathsGate.WaitAsync();
         try
         {
-            var content = await _files.ReadAsync(path);
-            document.Load(path, content);
-            document.CaretIndex = Math.Clamp(caret, 0, document.EditorDocument.TextLength);
-            StatusMessage = $"{document.DisplayName} を開き直しました";
+            if (!Tabs.Contains(document) || document.FilePath is not { } path)
+            {
+                return;
+            }
+
+            if (document.IsModified && !await _dialogs.ConfirmAsync(
+                    "ファイルを開き直す",
+                    $"{document.DisplayName} の未保存の変更を破棄して、ディスクから開き直しますか？"))
+            {
+                return;
+            }
+
+            var caret = document.CaretIndex;
+            try
+            {
+                var content = await _files.ReadAsync(path);
+                document.Load(path, content);
+                document.CaretIndex = Math.Clamp(caret, 0, document.EditorDocument.TextLength);
+                StatusMessage = $"{document.DisplayName} を開き直しました";
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                document.MarkMissingOnDisk();
+                StatusMessage = $"{document.DisplayName} はディスク上から削除されました（編集中の内容は保持しています）";
+                AppLogger.For<MainWindowViewModel>().Error($"ファイルを開き直せませんでした: {path}", ex);
+                await _dialogs.ShowErrorAsync("ファイルを開き直せません", $"{path}\n\n{ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                AppLogger.For<MainWindowViewModel>().Error($"ファイルを開き直せませんでした: {path}", ex);
+                await _dialogs.ShowErrorAsync("ファイルを開き直せません", $"{path}\n\n{ex.Message}");
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            AppLogger.For<MainWindowViewModel>().Error($"ファイルを開き直せませんでした: {path}", ex);
-            await _dialogs.ShowErrorAsync("ファイルを開き直せません", $"{path}\n\n{ex.Message}");
+            _openPathsGate.Release();
         }
     }
 
@@ -514,18 +566,143 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusMessage = $"行 {line.Value:N0} へ移動しました";
     }
 
-    /// <summary>設定タブは常に一覧の末尾に置き、文書タブはその手前へ追加する。</summary>
-    private void InsertContentTab(WorkspaceTabViewModel document)
+    /// <summary>ピン留めを先頭、通常タブをその後、設定タブを末尾に置く。</summary>
+    private void InsertContentTab(WorkspaceTabViewModel tab)
     {
+        tab.PinStateChanged += OnTabPinStateChanged;
+
+        if (tab.IsPinned)
+        {
+            var firstUnpinned = Tabs.TakeWhile(item => item.IsPinned && !item.IsSettingsTab).Count();
+            Tabs.Insert(firstUnpinned, tab);
+            RefreshMonitoredFiles();
+            return;
+        }
+
         var settingsIndex = IndexOfSettingsTab();
         if (settingsIndex < 0)
         {
-            Tabs.Add(document);
+            Tabs.Add(tab);
         }
         else
         {
-            Tabs.Insert(settingsIndex, document);
+            Tabs.Insert(settingsIndex, tab);
         }
+
+        RefreshMonitoredFiles();
+    }
+
+    /// <summary>監視で検出した外部変更を反映する。編集中の本文は確認なしに破棄しない。</summary>
+    internal async Task<bool> ProcessExternalFileChangeAsync(string changedPath)
+    {
+        var fullPath = Path.GetFullPath(changedPath);
+        await _openPathsGate.WaitAsync();
+        try
+        {
+            if (FindOpenFileTab(fullPath) is not DocumentViewModel document)
+            {
+                return CompleteExternalFileChange(fullPath);
+            }
+
+            TextDocumentContent content;
+            try
+            {
+                content = await _files.ReadAsync(fullPath);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                document.MarkMissingOnDisk();
+                StatusMessage = $"{document.DisplayName} はディスク上から削除されました（編集中の内容は保持しています）";
+                return CompleteExternalFileChange(fullPath);
+            }
+
+            if (!document.HasSavedContentBaseline)
+            {
+                document.RememberSavedContentBaseline(content);
+                return CompleteExternalFileChange(fullPath);
+            }
+
+            // FileSystemWatcher はアプリ自身の原子的な保存にも反応する。保存時の基準値と同じなら何もしない。
+            if (document.MatchesSavedContent(content))
+            {
+                document.MarkSavedContentPresent();
+                return CompleteExternalFileChange(fullPath);
+            }
+
+            if (document.IsModified && !await _dialogs.ConfirmAsync(
+                    "ファイルが外部で変更されました",
+                    $"{document.DisplayName} は別のプログラムで変更されました。\n\n"
+                    + "未保存の編集を破棄して、ディスクの内容を読み込みますか？"))
+            {
+                StatusMessage = $"{document.DisplayName} の外部変更は保留しました（編集中の内容を保持しています）";
+                return CompleteExternalFileChange(fullPath);
+            }
+
+            var caret = document.CaretIndex;
+            var selectionStart = document.SelectionStart;
+            var selectionLength = document.SelectionLength;
+            document.Load(fullPath, content);
+            document.SelectionStart = Math.Clamp(selectionStart, 0, document.EditorDocument.TextLength);
+            document.SelectionLength = Math.Clamp(
+                selectionLength,
+                0,
+                document.EditorDocument.TextLength - document.SelectionStart);
+            document.CaretIndex = Math.Clamp(caret, 0, document.EditorDocument.TextLength);
+            StatusMessage = $"{document.DisplayName} の外部変更を読み込みました";
+            return CompleteExternalFileChange(fullPath);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.For<MainWindowViewModel>().Error($"外部変更を読み込めませんでした: {fullPath}", ex);
+            if (_reportedExternalReloadErrors.Add(fullPath))
+            {
+                await _dialogs.ShowErrorAsync("外部変更を読み込めません", $"{fullPath}\n\n{ex.Message}");
+            }
+            else
+            {
+                StatusMessage = $"{Path.GetFileName(fullPath)} の外部変更をまだ読み込めません";
+            }
+
+            return false;
+        }
+        finally
+        {
+            _openPathsGate.Release();
+        }
+    }
+
+    private bool CompleteExternalFileChange(string fullPath)
+    {
+        _reportedExternalReloadErrors.Remove(fullPath);
+        return true;
+    }
+
+    /// <summary>ピン操作後も各グループ内の順序を保ったまま、境界へタブを移す。</summary>
+    private void OnTabPinStateChanged(object? sender, EventArgs args)
+    {
+        if (sender is not WorkspaceTabViewModel tab || tab.IsSettingsTab)
+        {
+            return;
+        }
+
+        var oldIndex = Tabs.IndexOf(tab);
+        if (oldIndex < 0)
+        {
+            return;
+        }
+
+        var targetIndex = Tabs
+            .Where(item => !ReferenceEquals(item, tab))
+            .TakeWhile(item => item.IsPinned && !item.IsSettingsTab)
+            .Count();
+        if (targetIndex != oldIndex)
+        {
+            Tabs.Move(oldIndex, targetIndex);
+        }
+
+        StatusMessage = tab.IsPinned
+            ? $"{tab.TabTitle} をピン留めしました"
+            : $"{tab.TabTitle} のピン留めを解除しました";
     }
 
     private int IndexOfSettingsTab()
@@ -586,7 +763,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         var closingIndex = Tabs.IndexOf(tab);
+        tab.PinStateChanged -= OnTabPinStateChanged;
         Tabs.Remove(tab);
+        RefreshMonitoredFiles();
 
         // 表示できるタブが 1 つも無い状態は作らない（設定タブだけになったら空文書を用意する）。
         if (!Tabs.Any(item => item is DocumentViewModel or PdfDocumentViewModel or GrepResultTabViewModel))
@@ -639,11 +818,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 return false;
             }
 
-            await _files.WriteAsync(path, document.CreateSaveContent(), Options.CreateBackupOnSave);
-            document.MarkSaved(path);
+            var savedContent = document.CreateSaveContent();
+            var savedVersion = document.EditorDocument.Version;
+            await _files.WriteAsync(path, savedContent, Options.CreateBackupOnSave);
+            document.MarkSaved(path, savedContent, savedVersion);
             RememberCaretPosition(document);
             SelectedTab = document;
-            StatusMessage = $"{document.DisplayName} を保存しました";
+            StatusMessage = document.IsModified
+                ? $"{document.DisplayName} を保存しました（保存中の変更は未保存です）"
+                : $"{document.DisplayName} を保存しました";
             return true;
         }
         catch (Exception ex)
@@ -675,16 +858,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     // ===== ファイル設定（sakura の共通設定『ファイル』相当） =====
 
     /// <summary>
-    /// 大きなファイルを開く前に尋ねる（sakura の m_bAlertIfLargeFile / m_nAlertFileSize）。
+    /// 大きなファイルを開く前に尋ね、テキスト読込能力を超える場合は確認せず拒否する
+    /// （sakura の m_bAlertIfLargeFile / m_nAlertFileSize）。
     /// サイズが読めないときは黙って開く（存在しないファイルは後段のエラーで扱う）。
     /// </summary>
-    private async Task<bool> ConfirmLargeFileAsync(string fullPath)
+    private async Task<bool> ConfirmLargeFileAsync(string fullPath, bool requireTextReader = false)
     {
-        if (!Options.WarnOnLargeFile)
-        {
-            return true;
-        }
-
         long length;
         try
         {
@@ -697,6 +876,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
             length = info.Length;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return true;
+        }
+
+        if (requireTextReader && length > Array.MaxLength)
+        {
+            StatusMessage = $"{Path.GetFileName(fullPath)} は読み込める上限を超えています";
+            await _dialogs.ShowErrorAsync(
+                "ファイルを開けません",
+                $"{fullPath}\n\nテキストとして読み込める上限 "
+                + $"({Array.MaxLength / 1024.0 / 1024.0:N1} MB) を超えています。");
+            return false;
+        }
+
+        if (!Options.WarnOnLargeFile)
         {
             return true;
         }
@@ -746,6 +940,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void OnDocumentPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(DocumentViewModel.FilePath))
+        {
+            RefreshMonitoredFiles();
+        }
+
         if (args.PropertyName == nameof(DocumentViewModel.IsModified))
         {
             SaveAllCommand.NotifyCanExecuteChanged();
@@ -784,6 +983,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
+    private void RefreshMonitoredFiles()
+    {
+        var paths = Documents
+            .Select(document => document.FilePath)
+            .OfType<string>()
+            .ToArray();
+        _reportedExternalReloadErrors.RemoveWhere(path =>
+            !paths.Contains(path, StringComparer.OrdinalIgnoreCase));
+        _fileChangeMonitor?.SetPaths(paths);
+    }
+
     private void NotifyDocumentCommandsChanged()
     {
         UndoCommand.NotifyCanExecuteChanged();
@@ -810,12 +1020,16 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         DetachDocument(pristine);
+        pristine.PinStateChanged -= OnTabPinStateChanged;
         Tabs.Remove(pristine);
     }
 
     /// <summary>一度も触られていない空の新規文書か（開いた文書に押し出してよい相手）。</summary>
     private static bool IsPristine(DocumentViewModel document)
-        => document.FilePath is null && !document.IsModified && document.Text.Length == 0;
+        => document.FilePath is null
+            && !document.IsModified
+            && !document.IsPinned
+            && document.Text.Length == 0;
 
     /// <summary>一覧から外す文書の購読を解く。</summary>
     private void DetachDocument(DocumentViewModel document)

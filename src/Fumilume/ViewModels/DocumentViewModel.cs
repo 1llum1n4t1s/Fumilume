@@ -2,12 +2,15 @@ using System.ComponentModel;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Fumilume.Models;
+using Fumilume.Services;
 
 namespace Fumilume.ViewModels;
 
 public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 {
     private bool _isLoading;
+    private bool _isMissingOnDisk;
+    private string? _savedText = string.Empty;
     private DocumentEncoding _savedEncoding = DocumentEncoding.Utf8;
     private string _savedNewLine = Environment.NewLine;
 
@@ -160,9 +163,11 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             NewLine = content.NewLine;
             _savedEncoding = Encoding;
             _savedNewLine = NewLine;
+            _savedText = content.Text;
             Text = content.Text;
             CaretIndex = 0;
             _restoredUnsaved = false;
+            _isMissingOnDisk = false;
             IsModified = false;
         }
         finally
@@ -196,19 +201,65 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             _isLoading = false;
             EditorDocument.UndoStack.ClearAll();
             UpdateTextStatistics();
+            _savedText = null;
             _restoredUnsaved = true;
             IsModified = true;
         }
     }
 
     public void MarkSaved(string path)
+        => MarkSaved(path, CreateSaveContent(), EditorDocument.Version);
+
+    /// <summary>実際に書き込んだスナップショットだけを保存基準にし、保存待ちの追加入力は未保存として残す。</summary>
+    internal void MarkSaved(string path, TextDocumentContent savedContent, object savedVersion)
     {
+        var unchangedDuringSave = ReferenceEquals(EditorDocument.Version, savedVersion)
+            && Encoding == savedContent.Encoding
+            && string.Equals(NewLine, savedContent.NewLine, StringComparison.Ordinal);
         FilePath = Path.GetFullPath(path);
-        _savedEncoding = Encoding;
-        _savedNewLine = NewLine;
-        EditorDocument.UndoStack.MarkAsOriginalFile();
-        _restoredUnsaved = false;
-        IsModified = false;
+        _savedEncoding = savedContent.Encoding;
+        _savedNewLine = savedContent.NewLine;
+        _savedText = DocumentFileService.NormalizeNewLines(savedContent.Text, savedContent.NewLine);
+        _isMissingOnDisk = false;
+        if (unchangedDuringSave)
+        {
+            EditorDocument.UndoStack.MarkAsOriginalFile();
+        }
+
+        _restoredUnsaved = !unchangedDuringSave;
+        IsModified = !unchangedDuringSave;
+    }
+
+    /// <summary>監視通知が自分自身の保存に由来する場合、ディスク内容は保存時の基準値と一致する。</summary>
+    internal bool HasSavedContentBaseline => _savedText is not null;
+
+    internal bool MatchesSavedContent(TextDocumentContent content)
+        => _savedText is not null
+            && content.Encoding == _savedEncoding
+            && string.Equals(content.Text, _savedText, StringComparison.Ordinal);
+
+    /// <summary>外部削除後の本文を、閉じる確認とセッション保存の対象として保持する。</summary>
+    internal void MarkMissingOnDisk()
+    {
+        _isMissingOnDisk = true;
+        IsModified = true;
+    }
+
+    /// <summary>保存時の内容が再び存在すると確認できたら、ディスク消失状態だけを解消する。</summary>
+    internal void MarkSavedContentPresent()
+    {
+        _isMissingOnDisk = false;
+        UpdateModifiedState();
+    }
+
+    /// <summary>未保存セッションでは本文を変えず、現在のディスク内容だけを今後の比較基準にする。</summary>
+    internal void RememberSavedContentBaseline(TextDocumentContent content)
+    {
+        _savedText = content.Text;
+        _savedEncoding = content.Encoding;
+        _savedNewLine = content.NewLine;
+        _isMissingOnDisk = false;
+        UpdateModifiedState();
     }
 
     public void ToggleMarkdownPreview()
@@ -283,7 +334,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     }
 
     private void UpdateModifiedState()
-        => IsModified = _restoredUnsaved || !EditorDocument.UndoStack.IsOriginalFile
+        => IsModified = _restoredUnsaved || _isMissingOnDisk || !EditorDocument.UndoStack.IsOriginalFile
             || Encoding != _savedEncoding || NewLine != _savedNewLine;
 
     private void UpdateTextStatistics()

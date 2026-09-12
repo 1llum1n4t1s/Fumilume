@@ -57,6 +57,29 @@ public sealed class MacroTests
         Assert.Equal("> two", document.Text);
     }
 
+    [Theory]
+    [InlineData("sample.cs", "class C\n{", "class C\n{\n    ")]
+    [InlineData("sample.json", "{\n  \"items\": [", "{\n  \"items\": [\n        ")]
+    public async Task ReplayedNewLineUsesTheDocumentIndentation(
+        string path,
+        string before,
+        string expected)
+    {
+        var viewModel = CreateViewModel();
+        viewModel.Options.ConvertTabsToSpaces = true;
+        var document = viewModel.Documents.Single();
+        document.Load(path, new TextDocumentContent(before, DocumentEncoding.Utf8, "\n"));
+        document.CaretIndex = document.Text.Length;
+
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+        viewModel.RecordMacroStep(new MacroStep { Kind = MacroStepKind.InsertNewLine });
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+        await viewModel.RunMacroCommand.ExecuteAsync(null);
+
+        Assert.Equal(expected, document.Text);
+        Assert.Equal(expected.Length, document.CaretIndex);
+    }
+
     [Fact]
     public async Task CommandsAreRecordedAndReplayed()
     {

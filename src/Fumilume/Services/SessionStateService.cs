@@ -6,6 +6,7 @@ namespace Fumilume.Services;
 /// <summary>前回終了時のワークスペース（タブの並び、選択、未保存の内容）。</summary>
 public sealed class SessionState
 {
+    [JsonRequired]
     public List<SessionTabState> Tabs { get; set; } = [];
 
     /// <summary>終了時に選ばれていた <see cref="Tabs"/> の位置。復元できないタブがあってもよいように
@@ -66,6 +67,9 @@ public sealed class SessionTabState
     /// <summary>PDF のフィット方式。null は旧形式のセッション。</summary>
     public string? PdfZoomMode { get; set; }
 
+    /// <summary>タブ一覧の先頭へ固定されていたか。旧セッションでは既定の false として扱う。</summary>
+    public bool IsPinned { get; set; }
+
     /// <summary>
     /// 未保存の本文。JSON へは書かず、<see cref="SessionStateService"/> が
     /// <see cref="BufferFile"/> の指す別ファイルへ出し入れする。
@@ -75,7 +79,28 @@ public sealed class SessionTabState
     /// </summary>
     [JsonIgnore]
     public string? Text { get; set; }
+
+    /// <summary>控え本文を読めなかった理由。JSONには保存せず、今回の復元判断だけに使う。</summary>
+    [JsonIgnore]
+    internal SessionBufferReadStatus BufferReadStatus { get; set; }
 }
+
+internal enum SessionBufferReadStatus
+{
+    None,
+    Loaded,
+    Missing,
+    Unavailable,
+}
+
+internal readonly record struct SessionLoadResult(
+    SessionState State,
+    bool Failed,
+    bool RecoveryDeferred = false);
+
+internal readonly record struct RecoverySessionLoadResult(
+    IReadOnlyList<SessionState> States,
+    bool Deferred);
 
 // PublishAot=true のためリフレクションベースのシリアライザは使えない。ソース生成を通す。
 [JsonSourceGenerationOptions(WriteIndented = true)]
@@ -89,45 +114,59 @@ internal sealed partial class SessionJsonContext : JsonSerializerContext;
 /// 未保存の本文（何 MB にもなりうる）を同居させると、設定の保存が本文の大きさに引きずられ、
 /// 書き込みに失敗したときの被害も設定全体へ広がる。
 ///
-/// 読み込みは常に成功し、壊れていれば「セッション無し」として扱う（起動できないほうが困る）。
+/// 公開読み込みは常に成功し、壊れていれば「セッション無し」として扱う（起動できないほうが困る）。
+/// アプリの起動経路では失敗状態も受け取り、既存の一覧と控えを誤って上書きしない。
 /// </summary>
 public static class SessionStateService
 {
     private static string SessionPath => Path.Combine(AppStoragePaths.Directory, "session.json");
 
+    /// <summary>
+    /// 主一覧を読めないあいだ、今回の編集を別系統で守る一覧。
+    /// 主一覧を上書きしないため、復旧するまでは古い控えの掃除も行わない。
+    /// </summary>
+    private static string RecoveryDirectory => Path.Combine(AppStoragePaths.Directory, "session-recovery");
+
     /// <summary>未保存の本文を置くディレクトリ。</summary>
     private static string BufferDirectory => Path.Combine(AppStoragePaths.Directory, "session");
 
     /// <summary>前回終了時のワークスペースを読む。無い・壊れているときは空のセッションを返す。</summary>
-    public static SessionState Load()
+    public static SessionState Load() => LoadWithStatus().State;
+
+    /// <summary>一覧が無い状態と、存在する一覧を読めなかった状態を区別して読む。</summary>
+    internal static SessionLoadResult LoadWithStatus()
     {
+        SessionState primary;
+        var primaryFailed = false;
         try
         {
-            if (!File.Exists(SessionPath))
-            {
-                return new SessionState();
-            }
-
-            var parsed = JsonSerializer.Deserialize(
-                File.ReadAllText(SessionPath),
-                SessionJsonContext.Default.SessionState);
-            if (parsed is null)
-            {
-                return new SessionState();
-            }
-
-            foreach (var tab in parsed.Tabs)
-            {
-                tab.Text = ReadBuffer(tab.BufferFile);
-            }
-
-            return parsed;
+            primary = ReadSession(SessionPath, BufferDirectory);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        catch (FileNotFoundException)
+        {
+            primary = new SessionState();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            primary = new SessionState();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         {
             AppLogger.For("Fumilume.SessionStateService").Warn("前回のセッションを読み込めませんでした。", ex);
-            return new SessionState();
+            primary = new SessionState();
+            primaryFailed = true;
         }
+
+        var recovery = LoadRecoverySessions();
+        if (recovery.Deferred)
+        {
+            return new SessionLoadResult(primary, primaryFailed, RecoveryDeferred: true);
+        }
+
+        return new SessionLoadResult(
+            MergeSessions(primary, recovery.States),
+            primaryFailed,
+            RecoveryDeferred: false);
     }
 
     /// <summary>
@@ -138,21 +177,70 @@ public static class SessionStateService
     /// </summary>
     /// <returns>本文と一覧の両方を書けたとき <see langword="true"/>。</returns>
     public static bool Save(SessionState state)
+        => Save(state, clearRecovery: true);
+
+    internal static bool Save(SessionState state, bool clearRecovery)
     {
-        try
+        if (!SaveCore(state, SessionPath, BufferDirectory, "セッション"))
         {
-            WriteBuffers(state);
-            var json = JsonSerializer.Serialize(state, SessionJsonContext.Default.SessionState);
-            AtomicFile.WriteAllText(SessionPath, json);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            AppLogger.For("Fumilume.SessionStateService").Warn("セッションを保存できませんでした。", ex);
             return false;
         }
 
-        // 一覧が確定してからでないと古い控えを消せない（消してから確定に失敗すると前回分まで失う）。
-        RemoveUnusedBuffers(state);
+        if (clearRecovery)
+        {
+            DeleteRecoveryDirectory();
+        }
+
+        // 主一覧の確定後なら、主一覧専用の置き場にある旧世代だけを安全に片付けられる。
+        RemoveUnusedBuffers(state, BufferDirectory);
+        return true;
+    }
+
+    /// <summary>
+    /// 主一覧を読めなかった起動中の編集を別一覧へ控える。
+    /// 読めない主一覧が参照している可能性のある控えは一切掃除しない。
+    /// </summary>
+    internal static bool SaveRecovery(SessionState state, bool replaceExisting)
+    {
+        var snapshotName = $"snapshot-{DateTime.UtcNow:yyyyMMddHHmmssfffffff}-{Guid.NewGuid():N}";
+        var pending = Path.Combine(RecoveryDirectory, $".pending-{Guid.NewGuid():N}");
+        var committed = Path.Combine(RecoveryDirectory, snapshotName);
+        try
+        {
+            Directory.CreateDirectory(pending);
+            WriteBuffers(state, pending);
+            var json = JsonSerializer.Serialize(state, SessionJsonContext.Default.SessionState);
+            AtomicFile.WriteAllText(Path.Combine(pending, "session.json"), json);
+            Directory.Move(pending, committed);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            TryDeleteDirectory(pending, "未完成の回復用セッションを片付けられませんでした。");
+            AppLogger.For("Fumilume.SessionStateService").Warn("回復用セッションを保存できませんでした。", ex);
+            return false;
+        }
+
+        if (replaceExisting)
+        {
+            DeleteRecoverySnapshotsExcept(committed);
+        }
+
+        return true;
+    }
+
+    private static bool SaveCore(SessionState state, string destination, string bufferDirectory, string target)
+    {
+        try
+        {
+            WriteBuffers(state, bufferDirectory);
+            var json = JsonSerializer.Serialize(state, SessionJsonContext.Default.SessionState);
+            AtomicFile.WriteAllText(destination, json);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            AppLogger.For("Fumilume.SessionStateService").Warn($"{target}を保存できませんでした。", ex);
+            return false;
+        }
         return true;
     }
 
@@ -166,6 +254,11 @@ public static class SessionStateService
             {
                 Directory.Delete(BufferDirectory, recursive: true);
             }
+
+            if (Directory.Exists(RecoveryDirectory))
+            {
+                Directory.Delete(RecoveryDirectory, recursive: true);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -173,8 +266,141 @@ public static class SessionStateService
         }
     }
 
+    private static SessionState ReadSession(string path, string bufferDirectory)
+    {
+        var parsed = JsonSerializer.Deserialize(
+            File.ReadAllText(path),
+            SessionJsonContext.Default.SessionState);
+        if (parsed?.Tabs is null)
+        {
+            throw new JsonException("セッションのタブ一覧がありません。");
+        }
+
+        foreach (var tab in parsed.Tabs)
+        {
+            if (tab is null)
+            {
+                throw new JsonException("セッションに不正なタブがあります。");
+            }
+
+            var buffer = ReadBuffer(bufferDirectory, tab.BufferFile);
+            tab.Text = buffer.Text;
+            tab.BufferReadStatus = buffer.Status;
+        }
+
+        return parsed;
+    }
+
+    private static RecoverySessionLoadResult LoadRecoverySessions()
+    {
+        string[] snapshots;
+        try
+        {
+            snapshots = Directory.Exists(RecoveryDirectory)
+                ? Directory.EnumerateDirectories(RecoveryDirectory, "snapshot-*")
+                    .Order(StringComparer.Ordinal)
+                    .ToArray()
+                : [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.For("Fumilume.SessionStateService").Warn("回復用セッションの一覧を読み込めませんでした。", ex);
+            return new RecoverySessionLoadResult([], Deferred: true);
+        }
+
+        var states = new List<SessionState>(snapshots.Length);
+        foreach (var snapshot in snapshots)
+        {
+            try
+            {
+                var state = ReadSession(Path.Combine(snapshot, "session.json"), snapshot);
+                if (state.Tabs.Any(tab => tab.BufferReadStatus == SessionBufferReadStatus.Unavailable))
+                {
+                    return new RecoverySessionLoadResult([], Deferred: true);
+                }
+
+                states.Add(state);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+            {
+                AppLogger.For("Fumilume.SessionStateService").Warn(
+                    $"回復用セッションを読み込めませんでした: {snapshot}",
+                    ex);
+                return new RecoverySessionLoadResult([], Deferred: true);
+            }
+        }
+
+        return new RecoverySessionLoadResult(states, Deferred: false);
+    }
+
+    private static SessionState MergeSessions(SessionState primary, IReadOnlyList<SessionState> recoveries)
+    {
+        if (recoveries.Count == 0)
+        {
+            return primary;
+        }
+
+        var merged = new SessionState
+        {
+            Tabs = [.. primary.Tabs],
+            SelectedTabIndex = primary.SelectedTabIndex,
+            SettingsTabOpen = primary.SettingsTabOpen,
+        };
+        foreach (var recovery in recoveries)
+        {
+            var offset = merged.Tabs.Count;
+            merged.Tabs.AddRange(recovery.Tabs);
+            if (recovery.SelectedTabIndex >= 0 && recovery.SelectedTabIndex < recovery.Tabs.Count)
+            {
+                merged.SelectedTabIndex = offset + recovery.SelectedTabIndex;
+            }
+
+            merged.SettingsTabOpen |= recovery.SettingsTabOpen;
+        }
+
+        return merged;
+    }
+
+    private static void DeleteRecoveryDirectory()
+    {
+        TryDeleteDirectory(RecoveryDirectory, "古い回復用セッションを削除できませんでした。");
+    }
+
+    private static void DeleteRecoverySnapshotsExcept(string committed)
+    {
+        try
+        {
+            foreach (var path in Directory.EnumerateDirectories(RecoveryDirectory))
+            {
+                if (!string.Equals(path, committed, StringComparison.OrdinalIgnoreCase))
+                {
+                    TryDeleteDirectory(path, "古い回復用セッションを削除できませんでした。");
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.For("Fumilume.SessionStateService").Warn("古い回復用セッションを列挙できませんでした。", ex);
+        }
+    }
+
+    private static void TryDeleteDirectory(string path, string message)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLogger.For("Fumilume.SessionStateService").Warn(message, ex);
+        }
+    }
+
     /// <summary>未保存の本文をタブごとのファイルへ書き、参照名を <see cref="SessionTabState.BufferFile"/> へ入れる。</summary>
-    private static void WriteBuffers(SessionState state)
+    private static void WriteBuffers(SessionState state, string bufferDirectory)
     {
         for (var index = 0; index < state.Tabs.Count; index++)
         {
@@ -195,28 +421,54 @@ public static class SessionStateService
             // 「前回の一覧が今回の本文を指す」状態になり、前回の書きかけが別タブの内容へすり替わる。
             // 使われなくなった控えは、一覧を確定させたあとの RemoveUnusedBuffers が片付ける。
             var name = $"tab-{index}-{Guid.NewGuid():N}.txt";
-            AtomicFile.WriteAllText(Path.Combine(BufferDirectory, name), tab.Text);
+            AtomicFile.WriteAllText(Path.Combine(bufferDirectory, name), tab.Text);
             tab.BufferFile = name;
         }
     }
 
-    private static string? ReadBuffer(string? bufferFile)
+    private static (string? Text, SessionBufferReadStatus Status) ReadBuffer(
+        string bufferDirectory,
+        string? bufferFile)
     {
         if (string.IsNullOrEmpty(bufferFile))
         {
-            return null;
+            return (null, SessionBufferReadStatus.None);
         }
 
         // session.json が手で書き換えられていても、控えの読み込み先がディレクトリの外へ出ないようにする。
-        var path = Path.Combine(BufferDirectory, Path.GetFileName(bufferFile));
+        string fileName;
         try
         {
-            return File.Exists(path) ? File.ReadAllText(path) : null;
+            fileName = Path.GetFileName(bufferFile);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new JsonException("セッションの控えファイル名が不正です。", ex);
+        }
+
+        if (!string.Equals(fileName, bufferFile, StringComparison.Ordinal) ||
+            fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new JsonException("セッションの控えファイル名が不正です。");
+        }
+
+        var path = Path.Combine(bufferDirectory, fileName);
+        try
+        {
+            return (File.ReadAllText(path), SessionBufferReadStatus.Loaded);
+        }
+        catch (FileNotFoundException)
+        {
+            return (null, SessionBufferReadStatus.Missing);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return (null, SessionBufferReadStatus.Missing);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             AppLogger.For("Fumilume.SessionStateService").Warn($"未保存の内容を読み込めませんでした: {path}", ex);
-            return null;
+            return (null, SessionBufferReadStatus.Unavailable);
         }
     }
 
@@ -224,9 +476,9 @@ public static class SessionStateService
     /// 今回のセッションが参照していない控えを消す（閉じたタブと前回の版を残さない）。
     /// 後始末なので、失敗しても保存そのものは成功として扱う（次回の保存でもう一度試される）。
     /// </summary>
-    private static void RemoveUnusedBuffers(SessionState state)
+    private static void RemoveUnusedBuffers(SessionState state, string bufferDirectory)
     {
-        if (!Directory.Exists(BufferDirectory))
+        if (!Directory.Exists(bufferDirectory))
         {
             return;
         }
@@ -238,7 +490,7 @@ public static class SessionStateService
 
         try
         {
-            foreach (var path in Directory.EnumerateFiles(BufferDirectory))
+            foreach (var path in Directory.EnumerateFiles(bufferDirectory))
             {
                 if (used.Contains(Path.GetFileName(path)))
                 {

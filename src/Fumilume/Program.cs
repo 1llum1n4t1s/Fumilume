@@ -36,7 +36,7 @@ internal static class Program
             using var singleInstance = SingleInstanceCoordinator.Create();
             if (!singleInstance.IsPrimary)
             {
-                _ = singleInstance.ForwardArgumentsAsync(NormalizeForwardedArguments(args)).GetAwaiter().GetResult();
+                ForwardArgumentsOrReport(singleInstance, args);
                 return;
             }
 
@@ -72,6 +72,28 @@ internal static class Program
                 return argument;
             }
         }).ToArray();
+
+    /// <summary>後続起動の転送失敗を無言で捨てず、利用者へ再実行が必要だと知らせる。</summary>
+    internal static void ForwardArgumentsOrReport(
+        SingleInstanceCoordinator singleInstance,
+        IEnumerable<string> arguments,
+        Action<string>? reportFailure = null,
+        int connectionTimeoutMilliseconds = 3000)
+    {
+        var forwarded = singleInstance.ForwardArgumentsAsync(
+                NormalizeForwardedArguments(arguments),
+                connectionTimeoutMilliseconds: connectionTimeoutMilliseconds)
+            .GetAwaiter()
+            .GetResult();
+        if (forwarded)
+        {
+            return;
+        }
+
+        const string message = "既に起動している Fumilume へファイルを渡せませんでした。"
+            + "少し待ってから、もう一度ファイルを開いてください。";
+        (reportFailure ?? StartupErrorReporter.Show)(message);
+    }
 
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()

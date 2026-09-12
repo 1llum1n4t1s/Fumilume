@@ -14,7 +14,7 @@
         <!-- 縦タブ 1 行分の見た目。ListBoxItem の既定テンプレートは選択枠を自前で描くため、
              角丸と塗り分けだけを持つテンプレートへ差し替える。 -->
         <ControlTheme x:Key="VerticalTabItemTheme" TargetType="ListBoxItem">
-            <Setter Property="Margin" Value="10,2" />
+            <Setter Property="Margin" Value="4,2" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="MinHeight" Value="{DynamicResource TabItemHeight}" />
             <Setter Property="Background" Value="{DynamicResource TabIdleBg}" />
@@ -105,12 +105,12 @@
 
     <!-- タブの閉じるボタンと、タブ一覧下の丸いアイコンボタン。 -->
     <Style Selector="Button.tabclose">
-        <Setter Property="Width" Value="28" />
-        <Setter Property="Height" Value="28" />
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="CornerRadius" Value="13" />
         <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
         <Setter Property="FontSize" Value="10" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
@@ -119,6 +119,28 @@
     </Style>
     <Style Selector="Button.tabclose:pointerover">
         <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+    </Style>
+
+    <!-- ピン操作は未固定時も入口を残し、固定中はアクセント色で状態を示す。 -->
+    <Style Selector="Button.tabpin">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="13" />
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.tabpin:pointerover">
+        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="Button.tabpin.pinned">
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
     </Style>
 
     <!-- コマンドバーのボタン。アイコンのみ・アイコン＋文言のどちらでも高さが揃うようにする。 -->

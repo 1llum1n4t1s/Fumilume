@@ -39,6 +39,29 @@ public abstract partial class WorkspaceTabViewModel : ObservableObject
     /// <summary>フォルダ横断検索の結果タブかどうか。</summary>
     public virtual bool IsGrepTab => false;
 
+    /// <summary>設定以外のタブを一覧の先頭へ固定できるか。</summary>
+    public bool CanPin => !IsSettingsTab;
+
+    /// <summary>タブ一覧の先頭グループへ固定されているか。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PinGlyph))]
+    [NotifyPropertyChangedFor(nameof(PinTooltip))]
+    private bool _isPinned;
+
+    /// <summary>現在の状態が一目で分かるピン操作のグリフ。</summary>
+    public string PinGlyph => IsPinned ? "\uE77A" : "\uE718";
+
+    /// <summary>現在の状態に対応するピン操作の説明。</summary>
+    public string PinTooltip => IsPinned ? "ピン留めを解除" : "タブをピン留め";
+
+    /// <summary>ピン状態が変わったことを、一覧を所有する ViewModel へ知らせる。</summary>
+    public event EventHandler? PinStateChanged;
+
+    partial void OnIsPinnedChanged(bool value) => PinStateChanged?.Invoke(this, EventArgs.Empty);
+
+    [RelayCommand(CanExecute = nameof(CanPin))]
+    private void TogglePin() => IsPinned = !IsPinned;
+
     [RelayCommand]
     private Task CloseTabAsync() => _closeAsync(this);
 }

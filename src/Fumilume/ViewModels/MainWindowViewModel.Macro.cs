@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using AvaloniaEdit;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fumilume.Services;
@@ -228,6 +229,21 @@ public sealed partial class MainWindowViewModel
                 return RunEditorCommandAsync(step.Command);
             case MacroStepKind.InsertText:
                 document.InsertText(step.Text);
+                break;
+            case MacroStepKind.InsertNewLine:
+                document.InsertText("\n");
+                var caret = EditorIndentationService.IndentLine(
+                    document.EditorDocument,
+                    document.CaretIndex,
+                    document.FilePath,
+                    new TextEditorOptions
+                    {
+                        IndentationSize = Options.IndentationSize,
+                        ConvertTabsToSpaces = Options.ConvertTabsToSpaces,
+                    });
+                document.SelectionStart = caret;
+                document.SelectionLength = 0;
+                document.CaretIndex = caret;
                 break;
             case MacroStepKind.MoveCaret:
                 document.MoveCaret(step.Motion, step.ExtendSelection);

@@ -23,6 +23,9 @@ public enum MacroStepKind
 
     /// <summary>記録時の検索条件で次の一致へ飛ぶ。</summary>
     FindNext,
+
+    /// <summary>文書形式に合うインデントを伴って改行する。</summary>
+    InsertNewLine,
 }
 
 /// <summary>カーソルの動かし方。キーの向きと単位をそのまま持つ。</summary>
@@ -71,6 +74,7 @@ public sealed class MacroStep
         MacroStepKind.Command => EditorCommandCatalog.All
             .FirstOrDefault(command => command.Id == Command)?.Title ?? Command.ToString(),
         MacroStepKind.InsertText => $"入力 {DescribeText()}",
+        MacroStepKind.InsertNewLine => "改行",
         MacroStepKind.MoveCaret => ExtendSelection ? $"{DescribeMotion()}へ選択" : $"{DescribeMotion()}へ移動",
         MacroStepKind.DeleteBack => "前を削除",
         MacroStepKind.DeleteForward => "後ろを削除",

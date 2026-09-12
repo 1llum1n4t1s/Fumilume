@@ -35,8 +35,10 @@ public sealed partial class MainWindow : Window
 
     private readonly MainWindowViewModel _viewModel;
     private readonly AppOptionsViewModel _options;
+    private readonly IExternalFileChangeMonitor _fileChangeMonitor;
     private readonly TextEditor _editor;
     private readonly SearchPanel _searchPanel;
+    private readonly BracketHighlighter _bracketHighlighter;
     private readonly ColumnDefinition _sidePanelColumn;
     private DocumentViewModel? _boundDocument;
     private bool _closeConfirmed;
@@ -62,7 +64,12 @@ public sealed partial class MainWindow : Window
 
         settings ??= SettingsService.Load();
         var dialogs = new EditorDialogService(this);
-        _viewModel = new MainWindowViewModel(new DocumentFileService(), dialogs, settings);
+        _fileChangeMonitor = new ExternalFileChangeMonitor();
+        _viewModel = new MainWindowViewModel(
+            new DocumentFileService(),
+            dialogs,
+            settings,
+            fileChangeMonitor: _fileChangeMonitor);
         _options = _viewModel.Options;
         DataContext = _viewModel;
 
@@ -79,6 +86,7 @@ public sealed partial class MainWindow : Window
         _searchPanel = SearchPanel.Install(_editor);
         _ = new EditorInputMethod(_editor);
         _editor.TextArea.TextView.BackgroundRenderers.Add(new BookmarkRenderer(() => _boundDocument));
+        _bracketHighlighter = new BracketHighlighter(_editor);
         ApplyUiFontOptions();
         ApplyEditorOptions();
         ApplyTabHeight();
@@ -107,8 +115,11 @@ public sealed partial class MainWindow : Window
         ActualThemeVariantChanged += (_, _) => ApplySyntaxHighlighting();
         BindSelectedDocument();
 
+        _fileChangeMonitor.FileChanged += OnExternalFileChanged;
         Opened += OnOpened;
+        Activated += OnActivated;
         Closing += OnClosing;
+        Closed += OnClosed;
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
@@ -172,6 +183,26 @@ public sealed partial class MainWindow : Window
         }
 
         _editor.Focus();
+    }
+
+    private void OnActivated(object? sender, EventArgs args)
+        => _fileChangeMonitor.CheckForChanges();
+
+    private void OnExternalFileChanged(object? sender, ExternalFileChangedEventArgs args)
+        => Dispatcher.UIThread.Post(() => _ = ProcessExternalFileChangeAsync(args));
+
+    private async Task ProcessExternalFileChangeAsync(ExternalFileChangedEventArgs change)
+    {
+        if (await _viewModel.ProcessExternalFileChangeAsync(change.FullPath))
+        {
+            _fileChangeMonitor.Acknowledge(change);
+        }
+    }
+
+    private void OnClosed(object? sender, EventArgs args)
+    {
+        _fileChangeMonitor.FileChanged -= OnExternalFileChanged;
+        _fileChangeMonitor.Dispose();
     }
 
     /// <summary>別プロセスから転送されたファイルを開き、既存ウィンドウを前面へ戻す。</summary>
@@ -270,11 +301,17 @@ public sealed partial class MainWindow : Window
     /// 共通パレットへ割り当ててから、現在のテーマへ適用する。
     /// </summary>
     private void ApplySyntaxHighlighting()
-        => _editor.SyntaxHighlighting = _options.EnableSyntaxHighlighting
+    {
+        _editor.SyntaxHighlighting = _options.EnableSyntaxHighlighting
             ? SyntaxHighlightingService.Resolve(
                 _boundDocument?.FilePath,
                 ActualThemeVariant == ThemeVariant.Dark)
             : null;
+        _bracketHighlighter.Apply(_boundDocument?.FilePath, _options.EnableSyntaxHighlighting);
+        _editor.TextArea.IndentationStrategy = EditorIndentationService.Resolve(
+            _boundDocument?.FilePath,
+            _editor.Options);
+    }
 
     /// <summary>ウィンドウの継承フォントを変え、明示指定されたアイコンとエディタは各自の設定を保つ。</summary>
     private void ApplyUiFontOptions()
@@ -465,6 +502,7 @@ public sealed partial class MainWindow : Window
 
     private void OnEditorCaretPositionChanged(object? sender, EventArgs args)
     {
+        _bracketHighlighter.InvalidatePairHighlight();
         if (_syncingCaret || _boundDocument is null)
         {
             return;
@@ -851,7 +889,7 @@ public sealed partial class MainWindow : Window
             Key.End => Motion(ctrl ? MacroMotion.DocumentEnd : MacroMotion.LineEnd, shift),
             Key.Back => new MacroStep { Kind = MacroStepKind.DeleteBack },
             Key.Delete => new MacroStep { Kind = MacroStepKind.DeleteForward },
-            Key.Enter or Key.Return => new MacroStep { Kind = MacroStepKind.InsertText, Text = "\n" },
+            Key.Enter or Key.Return => new MacroStep { Kind = MacroStepKind.InsertNewLine },
 
             // Tab は、実際に文字が入るときだけ記録する。選択があるときは字下げ、
             // AcceptsTab が切れているときはフォーカス移動になり、文字は入らない。

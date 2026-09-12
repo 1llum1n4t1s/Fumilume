@@ -8,6 +8,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
+using AvaloniaEdit.Indentation.CSharp;
 using Fumilume.Models;
 using Fumilume.Services;
 using Fumilume.ViewModels;
@@ -272,6 +273,28 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     });
 
     [Fact]
+    public void TabRowsShowAPinActionAndPinnedState() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        Dispatcher.UIThread.RunJobs();
+
+        var document = scope.ViewModel.SelectedDocument!;
+        var pin = scope.Window.GetVisualDescendants()
+            .OfType<Button>()
+            .Single(button => button.Classes.Contains("tabpin"));
+
+        Assert.Same(document.TogglePinCommand, pin.Command);
+        Assert.True(pin.IsEffectivelyVisible);
+        Assert.Equal("タブをピン留め", ToolTip.GetTip(pin));
+
+        document.TogglePinCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Contains("pinned", pin.Classes);
+        Assert.Equal("ピン留めを解除", ToolTip.GetTip(pin));
+    });
+
+    [Fact]
     public void EditorOptionsFollowTheSettings() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
@@ -526,6 +549,98 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 
         Assert.NotEmpty(bindings);
         Assert.All(bindings, binding => Assert.IsType<EditorCommandId>(binding.CommandParameter));
+    });
+
+    [Fact]
+    public void CSharpEnterUsesStructuralIndentation() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        scope.ViewModel.Options.ConvertTabsToSpaces = true;
+        scope.ViewModel.Options.IndentationSize = 2;
+        var document = scope.ViewModel.SelectedDocument!;
+        document.Load(
+            @"C:\tmp\Sample.cs",
+            new TextDocumentContent("class Sample\n{", DocumentEncoding.Utf8, DocumentNewLines.Lf));
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        editor.CaretOffset = editor.Document.TextLength;
+        editor.Focus();
+        Dispatcher.UIThread.RunJobs();
+
+        editor.TextArea.PerformTextInput("\n");
+
+        Assert.Equal("class Sample\n{\n  ", document.Text);
+        Assert.IsType<CSharpIndentationStrategy>(editor.TextArea.IndentationStrategy);
+    });
+
+    [Fact]
+    public void JsonEnterUsesBracketDepthAndRefreshesAfterSettingsChange() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        scope.ViewModel.Options.ConvertTabsToSpaces = true;
+        scope.ViewModel.Options.IndentationSize = 2;
+        var document = scope.ViewModel.SelectedDocument!;
+        document.Load(
+            @"C:\tmp\data.json",
+            new TextDocumentContent("{\n  \"items\": [", DocumentEncoding.Utf8, DocumentNewLines.Lf));
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        editor.CaretOffset = editor.Document.TextLength;
+        editor.Focus();
+        Dispatcher.UIThread.RunJobs();
+
+        editor.TextArea.PerformTextInput("\n");
+
+        Assert.Equal("{\n  \"items\": [\n    ", document.Text);
+        Assert.IsType<JsonIndentationStrategy>(editor.TextArea.IndentationStrategy);
+    });
+
+    [Fact]
+    public void BracketPairRendererIsConnectedToTheLiveEditor() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.SelectedDocument!;
+        document.Load(
+            @"C:\tmp\Sample.cs",
+            new TextDocumentContent("{ value }", DocumentEncoding.Utf8, DocumentNewLines.Lf));
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        editor.CaretOffset = 1;
+        editor.Focus();
+        scope.Window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        var renderer = editor.TextArea.TextView.BackgroundRenderers
+            .Single(item => item.GetType().Name.Contains("BracketPairRenderer", StringComparison.Ordinal));
+        var drawing = new DrawingGroup();
+        using (var context = drawing.Open())
+        {
+            renderer.Draw(editor.TextArea.TextView, context);
+        }
+
+        Assert.NotEmpty(drawing.Children);
+        Assert.Contains(
+            editor.TextArea.TextView.LineTransformers,
+            item => item.GetType().Name.Contains("BracketColorizer", StringComparison.Ordinal));
+    });
+
+    [Fact]
+    public void EditingAnEarlierBracketRecolorsAlreadyVisibleFollowingLines() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        scope.Window.RequestedThemeVariant = ThemeVariant.Light;
+        var document = scope.ViewModel.SelectedDocument!;
+        document.Load(
+            @"C:\tmp\data.json",
+            new TextDocumentContent("[\n  (value)\n]", DocumentEncoding.Utf8, DocumentNewLines.Lf));
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        scope.Window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(Color.Parse("#4078F2"), ReadBracketColor(editor, document.Text.IndexOf('(')));
+
+        editor.Document.Insert(0, "{");
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+
+        Assert.Equal(Color.Parse("#C18401"), ReadBracketColor(editor, document.Text.IndexOf('(')));
     });
 
     [Fact]
@@ -914,15 +1029,22 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 
         var steps = scope.ViewModel.RecordedSteps;
 
-        // 打った文字と改行はひと続きなので 1 手へまとまる。改行が KeyDown と TextEntered の
-        // 両方から入ると "ab\n\nc" になり、ここで落ちる。
+        // 改行は構造インデントを伴う独立した操作。TextEntered からも重複記録されないことを確かめる。
         Assert.Equal(
-            [MacroStepKind.InsertText, MacroStepKind.MoveCaret, MacroStepKind.DeleteBack, MacroStepKind.MoveCaret],
+            [
+                MacroStepKind.InsertText,
+                MacroStepKind.InsertNewLine,
+                MacroStepKind.InsertText,
+                MacroStepKind.MoveCaret,
+                MacroStepKind.DeleteBack,
+                MacroStepKind.MoveCaret,
+            ],
             steps.Select(step => step.Kind));
-        Assert.Equal("ab\nc", steps[0].Text);
-        Assert.Equal(MacroMotion.CharacterLeft, steps[1].Motion);
-        Assert.True(steps[1].ExtendSelection);
-        Assert.Equal(MacroMotion.DocumentStart, steps[3].Motion);
+        Assert.Equal("ab", steps[0].Text);
+        Assert.Equal("c", steps[2].Text);
+        Assert.Equal(MacroMotion.CharacterLeft, steps[3].Motion);
+        Assert.True(steps[3].ExtendSelection);
+        Assert.Equal(MacroMotion.DocumentStart, steps[5].Motion);
     });
 
     /// <summary>記録した手を当て直すと、記録どおりの本文になる。</summary>
@@ -1064,6 +1186,17 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         using (var context = drawing.Open())
             layer.Render(context);
         return drawing;
+    }
+
+    private static Color ReadBracketColor(TextEditor editor, int offset)
+    {
+        var line = editor.Document.GetLineByOffset(offset);
+        var visualLine = editor.TextArea.TextView.GetOrConstructVisualLine(line);
+        var relativeOffset = offset - visualLine.FirstDocumentLine.Offset;
+        var element = Assert.Single(visualLine.Elements, item =>
+            item.RelativeTextOffset <= relativeOffset
+            && relativeOffset < item.RelativeTextOffset + item.DocumentLength);
+        return Assert.IsAssignableFrom<ISolidColorBrush>(element.TextRunProperties.ForegroundBrush).Color;
     }
 
     private static void TypeInto(TextEditor editor, string text)

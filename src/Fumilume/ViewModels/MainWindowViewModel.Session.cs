@@ -16,9 +16,32 @@ public sealed partial class MainWindowViewModel
     private int _sessionBuffersLost;
 
     /// <summary>
+    /// 初回復元でまだ処理していないタブ。復元途中の同期終了では現在のタブへ足し、前回の一覧を欠落させない。
+    /// </summary>
+    private readonly List<SessionTabState> _pendingSessionTabs = [];
+
+    /// <summary>
     /// 復元を完了できなかった未保存タブ。終了時の再保存へ混ぜ、前回の控えを次回も参照できるようにする。
     /// </summary>
     private readonly List<SessionTabState> _unrestoredSessionTabs = [];
+
+    /// <summary>前回終了時に選ばれていたタブ。復元途中の同期保存でも選択位置を保つ。</summary>
+    private SessionTabState? _sessionSelectedTabState;
+
+    /// <summary>前回選択タブを復元済みだが、復元処理全体はまだ終わっていない場合の選択候補。</summary>
+    private WorkspaceTabViewModel? _restoredSessionSelectedTab;
+
+    /// <summary>復元内容が揃うまでだけ残す、起動直後の空文書。</summary>
+    private DocumentViewModel? _sessionRestorePlaceholder;
+
+    /// <summary>文書の初回復元が終わるまで保持する、前回の設定タブの開閉状態。</summary>
+    private bool _pendingSettingsTabOpen;
+
+    /// <summary>存在するセッション一覧を読めなかったため、既存の一覧と控えを上書きしてはいけない状態。</summary>
+    private bool _sessionLoadFailed;
+
+    /// <summary>回復用スナップショットを全件回収できず、合流・清掃を延期している状態。</summary>
+    private bool _sessionRecoveryDeferred;
 
     /// <summary>前回終了時のタブを戻す。1 枚も戻せなければ何もしない（起動直後の空文書が残る）。</summary>
     private async Task RestoreSessionAsync(SessionState session)
@@ -42,28 +65,36 @@ public sealed partial class MainWindowViewModel
         }
 
         _sessionBuffersLost = 0;
+        _pendingSessionTabs.Clear();
+        _pendingSessionTabs.AddRange(session.Tabs);
         _unrestoredSessionTabs.Clear();
-        _unrestoredSessionTabs.AddRange(session.Tabs.Where(tab => tab.IsModified));
+        _sessionSelectedTabState = session.SelectedTabIndex >= 0 && session.SelectedTabIndex < session.Tabs.Count
+            ? session.Tabs[session.SelectedTabIndex]
+            : null;
+        _restoredSessionSelectedTab = null;
 
         // コンストラクタが用意した空文書。復元できたぶんがあれば要らなくなる。
         var initial = Tabs.OfType<DocumentViewModel>().FirstOrDefault();
+        _sessionRestorePlaceholder = initial;
 
         WorkspaceTabViewModel? selected = null;
         for (var index = 0; index < session.Tabs.Count; index++)
         {
             var state = session.Tabs[index];
             var restored = await RestoreTabAsync(state);
+            _pendingSessionTabs.Remove(state);
             if (restored is null)
             {
                 if (state.IsModified)
                 {
                     _sessionBuffersLost++;
+                    _unrestoredSessionTabs.Add(state);
                 }
 
                 continue;
             }
 
-            _unrestoredSessionTabs.Remove(state);
+            restored.IsPinned = state.IsPinned;
 
             if (!Tabs.Contains(restored))
             {
@@ -72,6 +103,7 @@ public sealed partial class MainWindowViewModel
             if (index == session.SelectedTabIndex)
             {
                 selected = restored;
+                _restoredSessionSelectedTab = restored;
             }
         }
 
@@ -81,6 +113,7 @@ public sealed partial class MainWindowViewModel
             if (initial is not null && IsPristine(initial))
             {
                 DetachDocument(initial);
+                initial.PinStateChanged -= OnTabPinStateChanged;
                 Tabs.Remove(initial);
             }
 
@@ -96,12 +129,13 @@ public sealed partial class MainWindowViewModel
         // 控えを失ったときは、1 枚も戻せなかった場合でも黙って空の画面を出さない。
         if (_sessionBuffersLost > 0)
         {
-            StatusMessage = $"未保存の内容を {_sessionBuffersLost:N0} 件復元できませんでした（残存する控えは保持しています）";
+            StatusMessage = $"未保存の内容を {_sessionBuffersLost:N0} 件復元できませんでした";
         }
         else if (restoredTabs.Length > 0)
         {
             StatusMessage = $"前回のタブを {restoredTabs.Length:N0} 件復元しました";
         }
+
     }
 
     private async Task<WorkspaceTabViewModel?> RestoreTabAsync(SessionTabState state)
@@ -155,12 +189,13 @@ public sealed partial class MainWindowViewModel
         else if (state.IsModified)
         {
             // 未保存だったのに控えが読めない（外部から消された・読み取りに失敗した）。
-            // 控え自体が無ければ再試行しても戻らないため、保存済みファイルだけはディスクから開き直す。
+            // 一時的な読込失敗なら参照を残して次回再試行し、実在しない場合だけディスクへ戻す。
             AppLogger.For<MainWindowViewModel>().Warn(
                 $"未保存の内容を復元できませんでした: {state.FilePath ?? state.UntitledName}");
-            if (state.FilePath is not { } lostPath ||
+            if (state.BufferReadStatus == SessionBufferReadStatus.Unavailable ||
+                state.FilePath is not { } lostPath ||
                 !File.Exists(lostPath) ||
-                !await ConfirmLargeFileAsync(lostPath))
+                !await ConfirmLargeFileAsync(lostPath, requireTextReader: true))
             {
                 return null;
             }
@@ -171,7 +206,7 @@ public sealed partial class MainWindowViewModel
         else if (state.FilePath is { } path)
         {
             // 未保存の変更が無いタブはディスクが正本。消えていればタブごと諦める。
-            if (!File.Exists(path) || !await ConfirmLargeFileAsync(path))
+            if (!File.Exists(path) || !await ConfirmLargeFileAsync(path, requireTextReader: true))
             {
                 return null;
             }
@@ -247,16 +282,18 @@ public sealed partial class MainWindowViewModel
     /// <summary>今のワークスペースを控えの形にする。未保存の本文はここでだけ持ち出す。</summary>
     internal SessionState CaptureSession()
     {
-        var session = new SessionState { SettingsTabOpen = SettingsTab is not null };
+        var session = new SessionState { SettingsTabOpen = SettingsTab is not null || _pendingSettingsTabOpen };
+        var selectedTabCaptured = false;
+        var restoredSelectionIndex = -1;
 
         foreach (var tab in Tabs)
         {
             // 復元が全部失敗したときにコンストラクタが残した空文書は、前回タブの代用品にすぎない。
             // 失敗したタブと一緒に保存すると次回起動で空タブが増えるため、控えからは外す。
-            if (_unrestoredSessionTabs.Count > 0 &&
+            if ((_pendingSessionTabs.Count > 0 || _unrestoredSessionTabs.Count > 0) &&
+                ReferenceEquals(tab, _sessionRestorePlaceholder) &&
                 tab is DocumentViewModel placeholder &&
-                IsPristine(placeholder) &&
-                Tabs.OfType<DocumentViewModel>().Count() == 1)
+                IsPristine(placeholder))
             {
                 continue;
             }
@@ -276,15 +313,43 @@ public sealed partial class MainWindowViewModel
             if (ReferenceEquals(tab, SelectedTab))
             {
                 session.SelectedTabIndex = session.Tabs.Count;
+                selectedTabCaptured = true;
+            }
+            else if (ReferenceEquals(tab, _restoredSessionSelectedTab))
+            {
+                restoredSelectionIndex = session.Tabs.Count;
             }
 
             session.Tabs.Add(captured);
         }
 
+        // 復元途中で同期終了しても、まだ処理していない前回タブを一覧から落とさない。
+        foreach (var tab in _pendingSessionTabs)
+        {
+            if (!selectedTabCaptured && ReferenceEquals(tab, _sessionSelectedTabState))
+            {
+                session.SelectedTabIndex = session.Tabs.Count;
+                selectedTabCaptured = true;
+            }
+
+            session.Tabs.Add(CloneSessionTab(tab));
+        }
+
         // 1 枚の復元失敗や、復元処理全体の例外が起きても、未保存の控えを一覧から落とさない。
         foreach (var tab in _unrestoredSessionTabs)
         {
+            if (!selectedTabCaptured && ReferenceEquals(tab, _sessionSelectedTabState))
+            {
+                session.SelectedTabIndex = session.Tabs.Count;
+                selectedTabCaptured = true;
+            }
+
             session.Tabs.Add(CloneSessionTab(tab));
+        }
+
+        if (!selectedTabCaptured && restoredSelectionIndex >= 0)
+        {
+            session.SelectedTabIndex = restoredSelectionIndex;
         }
 
         return session;
@@ -307,6 +372,7 @@ public sealed partial class MainWindowViewModel
         PdfPage = tab.PdfPage,
         PdfZoom = tab.PdfZoom,
         PdfZoomMode = tab.PdfZoomMode,
+        IsPinned = tab.IsPinned,
         Text = tab.Text,
     };
 
@@ -322,6 +388,7 @@ public sealed partial class MainWindowViewModel
         SelectionStart = document.SelectionStart,
         SelectionLength = document.SelectionLength,
         IsMarkdownPreview = document.IsMarkdownPreview,
+        IsPinned = document.IsPinned,
         Bookmarks = document.HasBookmarks ? [.. document.Bookmarks.Lines] : [],
         // 本文を控えるのは未保存のときだけ。保存済みで変更が無ければディスクが正本。
         Text = document.IsModified ? document.Text : null,
@@ -334,6 +401,7 @@ public sealed partial class MainWindowViewModel
         PdfPage = pdf.CurrentPage,
         PdfZoom = pdf.Zoom,
         PdfZoomMode = pdf.ZoomMode.ToString(),
+        IsPinned = pdf.IsPinned,
     };
 
     private static DocumentEncoding ParseEncoding(string value)

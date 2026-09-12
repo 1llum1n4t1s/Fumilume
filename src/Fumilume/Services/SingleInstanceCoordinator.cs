@@ -80,7 +80,8 @@ internal sealed class SingleInstanceCoordinator : IDisposable
     /// <summary>後続プロセスの起動引数を最初のプロセスへ転送する。</summary>
     public async Task<bool> ForwardArgumentsAsync(
         IEnumerable<string> arguments,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int connectionTimeoutMilliseconds = 3000)
     {
         if (IsPrimary)
         {
@@ -94,7 +95,7 @@ internal sealed class SingleInstanceCoordinator : IDisposable
                 _pipeName,
                 PipeDirection.Out,
                 PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-            await pipe.ConnectAsync(3000, cancellationToken);
+            await pipe.ConnectAsync(connectionTimeoutMilliseconds, cancellationToken);
 
             await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true);
             foreach (var argument in arguments)

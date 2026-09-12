@@ -34,6 +34,60 @@ public sealed class WorkspaceTabTests
     }
 
     [Fact]
+    public void PinnedTabsFormAStableGroupBeforeSettings()
+    {
+        var viewModel = CreateViewModel();
+
+        var first = viewModel.SelectedDocument!;
+        viewModel.NewDocumentCommand.Execute(null);
+        var second = viewModel.SelectedDocument!;
+        viewModel.NewDocumentCommand.Execute(null);
+        var third = viewModel.SelectedDocument!;
+        viewModel.OpenSettingsCommand.Execute(null);
+
+        third.TogglePinCommand.Execute(null);
+        second.TogglePinCommand.Execute(null);
+
+        Assert.Equal([third, second, first], viewModel.Tabs.Where(tab => !tab.IsSettingsTab));
+        Assert.All(viewModel.Tabs.Take(2), tab => Assert.True(tab.IsPinned));
+        Assert.True(viewModel.Tabs[^1].IsSettingsTab);
+
+        third.TogglePinCommand.Execute(null);
+
+        Assert.Equal([second, third, first], viewModel.Tabs.Where(tab => !tab.IsSettingsTab));
+        Assert.True(second.IsPinned);
+        Assert.False(third.IsPinned);
+        Assert.Equal("タブをピン留め", third.PinTooltip);
+        Assert.Contains("ピン留めを解除", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public void SettingsCannotBePinned()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.OpenSettingsCommand.Execute(null);
+        var settings = Assert.IsType<SettingsTabViewModel>(viewModel.SettingsTab);
+
+        Assert.False(settings.CanPin);
+        Assert.False(settings.TogglePinCommand.CanExecute(null));
+        Assert.False(settings.IsPinned);
+    }
+
+    [Fact]
+    public async Task PinnedEmptyDocumentIsNotDiscardedWhenFileOpens()
+    {
+        var viewModel = CreateViewModel();
+        var pinned = viewModel.SelectedDocument!;
+        pinned.TogglePinCommand.Execute(null);
+
+        await viewModel.OpenPathsAsync([Path.Combine(Path.GetTempPath(), "Fumilume", "opened.txt")]);
+
+        Assert.Contains(pinned, viewModel.Documents);
+        Assert.True(pinned.IsPinned);
+        Assert.Equal(2, viewModel.Documents.Count());
+    }
+
+    [Fact]
     public async Task ClosingSettingsTabKeepsDocumentsOpen()
     {
         var viewModel = CreateViewModel();

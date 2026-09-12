@@ -74,7 +74,7 @@
 
         <Grid x:Name="WorkspaceGrid" RowDefinitions="32,*">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240" MinWidth="176" MaxWidth="480" />
+                <ColumnDefinition Width="240" MinWidth="120" MaxWidth="480" />
                 <ColumnDefinition Width="4" />
                 <ColumnDefinition Width="*" MinWidth="480" />
             </Grid.ColumnDefinitions>
@@ -159,14 +159,20 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
                                 <Grid Height="{DynamicResource TabItemHeight}"
-                                      ColumnDefinitions="32,*,36" Background="Transparent">
+                                      ColumnDefinitions="26,*,26,26" Background="Transparent">
                                     <TextBlock Grid.Column="0" Classes="icon" Text="{Binding TabGlyph}"
                                                HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
                                     <TextBlock Grid.Column="1" Text="{Binding TabTitle}" FontSize="12.5"
                                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                                Foreground="{DynamicResource TextPrimary}"
                                                ToolTip.Tip="{Binding TabTooltip}" />
-                                    <Button Grid.Column="2" Classes="tabclose" Command="{Binding CloseTabCommand}"
+                                    <Button Grid.Column="2" Classes="tabpin" Classes.pinned="{Binding IsPinned}"
+                                            Command="{Binding TogglePinCommand}" IsVisible="{Binding CanPin}"
+                                            Content="{Binding PinGlyph}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                                            AutomationProperties.Name="{Binding PinTooltip}"
+                                            ToolTip.Tip="{Binding PinTooltip}" />
+                                    <Button Grid.Column="3" Classes="tabclose" Command="{Binding CloseTabCommand}"
                                             HorizontalAlignment="Center" VerticalAlignment="Center"
                                             AutomationProperties.Name="タブを閉じる">
                                         <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />

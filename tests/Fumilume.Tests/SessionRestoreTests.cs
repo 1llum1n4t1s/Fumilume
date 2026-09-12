@@ -142,6 +142,39 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
     }
 
     [Fact]
+    public void ExternallyDeletedDocumentSurvivesTheNextStartAsUnsavedText() => fixture.Run(() =>
+        SingleThreadedAsync.Run(async () =>
+    {
+        using var storage = new TemporaryStorage();
+        var path = Path.Combine(storage.Path, "deleted-externally.txt");
+        await File.WriteAllTextAsync(
+            path,
+            "only remaining copy",
+            TestContext.Current.CancellationToken);
+        var first = new MainWindowViewModel(
+            new DocumentFileService(),
+            new StubDialogService(),
+            new AppSettings());
+        await first.InitializeAsync([path]);
+        File.Delete(path);
+
+        Assert.True(await first.ProcessExternalFileChangeAsync(path));
+        Assert.True(first.SelectedDocument!.IsModified);
+        Assert.True(await first.PersistSessionStateAsync());
+
+        var second = new MainWindowViewModel(
+            new DocumentFileService(),
+            new StubDialogService(),
+            new AppSettings());
+        await second.InitializeAsync([]);
+
+        var restored = Assert.Single(second.Documents);
+        Assert.Equal("only remaining copy", restored.Text);
+        Assert.Equal(path, restored.FilePath, ignoreCase: true);
+        Assert.True(restored.IsModified);
+    }));
+
+    [Fact]
     public async Task ClosingIsNotBlockedByUnsavedDocumentsWhileRestoreIsOn()
     {
         using var storage = new TemporaryStorage();
@@ -220,6 +253,7 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
 
         var first = CreateViewModel("消える予定");
         await first.InitializeAsync([path]);
+        first.OpenSettingsCommand.Execute(null);
         await first.PersistSessionStateAsync();
         File.Delete(path);
 
@@ -229,6 +263,7 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
         var remaining = Assert.Single(second.Documents);
         Assert.Null(remaining.FilePath);
         Assert.Equal(string.Empty, remaining.Text);
+        Assert.NotNull(second.SettingsTab);
     }
 
     [Fact]
@@ -256,6 +291,50 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
         // 復元した「無題 2」と同じ名前を次の新規文書へ振らない。
         second.NewDocumentCommand.Execute(null);
         Assert.Equal("無題 3", second.SelectedDocument!.DisplayName);
+    }
+
+    [Fact]
+    public async Task PinnedTabsAndTheirOrderComeBackFromTheSession()
+    {
+        using var storage = new TemporaryStorage();
+
+        var first = CreateViewModel();
+        await first.InitializeAsync([]);
+        first.SelectedDocument!.Text = "通常";
+        first.NewDocumentCommand.Execute(null);
+        var pinnedFirst = first.SelectedDocument!;
+        pinnedFirst.Text = "固定 1";
+        pinnedFirst.TogglePinCommand.Execute(null);
+        first.NewDocumentCommand.Execute(null);
+        var pinnedSecond = first.SelectedDocument!;
+        pinnedSecond.Text = "固定 2";
+        pinnedSecond.TogglePinCommand.Execute(null);
+        first.SelectedTab = pinnedSecond;
+
+        await first.PersistSessionStateAsync();
+
+        var stored = SessionStateService.Load();
+        Assert.Equal([true, true, false], stored.Tabs.Select(tab => tab.IsPinned));
+
+        var restored = CreateViewModel();
+        await restored.InitializeAsync([]);
+
+        Assert.Equal(["固定 1", "固定 2", "通常"], restored.Documents.Select(tab => tab.Text));
+        Assert.Equal([true, true, false], restored.Documents.Select(tab => tab.IsPinned));
+        Assert.Equal("固定 2", restored.SelectedDocument!.Text);
+    }
+
+    [Fact]
+    public void SessionsWrittenBeforePinningWasAddedLoadAsUnpinned()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "session.json"),
+            """{"Tabs":[{"Kind":"Document","UntitledName":"無題"}]}""");
+
+        var tab = Assert.Single(SessionStateService.Load().Tabs);
+
+        Assert.False(tab.IsPinned);
     }
 
     [Fact]
@@ -348,6 +427,151 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
         Assert.Equal(-1, session.SelectedTabIndex);
     }
 
+    [Theory]
+    [InlineData("{ これは JSON ではない")]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("{\"Tabs\":null}")]
+    [InlineData("{\"Tabs\":[{\"IsModified\":true,\"BufferFile\":\"tab-\\u0000.txt\"}]}")]
+    public async Task AnUnreadableSessionFileAndItsBuffersAreNotOverwrittenOnClose(string unreadableJson)
+    {
+        using var storage = new TemporaryStorage();
+        Assert.True(SessionStateService.Save(SingleTabSession("一覧が壊れても残す内容")));
+        var bufferPath = Assert.Single(Directory.GetFiles(Path.Combine(storage.Path, "session")));
+        var sessionPath = Path.Combine(storage.Path, "session.json");
+        File.WriteAllText(sessionPath, unreadableJson);
+
+        var viewModel = CreateViewModel();
+        await viewModel.InitializeAsync([]);
+
+        Assert.Contains("既存の控えは保護しています", viewModel.StatusMessage);
+        Assert.True(await viewModel.PersistSessionStateAsync());
+        Assert.Equal(unreadableJson, File.ReadAllText(sessionPath));
+        Assert.True(File.Exists(bufferPath));
+    }
+
+    [Fact]
+    public async Task NewEditsUseARecoverySessionWhenThePrimarySessionIsUnreadable()
+    {
+        using var storage = new TemporaryStorage();
+        Assert.True(SessionStateService.Save(SingleTabSession("主一覧から参照されていた内容")));
+        var originalBuffer = Assert.Single(Directory.GetFiles(Path.Combine(storage.Path, "session")));
+        var sessionPath = Path.Combine(storage.Path, "session.json");
+        const string corruptJson = "{ これは JSON ではない";
+        File.WriteAllText(sessionPath, corruptJson);
+
+        var second = CreateViewModel();
+        await second.InitializeAsync([]);
+        second.SelectedDocument!.Text = "一覧破損後の新しい編集";
+
+        Assert.True(second.PersistSessionStateForShutdown());
+        Assert.Equal(corruptJson, File.ReadAllText(sessionPath));
+        Assert.True(File.Exists(originalBuffer));
+
+        var third = CreateViewModel();
+        await third.InitializeAsync([]);
+
+        var recovered = Assert.Single(third.Documents);
+        Assert.Equal("一覧破損後の新しい編集", recovered.Text);
+        Assert.True(recovered.IsModified);
+
+        // 主一覧が取り除かれた次の起動では回復一覧を通常セッションへ昇格し、専用の控えを片付ける。
+        File.Delete(sessionPath);
+        var fourth = CreateViewModel();
+        await fourth.InitializeAsync([]);
+        Assert.Equal("一覧破損後の新しい編集", Assert.Single(fourth.Documents).Text);
+        Assert.True(await fourth.PersistSessionStateAsync());
+        Assert.True(File.Exists(sessionPath));
+        Assert.False(Directory.Exists(Path.Combine(storage.Path, "session-recovery")));
+    }
+
+    [Fact]
+    public async Task RecoveryIsMergedAfterATemporarilyUnreadablePrimaryBecomesReadable()
+    {
+        using var storage = new TemporaryStorage();
+        Assert.True(SessionStateService.Save(SingleTabSession("主一覧に残っていた内容")));
+        var sessionPath = Path.Combine(storage.Path, "session.json");
+
+        await using (var locked = new FileStream(sessionPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var second = CreateViewModel();
+            await second.InitializeAsync([]);
+            second.SelectedDocument!.Text = "ロック中に書いた内容";
+            Assert.True(second.PersistSessionStateForShutdown());
+        }
+
+        var third = CreateViewModel();
+        await third.InitializeAsync([]);
+
+        Assert.Contains(third.Documents, document => document.Text == "主一覧に残っていた内容");
+        Assert.Contains(third.Documents, document => document.Text == "ロック中に書いた内容");
+        Assert.True(await third.PersistSessionStateAsync());
+        Assert.False(Directory.Exists(Path.Combine(storage.Path, "session-recovery")));
+    }
+
+    [Fact]
+    public async Task AnUnreadableRecoverySnapshotIsNotOverwritten()
+    {
+        using var storage = new TemporaryStorage();
+        Assert.True(SessionStateService.Save(SingleTabSession("主一覧に残っていた内容")));
+        var sessionPath = Path.Combine(storage.Path, "session.json");
+        File.WriteAllText(sessionPath, "{ 壊れた主一覧");
+
+        var second = CreateViewModel();
+        await second.InitializeAsync([]);
+        second.SelectedDocument!.Text = "最初の回復内容";
+        Assert.True(second.PersistSessionStateForShutdown());
+
+        var recoveryRoot = Path.Combine(storage.Path, "session-recovery");
+        var firstSnapshot = Assert.Single(Directory.GetDirectories(recoveryRoot, "snapshot-*"));
+        var firstBuffer = Assert.Single(Directory.GetFiles(firstSnapshot, "tab-*.txt"));
+        var recoveryManifest = Path.Combine(firstSnapshot, "session.json");
+        const string corruptRecovery = "{ 壊れた回復一覧";
+        File.WriteAllText(recoveryManifest, corruptRecovery);
+
+        var third = CreateViewModel();
+        await third.InitializeAsync([]);
+        third.SelectedDocument!.Text = "回復一覧が壊れた後の編集";
+        Assert.True(third.PersistSessionStateForShutdown());
+
+        Assert.Equal(corruptRecovery, File.ReadAllText(recoveryManifest));
+        Assert.True(File.Exists(firstBuffer));
+        Assert.Equal(2, Directory.GetDirectories(recoveryRoot, "snapshot-*").Length);
+    }
+
+    [Fact]
+    public async Task PromotionWaitsWhileARecoveryBufferIsTemporarilyUnreadable()
+    {
+        using var storage = new TemporaryStorage();
+        var sessionPath = Path.Combine(storage.Path, "session.json");
+        File.WriteAllText(sessionPath, "{ 壊れた主一覧");
+
+        var first = CreateViewModel();
+        await first.InitializeAsync([]);
+        first.SelectedDocument!.Text = "一時的に読めない回復内容";
+        Assert.True(first.PersistSessionStateForShutdown());
+        File.Delete(sessionPath);
+
+        var recoveryRoot = Path.Combine(storage.Path, "session-recovery");
+        var snapshot = Assert.Single(Directory.GetDirectories(recoveryRoot, "snapshot-*"));
+        var buffer = Assert.Single(Directory.GetFiles(snapshot, "tab-*.txt"));
+        await using (var locked = new FileStream(buffer, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var second = CreateViewModel();
+            await second.InitializeAsync([]);
+            Assert.Contains("回復用セッションを一時的に読み込めませんでした", second.StatusMessage);
+            Assert.True(await second.PersistSessionStateAsync());
+            Assert.True(Directory.Exists(recoveryRoot));
+            Assert.True(File.Exists(buffer));
+        }
+
+        var third = CreateViewModel();
+        await third.InitializeAsync([]);
+        Assert.Contains(third.Documents, document => document.Text == "一時的に読めない回復内容");
+        Assert.True(await third.PersistSessionStateAsync());
+        Assert.False(Directory.Exists(recoveryRoot));
+    }
+
     [Fact]
     public async Task TheSessionIsNotRewrittenWhileTheRestoreIsStillRunning()
     {
@@ -381,6 +605,92 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
         Assert.Equal(2, third.Documents.Count());
         Assert.Contains(third.Documents, document => document.Text == "もう 1 枚の書きかけ");
     }
+
+    [Fact]
+    public void SynchronousShutdownDuringRestoreLeavesThePreviousSessionUntouched() => fixture.Run(() =>
+        SingleThreadedAsync.Run(async () =>
+    {
+        using var storage = new TemporaryStorage();
+        var firstPath = Path.Combine(storage.Path, "first.txt");
+        var secondPath = Path.Combine(storage.Path, "second.txt");
+        File.WriteAllText(firstPath, "first");
+        File.WriteAllText(secondPath, "second");
+        Assert.True(SessionStateService.Save(new SessionState
+        {
+            Tabs =
+            [
+                new SessionTabState { FilePath = firstPath },
+                new SessionTabState { FilePath = secondPath },
+            ],
+            SelectedTabIndex = 1,
+            SettingsTabOpen = true,
+        }));
+        var readGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var files = new FakeFileService { ReadText = "disk", ReadGate = readGate.Task };
+        var viewModel = new MainWindowViewModel(files, new StubDialogService(), new AppSettings());
+        var initialization = viewModel.InitializeAsync([]);
+        SessionState preserved;
+
+        try
+        {
+            Assert.Equal(1, files.Reads);
+            Assert.True(viewModel.PersistSessionStateForShutdown());
+            preserved = SessionStateService.Load();
+        }
+        finally
+        {
+            readGate.TrySetResult();
+            await initialization;
+        }
+
+        Assert.Equal([firstPath, secondPath], preserved.Tabs.Select(tab => tab.FilePath));
+        Assert.Equal(1, preserved.SelectedTabIndex);
+        Assert.True(preserved.SettingsTabOpen);
+    }));
+
+    [Fact]
+    public void SynchronousShutdownDuringRestoreKeepsNewEditsAndPendingTabs() => fixture.Run(() =>
+        SingleThreadedAsync.Run(async () =>
+    {
+        using var storage = new TemporaryStorage();
+        var firstPath = Path.Combine(storage.Path, "first.txt");
+        var secondPath = Path.Combine(storage.Path, "second.txt");
+        File.WriteAllText(firstPath, "first");
+        File.WriteAllText(secondPath, "second");
+        Assert.True(SessionStateService.Save(new SessionState
+        {
+            Tabs =
+            [
+                new SessionTabState { FilePath = firstPath },
+                new SessionTabState { FilePath = secondPath },
+            ],
+            SelectedTabIndex = 1,
+        }));
+        var readGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var files = new FakeFileService { ReadText = "disk", ReadGate = readGate.Task };
+        var viewModel = new MainWindowViewModel(files, new StubDialogService(), new AppSettings());
+        var initialization = viewModel.InitializeAsync([]);
+        SessionState stored;
+
+        try
+        {
+            Assert.Equal(1, files.Reads);
+            viewModel.SelectedDocument!.Text = "復元を待つ間の新しい編集";
+
+            Assert.True(viewModel.PersistSessionStateForShutdown());
+            stored = SessionStateService.Load();
+        }
+        finally
+        {
+            readGate.TrySetResult();
+            await initialization;
+        }
+
+        Assert.Equal(3, stored.Tabs.Count);
+        Assert.Contains(stored.Tabs, tab => tab.Text == "復元を待つ間の新しい編集");
+        Assert.Equal([firstPath, secondPath], stored.Tabs.Where(tab => tab.FilePath is not null).Select(tab => tab.FilePath));
+        Assert.Equal(0, stored.SelectedTabIndex);
+    }));
 
     [Fact]
     public async Task PersistBeforeInitializationLeavesThePreviousSessionUntouched()
@@ -431,7 +741,7 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
 
         var viewModel = CreateViewModel();
         await viewModel.InitializeAsync([]);
-        Assert.Contains("残存する控えは保持しています", viewModel.StatusMessage);
+        Assert.Contains("復元できませんでした", viewModel.StatusMessage);
 
         Assert.True(await viewModel.PersistSessionStateAsync());
         var savedAgain = SessionStateService.Load();
@@ -474,8 +784,9 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
     public async Task ClosingIsRefusedWhenTheUnsavedContentCannotBeStored()
     {
         using var storage = new TemporaryStorage();
-        // session.json と同じ名前のディレクトリを置いて、一覧の書き込みだけを失敗させる。
+        // 主一覧と回復一覧の両方を書けない状態にして、未保存本文を預けられない場合を再現する。
         Directory.CreateDirectory(Path.Combine(storage.Path, "session.json"));
+        File.WriteAllText(Path.Combine(storage.Path, "session-recovery"), "回復領域を作れないようにする");
 
         var dialogs = new StubDialogService();
         var viewModel = new MainWindowViewModel(new FakeFileService(), dialogs, new AppSettings());
@@ -491,6 +802,7 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
     {
         using var storage = new TemporaryStorage();
         Directory.CreateDirectory(Path.Combine(storage.Path, "session.json"));
+        File.WriteAllText(Path.Combine(storage.Path, "session-recovery"), "回復領域を作れないようにする");
 
         var dialogs = new StubDialogService();
         var viewModel = new MainWindowViewModel(new FakeFileService(), dialogs, new AppSettings());
@@ -557,6 +869,46 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
         Assert.Equal("ディスクの内容", restored.Text);
         Assert.False(restored.IsModified);
         Assert.Contains("復元できませんでした", second.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ATemporarilyUnreadableUnsavedBufferIsRetriedOnTheNextStart()
+    {
+        using var storage = new TemporaryStorage();
+        var path = Path.Combine(storage.Path, "note.txt");
+        File.WriteAllText(path, "ディスクの内容");
+        var state = new SessionState
+        {
+            Tabs =
+            [
+                new SessionTabState
+                {
+                    FilePath = path,
+                    IsModified = true,
+                    Text = "一時的に読めない書きかけ",
+                },
+            ],
+            SelectedTabIndex = 0,
+        };
+        Assert.True(SessionStateService.Save(state));
+        var bufferPath = Path.Combine(storage.Path, "session", Assert.IsType<string>(state.Tabs[0].BufferFile));
+
+        await using (var locked = new FileStream(bufferPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var second = CreateViewModel("ディスクの内容");
+            await second.InitializeAsync([]);
+            Assert.Contains("復元できませんでした", second.StatusMessage);
+
+            Assert.True(await second.PersistSessionStateAsync());
+            Assert.True(File.Exists(bufferPath));
+        }
+
+        var third = CreateViewModel("ディスクの内容");
+        await third.InitializeAsync([]);
+
+        var restored = Assert.Single(third.Documents);
+        Assert.Equal("一時的に読めない書きかけ", restored.Text);
+        Assert.True(restored.IsModified);
     }
 
     [Fact]

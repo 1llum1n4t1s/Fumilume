@@ -127,6 +127,20 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public void LargeFileThresholdIsClampedBelowTheTextReaderLimitOnLoad()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "settings.json"),
+            """{"LargeFileThresholdMegabytes":4096}""");
+
+        var loaded = SettingsService.Load();
+
+        Assert.Equal(2047, AppSettingsDefaults.MaximumLargeFileThresholdMegabytes);
+        Assert.Equal(AppSettingsDefaults.MaximumLargeFileThresholdMegabytes, loaded.LargeFileThresholdMegabytes);
+    }
+
+    [Fact]
     public void SidePanelWidthIsClampedToTheSmallerMinimumOnLoad()
     {
         using var storage = new TemporaryStorage();
@@ -136,7 +150,7 @@ public sealed class SettingsServiceTests
 
         var loaded = SettingsService.Load();
 
-        Assert.Equal(176, AppSettingsDefaults.MinimumSidePanelWidth);
+        Assert.Equal(120, AppSettingsDefaults.MinimumSidePanelWidth);
         Assert.Equal(AppSettingsDefaults.MinimumSidePanelWidth, loaded.SidePanelWidth);
     }
 
