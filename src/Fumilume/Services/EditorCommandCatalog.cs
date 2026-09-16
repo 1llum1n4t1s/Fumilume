@@ -60,6 +60,8 @@ public enum EditorCommandId
     BookmarkPrevious,
     BookmarkClear,
     BookmarkPattern,
+    AppendCsvRow,
+    AppendCsvColumn,
 }
 
 /// <summary>コマンド 1 件の定義。メニューとコマンドパレットはこれを読んで並べる。</summary>
@@ -136,6 +138,8 @@ public static class EditorCommandCatalog
         new(EditorCommandId.InsertTime, InsertCategory, "時刻を挿入"),
         new(EditorCommandId.InsertFileName, InsertCategory, "ファイル名を挿入"),
         new(EditorCommandId.InsertFilePath, InsertCategory, "フルパスを挿入"),
+        new(EditorCommandId.AppendCsvRow, InsertCategory, "CSV の末尾に行を追加"),
+        new(EditorCommandId.AppendCsvColumn, InsertCategory, "CSV の末尾に列を追加"),
 
         new(EditorCommandId.GoToLine, JumpCategory, "指定行へ移動", "Ctrl+G"),
         new(EditorCommandId.GoToMatchingBracket, JumpCategory, "対括弧の検索", "Ctrl+OemCloseBrackets"),

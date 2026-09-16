@@ -49,11 +49,11 @@ public sealed class MarkdownDocumentParserTests
     {
         var document = new Fumilume.ViewModels.DocumentViewModel("無題", _ => Task.CompletedTask);
 
-        document.ToggleMarkdownPreview();
+        document.TogglePreview();
         Assert.False(document.IsMarkdownPreview);
 
         document.MarkSaved(@"C:\tmp\readme.md");
-        document.ToggleMarkdownPreview();
+        document.TogglePreview();
 
         Assert.True(document.IsMarkdown);
         Assert.True(document.IsMarkdownPreview);

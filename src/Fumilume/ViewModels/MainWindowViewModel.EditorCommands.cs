@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fumilume.Services;
@@ -118,9 +119,9 @@ public sealed partial class MainWindowViewModel
 
         yield return Entry(SearchCategory, "フォルダから探す", "Ctrl+Shift+F", () => GrepAsync());
 
-        if (CanToggleMarkdownPreview())
+        if (CanTogglePreview())
         {
-            yield return Entry(ViewCategory, "Markdown プレビューを切り替え", "Ctrl+Shift+M", ToggleMarkdownPreview);
+            yield return Entry(ViewCategory, "Markdown / CSV プレビューを切り替え", "Ctrl+Shift+M", TogglePreview);
         }
 
         yield return Entry(ViewCategory, "設定を開く", "Ctrl+,", () => EnsureSettingsTab(select: true));
@@ -152,6 +153,11 @@ public sealed partial class MainWindowViewModel
 
         foreach (var definition in EditorCommandCatalog.All)
         {
+            if (!CanRunEditorCommand(definition.Id))
+            {
+                continue;
+            }
+
             yield return new CommandPaletteEntry(
                 definition.Category,
                 definition.Title,
@@ -185,9 +191,23 @@ public sealed partial class MainWindowViewModel
     private static readonly EditorCommandId[] NotRecordable =
         [EditorCommandId.GoToLine, EditorCommandId.BookmarkPattern];
 
-    [RelayCommand(CanExecute = nameof(IsDocumentSelected))]
-    private async Task RunEditorCommandAsync(EditorCommandId commandId)
+    private bool CanRunEditorCommand(EditorCommandId commandId)
+        => SelectedDocument is { } document &&
+            (commandId is EditorCommandId.AppendCsvRow or EditorCommandId.AppendCsvColumn
+                ? document.IsCsv
+                : !document.IsCsvPreview);
+
+    [RelayCommand(CanExecute = nameof(CanRunEditorCommand))]
+    private Task RunEditorCommandAsync(EditorCommandId commandId)
+        => RunEditorCommandCoreAsync(commandId, null);
+
+    private async Task RunEditorCommandCoreAsync(EditorCommandId commandId, object? macroGroup)
     {
+        if (!CanRunEditorCommand(commandId))
+        {
+            return;
+        }
+
         if (IsCapturingMacro)
         {
             if (NotRecordable.Contains(commandId))
@@ -210,6 +230,15 @@ public sealed partial class MainWindowViewModel
 
         switch (commandId)
         {
+            case EditorCommandId.AppendCsvRow:
+            case EditorCommandId.AppendCsvColumn:
+                if (!await AppendCsvDimensionAsync(document, commandId == EditorCommandId.AppendCsvRow, macroGroup)
+                    && macroGroup is not null)
+                {
+                    _macroPlaybackAborted = true;
+                }
+                break;
+
             // ===== 変換系（sakura と同じく選択範囲が要る） =====
             case EditorCommandId.ToUpper:
                 Report(title, document.TransformSelection(TextTransforms.ToUpper));
@@ -405,6 +434,104 @@ public sealed partial class MainWindowViewModel
 
         document.InsertText(fullPath ? path : Path.GetFileName(path));
         StatusMessage = fullPath ? "フルパスを挿入しました" : "ファイル名を挿入しました";
+    }
+
+    private async Task<bool> AppendCsvDimensionAsync(DocumentViewModel document, bool rows, object? macroGroup)
+    {
+        var source = document.Text;
+        const string rejected = "CSV の操作上限を超えているか、構造を変更できません。「編集へ戻る」で編集してください";
+        if (source.Length > CsvTableEditingService.MaximumSourceLength)
+        {
+            StatusMessage = rejected;
+            return false;
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        void CancelOnDocumentChange(object? sender, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName is nameof(DocumentViewModel.Text) or nameof(DocumentViewModel.NewLine)
+                or nameof(DocumentViewModel.FilePath))
+            {
+                cancellation.Cancel();
+            }
+        }
+        void CancelOnTabChange(object? sender, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(SelectedTab) && !ReferenceEquals(SelectedDocument, document))
+            {
+                cancellation.Cancel();
+            }
+        }
+
+        CsvDocument table;
+        CsvPreparedEdit? prepared;
+        var undoStack = document.EditorDocument.UndoStack;
+        // 待機中のUndoや手入力をマクロの開いたグループへ巻き込まない。
+        if (macroGroup is not null)
+        {
+            undoStack.EndUndoGroup();
+        }
+        document.PropertyChanged += CancelOnDocumentChange;
+        PropertyChanged += CancelOnTabChange;
+        try
+        {
+            if (!document.TryGetCsvPreview(source, out table))
+            {
+                table = source.Length >= 128 * 1024
+                    ? await Task.Run(() => CsvDocumentParser.Parse(source, cancellation.Token), cancellation.Token)
+                    : CsvDocumentParser.Parse(source, cancellation.Token);
+                document.CacheCsvPreview(source, table);
+            }
+            if (table.HasUnterminatedQuotedField)
+            {
+                StatusMessage = "CSV の引用符が閉じていません。「編集へ戻る」で引用符を閉じてから再試行してください";
+                return false;
+            }
+            prepared = await document.PrepareCsvStructureEditAsync(source,
+                rows ? CsvTableOperation.InsertRows : CsvTableOperation.InsertColumns,
+                rows ? table.TotalRowCount : table.TotalColumnCount, 1, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            if (ReferenceEquals(SelectedDocument, document))
+            {
+                StatusMessage = "CSV が変更されたため、行・列の追加を中止しました";
+            }
+            return false;
+        }
+        finally
+        {
+            document.PropertyChanged -= CancelOnDocumentChange;
+            PropertyChanged -= CancelOnTabChange;
+            if (macroGroup is not null)
+            {
+                if (ReferenceEquals(undoStack.LastGroupDescriptor, macroGroup))
+                {
+                    undoStack.StartContinuedUndoGroup(macroGroup);
+                }
+                else
+                {
+                    undoStack.StartUndoGroup(macroGroup);
+                }
+            }
+        }
+
+        if (!ReferenceEquals(SelectedDocument, document))
+        {
+            return false;
+        }
+        if (prepared is null || !document.TryApplyPreparedCsvEdit(prepared))
+        {
+            StatusMessage = rejected;
+            return false;
+        }
+        var outsidePreview = rows
+            ? table.TotalRowCount >= CsvDocumentParser.MaxPreviewRows
+            : table.TotalColumnCount >= CsvDocumentParser.MaxPreviewColumns;
+        StatusMessage = (rows ? "CSV の末尾に行を追加しました" : "CSV の末尾に列を追加しました")
+            + (outsidePreview ? "。追加先はプレビューの表示上限外です。「編集へ戻る」で確認・編集してください" : string.Empty);
+        return true;
     }
 
     private void FormatDocument(DocumentViewModel document)

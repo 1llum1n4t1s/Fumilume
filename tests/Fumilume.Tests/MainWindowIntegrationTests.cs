@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Input.TextInput;
+using Avalonia.Input.Platform;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -690,7 +691,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         // パレットはカタログの 50 件に加えて、ファイル操作などのワークスペース操作も載せる。
         Assert.True(scope.ViewModel.CommandPaletteResults.Count > EditorCommandCatalog.All.Count);
         Assert.All(
-            EditorCommandCatalog.All,
+            EditorCommandCatalog.All.Where(command => command.Id is not (EditorCommandId.AppendCsvRow or EditorCommandId.AppendCsvColumn)),
             command => Assert.Contains(scope.ViewModel.CommandPaletteResults, entry => entry.Title == command.Title));
 
         scope.ViewModel.CommandPaletteQuery = "大文字";
@@ -807,6 +808,843 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     });
 
     [Fact]
+    public void CsvPreviewDisablesHiddenTextCommandsAndRefreshesPalette() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        const string source = "a,\"first\nsecond\"\nx,y";
+        document.Load(@"C:\tmp\commands.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        document.CaretIndex = source.IndexOf("second", StringComparison.Ordinal);
+        scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
+        var deleteTitle = EditorCommandCatalog.TitleOf(EditorCommandId.DeleteLine);
+        Assert.Contains(scope.ViewModel.CommandPaletteResults, entry => entry.Title == deleteTitle);
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.DoesNotContain(scope.ViewModel.CommandPaletteResults, entry => entry.Title == deleteTitle);
+        scope.ViewModel.IsCommandPaletteOpen = false;
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        FindCsvCell(preview, "A1").Focus();
+        scope.Window.KeyPress(Key.E, RawInputModifiers.Control | RawInputModifiers.Shift, default, null);
+        scope.Window.KeyRelease(Key.E, RawInputModifiers.Control | RawInputModifiers.Shift, default, null);
+        scope.Window.KeyPress(Key.I, RawInputModifiers.Control, default, null);
+        scope.Window.KeyRelease(Key.I, RawInputModifiers.Control, default, null);
+        scope.ViewModel.ToggleMacroRecordingCommand.Execute(null);
+        foreach (var command in new[] { EditorCommandId.DeleteLine, EditorCommandId.DuplicateLine, EditorCommandId.ToUpper })
+        {
+            Assert.False(scope.ViewModel.RunEditorCommandCommand.CanExecute(command));
+            scope.ViewModel.RunEditorCommandCommand.ExecuteAsync(command).GetAwaiter().GetResult();
+        }
+        Assert.Equal(0, scope.ViewModel.RecordedStepCount);
+        Assert.Equal(source, document.Text);
+        Assert.True(scope.ViewModel.RunEditorCommandCommand.CanExecute(EditorCommandId.AppendCsvRow));
+        scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Assert.True(scope.ViewModel.RunEditorCommandCommand.CanExecute(EditorCommandId.DeleteLine));
+        Assert.Contains(scope.ViewModel.CommandPaletteResults, entry => entry.Title == deleteTitle);
+    });
+
+    [Fact]
+    public void LargeCsvAppendKeepsTheUiResponsiveAndAppliesOneUndoOperation() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        var source = string.Join('\n', Enumerable.Repeat("a,b", 40_000));
+        document.Load(@"C:\tmp\large-append.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        var task = scope.ViewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvRow);
+        Assert.False(task.IsCompleted);
+        var uiResponded = false;
+        Dispatcher.UIThread.Post(() => uiResponded = true);
+        CompleteCsvCommand(task);
+        Assert.True(uiResponded);
+        Assert.Equal(source + "\n,", document.Text);
+        Assert.Contains("表示上限外", scope.ViewModel.StatusMessage);
+        document.EditorDocument.UndoStack.Undo();
+        Assert.Equal(source, document.Text);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LargeCsvAppendDoesNotApplyAfterDocumentOrTabChanges(bool switchTab) => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        var source = string.Join('\n', Enumerable.Repeat("a,b", 40_000));
+        document.Load(@"C:\tmp\cancel-append.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        var task = scope.ViewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvColumn);
+        Assert.False(task.IsCompleted);
+        if (switchTab)
+        {
+            scope.ViewModel.NewDocumentCommand.Execute(null);
+        }
+        else
+        {
+            document.Text = "changed,row";
+        }
+        CompleteCsvCommand(task);
+        Assert.Equal(switchTab ? source : "changed,row", document.Text);
+        if (switchTab)
+        {
+            Assert.Equal(string.Empty, scope.ViewModel.SelectedDocument!.Text);
+        }
+    });
+
+    [Fact]
+    public void CsvMacroStopsAfterAnAsyncAppendIsCanceledByTabSwitch() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        var source = string.Join('\n', Enumerable.Repeat("a,b", 40_000));
+        document.Load(@"C:\tmp\cancel-macro.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        var macro = new KeyboardMacro
+        {
+            Name = "CSVへの追加",
+            Steps =
+            [
+                new MacroStep { Kind = MacroStepKind.Command, Command = EditorCommandId.AppendCsvRow },
+                new MacroStep { Kind = MacroStepKind.InsertText, Text = "unexpected" },
+            ],
+        };
+        var task = scope.ViewModel.RunSavedMacroCommand.ExecuteAsync(macro);
+        Assert.False(task.IsCompleted);
+        scope.ViewModel.NewDocumentCommand.Execute(null);
+        CompleteCsvCommand(task);
+        Assert.Equal(source, document.Text);
+        Assert.Equal(string.Empty, scope.ViewModel.SelectedDocument!.Text);
+    });
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CsvMacroWaitAllowsUndoAndKeepsUserEditsSeparate(bool editDuringWait) => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        var source = string.Join('\n', Enumerable.Repeat("a,b", 40_000));
+        document.Load(@"C:\tmp\macro-undo.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        var macro = new KeyboardMacro
+        {
+            Name = "待機中のUndo",
+            Steps =
+            [
+                new MacroStep { Kind = MacroStepKind.InsertText, Text = "macro" },
+                new MacroStep { Kind = MacroStepKind.Command, Command = EditorCommandId.AppendCsvRow },
+            ],
+        };
+        var task = scope.ViewModel.RunSavedMacroCommand.ExecuteAsync(macro);
+        Assert.False(task.IsCompleted);
+        if (editDuringWait)
+        {
+            document.InsertText("user");
+        }
+        scope.ViewModel.UndoCommand.Execute(null);
+        CompleteCsvCommand(task);
+        Assert.Equal(editDuringWait ? "macro" + source : source, document.Text);
+        if (editDuringWait)
+        {
+            scope.ViewModel.UndoCommand.Execute(null);
+            Assert.Equal(source, document.Text);
+        }
+    });
+
+    [Fact]
+    public void CsvMacroSnapshotsRecordingAndKeepsAsyncStepsInOneUndo() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        var source = string.Join('\n', Enumerable.Repeat("a,b", 40_000));
+        document.Load(@"C:\tmp\macro-snapshot.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.ToggleMacroRecordingCommand.Execute(null);
+        scope.ViewModel.RecordMacroStep(new MacroStep { Kind = MacroStepKind.Command, Command = EditorCommandId.AppendCsvRow });
+        scope.ViewModel.RecordMacroStep(new MacroStep { Kind = MacroStepKind.Command, Command = EditorCommandId.AppendCsvRow });
+        scope.ViewModel.ToggleMacroRecordingCommand.Execute(null);
+        var task = scope.ViewModel.RunMacroCommand.ExecuteAsync(null);
+        Assert.False(task.IsCompleted);
+        scope.ViewModel.ToggleMacroRecordingCommand.Execute(null);
+        CompleteCsvCommand(task);
+        Assert.Equal(source + "\n,\n,", document.Text);
+        scope.ViewModel.UndoCommand.Execute(null);
+        Assert.Equal(source, document.Text);
+    });
+
+    [Fact]
+    public void CsvAppendDuringMacroWaitDoesNotOwnTheMacroUndoGroup() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var original = scope.ViewModel.Documents.Single();
+        var source = string.Join('\n', Enumerable.Repeat("a,b", 40_000));
+        original.Load(@"C:\tmp\macro-owner.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        var macro = new KeyboardMacro
+        {
+            Name = "グループ所有者",
+            Steps = [new MacroStep { Kind = MacroStepKind.Command, Command = EditorCommandId.AppendCsvRow }],
+        };
+        var task = scope.ViewModel.RunSavedMacroCommand.ExecuteAsync(macro);
+        Assert.False(task.IsCompleted);
+        scope.ViewModel.NewDocumentCommand.Execute(null);
+        var other = scope.ViewModel.SelectedDocument!;
+        other.Load(@"C:\tmp\other-owner.csv", new TextDocumentContent("x,y", DocumentEncoding.Utf8, "\n"));
+        CompleteCsvCommand(scope.ViewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvRow));
+        CompleteCsvCommand(task);
+        Assert.Equal(source, original.Text);
+        Assert.Equal("x,y\n,", other.Text);
+        scope.ViewModel.UndoCommand.Execute(null);
+        Assert.Equal("x,y", other.Text);
+    });
+
+    private static void CompleteCsvCommand(Task task)
+    {
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
+        while (!task.IsCompleted && timeout.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Yield();
+        }
+        Assert.True(task.IsCompleted, "CSV操作が完了しませんでした。");
+        task.GetAwaiter().GetResult();
+    }
+
+    [Fact]
+    public void CsvAppendAtPreviewLimitPreservesAppendPositionAndExplainsHiddenResult() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        var source = string.Join('\n', Enumerable.Range(0, CsvDocumentParser.MaxPreviewRows).Select(index => $"row-{index}"));
+        document.Load(@"C:\tmp\limit.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.ViewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvRow).GetAwaiter().GetResult();
+        Assert.StartsWith(source + "\n", document.Text);
+        Assert.Equal(CsvDocumentParser.MaxPreviewRows + 1, CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken).TotalRowCount);
+        Assert.Contains("表示上限外", scope.ViewModel.StatusMessage);
+        Assert.Contains("編集へ戻る", scope.ViewModel.StatusMessage);
+
+        source = string.Join(',', Enumerable.Range(0, CsvDocumentParser.MaxPreviewColumns).Select(index => $"col-{index}"));
+        document.Text = source;
+        scope.ViewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvColumn).GetAwaiter().GetResult();
+        Assert.Equal(source + ",", document.Text);
+        Assert.Contains("表示上限外", scope.ViewModel.StatusMessage);
+        Assert.Contains("編集へ戻る", scope.ViewModel.StatusMessage);
+    });
+
+    [Fact]
+    public void CsvAppendWithUnterminatedQuoteExplainsTheActualFailure() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\broken.csv", new TextDocumentContent("a,\"broken", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvRow).GetAwaiter().GetResult();
+        Assert.Contains("引用符", scope.ViewModel.StatusMessage);
+        Assert.Contains("編集へ戻る", scope.ViewModel.StatusMessage);
+        Assert.Equal("a,\"broken", document.Text);
+    });
+
+    [Fact]
+    public void CsvStructureCommandsAreAvailableOnlyForCsvAndCanCreateAnEmptyTable() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        Assert.False(scope.ViewModel.RunEditorCommandCommand.CanExecute(EditorCommandId.AppendCsvRow));
+        scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
+        Assert.DoesNotContain(scope.ViewModel.CommandPaletteResults, entry => entry.Title == "CSV の末尾に行を追加");
+        scope.ViewModel.IsCommandPaletteOpen = false;
+        var document = scope.ViewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\empty.csv");
+        Assert.True(scope.ViewModel.RunEditorCommandCommand.CanExecute(EditorCommandId.AppendCsvRow));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
+        scope.ViewModel.SelectedPaletteCommand = scope.ViewModel.CommandPaletteResults.Single(entry => entry.Title == "CSV の末尾に行を追加");
+        scope.ViewModel.RunSelectedPaletteCommandCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var table = CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken);
+        Assert.Single(table.Rows);
+        Assert.Single(table.Rows[0]);
+        scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
+        scope.ViewModel.SelectedPaletteCommand = scope.ViewModel.CommandPaletteResults.Single(entry => entry.Title == "CSV の末尾に列を追加");
+        scope.ViewModel.RunSelectedPaletteCommandCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(2, CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken).TotalColumnCount);
+        scope.ViewModel.UndoCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(1, CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken).TotalColumnCount);
+    });
+
+    [Fact]
+    public void CsvHeaderSelectionsCopyWholeColumnsAndRows() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\select.csv", new TextDocumentContent("a,b,c\n1,2,3\n4,5,6", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        ClickCsvHeader(scope.Window, preview, "CsvColumnHeader:B");
+        scope.Window.KeyPress(Key.C, RawInputModifiers.Control, default, null);
+        scope.Window.KeyRelease(Key.C, RawInputModifiers.Control, default, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("b\r\n2\r\n5", scope.Window.Clipboard!.TryGetTextAsync().GetAwaiter().GetResult());
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:2");
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:3", RawInputModifiers.Shift);
+        scope.Window.KeyPress(Key.C, RawInputModifiers.Control, default, null);
+        scope.Window.KeyRelease(Key.C, RawInputModifiers.Control, default, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("1\t2\t3\r\n4\t5\t6", scope.Window.Clipboard!.TryGetTextAsync().GetAwaiter().GetResult());
+        Assert.False(document.IsModified);
+    });
+
+    private static Control FindCsvHeader(CsvPreview preview, string name)
+        => preview.GetVisualDescendants().OfType<Control>().Single(control => Avalonia.Automation.AutomationProperties.GetName(control) == name);
+
+    [Theory]
+    [InlineData("CsvAddFirstRowButton")]
+    [InlineData("CsvAddFirstColumnButton")]
+    public void CsvEmptyPreviewCanCreateAnEditableCell(string buttonName) => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\empty.csv");
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        var button = preview.GetVisualDescendants().OfType<Button>().Single(control => control.Name == buttonName);
+        Assert.True(button.IsEffectivelyVisible);
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken).Rows);
+        var input = OpenCsvCellEditor(preview, "A1");
+        input.Text = "value";
+        input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter, KeyModifiers = KeyModifiers.Control });
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("value", document.Text);
+    });
+
+    [Fact]
+    public void CsvCellEditingKeepsTextCopyInsteadOfHeaderCopy() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\copy.csv", new TextDocumentContent("one,two\nthree,four", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        ClickCsvHeader(scope.Window, preview, "CsvColumnHeader:A");
+        var input = OpenCsvCellEditor(preview, "B1");
+        input.Text = "draft";
+        input.SelectAll();
+        scope.Window.KeyPress(Key.C, RawInputModifiers.Control, default, null);
+        scope.Window.KeyRelease(Key.C, RawInputModifiers.Control, default, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("draft", scope.Window.Clipboard!.TryGetTextAsync().GetAwaiter().GetResult());
+        Assert.Equal("one,two\nthree,four", document.Text);
+        Assert.False(document.IsModified);
+    });
+
+    [Fact]
+    public void CsvHeaderMenusInsertAndDeleteRowsAndColumnsWithUndo() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\structure.csv", new TextDocumentContent("a,b,c\n1,2,3\n4,5,6", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:2");
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:3", RawInputModifiers.Shift);
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:2", button: MouseButton.Right);
+        Assert.Equal((true, 1, 2), preview.SelectedHeaders);
+        InvokeCsvHeaderMenu(preview, "CsvRowHeader:2", "CsvDeleteSelectionMenuItem");
+        Assert.Single(CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken).Rows);
+        scope.ViewModel.UndoCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("a,b,c\n1,2,3\n4,5,6", document.Text);
+
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:1");
+        InvokeCsvHeaderMenu(preview, "CsvRowHeader:1", "CsvInsertAfterMenuItem");
+        var parsed = CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken);
+        Assert.Equal(4, parsed.Rows.Count);
+        Assert.All(parsed.Rows[1], value => Assert.Equal(string.Empty, value));
+        ClickCsvHeader(scope.Window, preview, "CsvColumnHeader:B");
+        InvokeCsvHeaderMenu(preview, "CsvColumnHeader:B", "CsvDeleteSelectionMenuItem");
+        parsed = CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "a", "c" }, parsed.Rows[0]);
+        Assert.Equal(new[] { "1", "3" }, parsed.Rows[2]);
+        ClickCsvHeader(scope.Window, preview, "CsvColumnHeader:A");
+        InvokeCsvHeaderMenu(preview, "CsvColumnHeader:A", "CsvInsertBeforeMenuItem");
+        parsed = CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken);
+        Assert.Equal(new[] { "", "a", "c" }, parsed.Rows[0]);
+        Assert.True(document.IsModified);
+        Assert.Equal(DocumentEncoding.Utf8, document.CreateSaveContent().Encoding);
+    });
+
+    private static void InvokeCsvHeaderMenu(CsvPreview preview, string headerName, string itemName)
+    {
+        var header = FindCsvHeader(preview, headerName);
+        var menu = header.ContextMenu;
+        Assert.NotNull(menu);
+        menu.Open(header);
+        Dispatcher.UIThread.RunJobs();
+        var item = menu.Items.OfType<MenuItem>().Single(item => item.Name == itemName);
+        Assert.True(item.IsEnabled);
+        item.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        menu.Close();
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    [Fact]
+    public void CsvSelectionCannotDeleteOrCopyFromAChangedSourceBeforeRedraw() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\stale.csv", new TextDocumentContent("a,b\n1,2", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:1");
+        var menu = FindCsvHeader(preview, "CsvRowHeader:1").ContextMenu!;
+        var delete = menu.Items.OfType<MenuItem>().Single(item => item.Name == "CsvDeleteSelectionMenuItem");
+        var copy = menu.Items.OfType<MenuItem>().Single(item => item.Name == "CsvCopySelectionMenuItem");
+        scope.Window.Clipboard!.SetTextAsync("unchanged clipboard").GetAwaiter().GetResult();
+        document.Text = "new,source\nkeep,this";
+        delete.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        copy.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("new,source\nkeep,this", document.Text);
+        Assert.Equal("unchanged clipboard", scope.Window.Clipboard!.TryGetTextAsync().GetAwaiter().GetResult());
+        Assert.Null(preview.SelectedHeaders);
+    });
+
+    [Fact]
+    public void CsvHeaderBoundaryDraggingChangesSizeWithoutEditingSource() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\sizes.csv", new TextDocumentContent("a,b\n1,2", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        PrepareCsvPointerInput(scope.Window);
+        var column = FindCsvHeader(preview, "CsvColumnHeader:A");
+        var originalWidth = column.Bounds.Width;
+        DragCsvBoundary(scope.Window, column, new Point(originalWidth - 1, column.Bounds.Height / 2), new Vector(60, 0));
+        var resizedWidth = FindCsvHeader(preview, "CsvColumnHeader:A").Bounds.Width;
+        Assert.True(resizedWidth > originalWidth + 40);
+        var row = FindCsvHeader(preview, "CsvRowHeader:1");
+        var originalHeight = row.Bounds.Height;
+        DragCsvBoundary(scope.Window, row, new Point(row.Bounds.Width / 2, originalHeight - 1), new Vector(0, 35));
+        Assert.True(FindCsvHeader(preview, "CsvRowHeader:1").Bounds.Height > originalHeight + 20);
+        Assert.False(document.IsModified);
+        Assert.Equal("a,b\n1,2", document.Text);
+        scope.ViewModel.NewDocumentCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.ViewModel.SelectedTab = document;
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+        Assert.Equal(resizedWidth, FindCsvHeader(preview, "CsvColumnHeader:A").Bounds.Width);
+    });
+
+    private static void DragCsvBoundary(MainWindow window, Control header, Point localStart, Vector distance)
+    {
+        PrepareCsvPointerInput(window);
+        var start = header.TranslatePoint(localStart, window)!.Value;
+        window.MouseDown(start, MouseButton.Left);
+        window.MouseMove(start + distance / 2, RawInputModifiers.LeftMouseButton);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        window.MouseMove(start + distance, RawInputModifiers.LeftMouseButton);
+        window.MouseUp(start + distance, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+    }
+
+    private static void PrepareCsvPointerInput(MainWindow window)
+    {
+        window.UpdateLayout();
+        var island = window.FindControl<Border>("ContentIsland")!;
+        island.Child!.Clip = new RectangleGeometry(new Rect(island.Child.Bounds.Size));
+    }
+
+    private static void ClickCsvHeader(MainWindow window, CsvPreview preview, string name, RawInputModifiers modifiers = RawInputModifiers.None, MouseButton button = MouseButton.Left)
+    {
+        PrepareCsvPointerInput(window);
+        var header = FindCsvHeader(preview, name);
+        var point = header.TranslatePoint(new Point(header.Bounds.Width / 2, header.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(point, button, modifiers);
+        window.MouseUp(point, button, modifiers);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    [Fact]
+    public void CsvPreviewDoubleClickEditsSourceAndSupportsUndoRedo() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\edit.csv", new TextDocumentContent("name,value\r\napple,001\r\n", DocumentEncoding.ShiftJis, "\r\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        var cell = FindCsvCell(preview, "B2");
+        // Headless の角丸 Geometry は内部点の FillContains も false を返すため、
+        // 製品の角丸だけを矩形へ置き換え、セル自身のクリップと実ポインター入力を検証する。
+        var island = scope.Window.FindControl<Border>("ContentIsland")!;
+        island.Child!.Clip = new RectangleGeometry(new Rect(island.Child.Bounds.Size));
+        var point = cell.TranslatePoint(new Point(20, 12), scope.Window)!.Value;
+        scope.Window.MouseDown(point, MouseButton.Left);
+        scope.Window.MouseUp(point, MouseButton.Left);
+        scope.Window.MouseDown(point, MouseButton.Left);
+        scope.Window.MouseUp(point, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        var input = preview.GetVisualDescendants().OfType<TextBox>().Single();
+        Assert.True(input.IsEffectivelyVisible, "ダブルクリックでセル編集欄が表示される");
+        Assert.Equal("001", input.Text);
+        input.Text = "a,\"b\"\nsecond";
+        input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter, KeyModifiers = KeyModifiers.Control });
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(input.IsEffectivelyVisible);
+        const string changed = "name,value\r\napple,\"a,\"\"b\"\"\r\nsecond\"\r\n";
+        Assert.Equal(changed, document.Text);
+        Assert.True(document.IsModified, "セル値の適用で文書が変更済みになる");
+        Assert.Equal(DocumentEncoding.ShiftJis, document.CreateSaveContent().Encoding);
+        scope.Window.KeyPress(Key.Z, RawInputModifiers.Control, default, null);
+        scope.Window.KeyRelease(Key.Z, RawInputModifiers.Control, default, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("name,value\r\napple,001\r\n", document.Text);
+        Assert.False(document.IsModified);
+        scope.Window.KeyPress(Key.Y, RawInputModifiers.Control, default, null);
+        scope.Window.KeyRelease(Key.Y, RawInputModifiers.Control, default, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(changed, document.Text);
+        Assert.Contains(preview.GetVisualDescendants().OfType<SelectableTextBlock>(), text => text.Text!.Contains("a,\"b\""));
+    });
+
+    [Fact]
+    public void CsvPreviewEditsEmptyCellAndCancelsUnappliedDrafts() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\empty.csv", new TextDocumentContent("a,\nx,y", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        var input = OpenCsvCellEditor(preview, "B1");
+        Assert.Equal(string.Empty, input.Text);
+        input.Text = "new";
+        preview.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "ApplyCsvCellEdit")
+            .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("a,new\nx,y", document.Text);
+
+        input = OpenCsvCellEditor(preview, "A1");
+        input.Text = "cancelled";
+        input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(input.IsEffectivelyVisible);
+        Assert.Equal("a,new\nx,y", document.Text);
+
+        input = OpenCsvCellEditor(preview, "A1");
+        input.Text = "stale";
+        document.EditorDocument.Replace(0, 1, "external");
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(input.IsEffectivelyVisible);
+        Assert.Equal("external,new\nx,y", document.Text);
+
+        input = OpenCsvCellEditor(preview, "B2");
+        input.Text = "not applied";
+        scope.ViewModel.NewDocumentCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.ViewModel.SelectedTab = document;
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(input.IsEffectivelyVisible);
+        Assert.Equal("external,new\nx,y", document.Text);
+    });
+
+    [Fact]
+    public void CsvCellRangesCopyPasteCutAndUndoThroughKeyboard() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        const string source = "a,b,c\n1,2,3\n4,5,6";
+        document.Load(@"C:\tmp\cells.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        ClickCsvCell(scope.Window, preview, "A1");
+        SendCsvKey(scope.Window, Key.Right, RawInputModifiers.Shift);
+        SendCsvKey(scope.Window, Key.Down, RawInputModifiers.Shift);
+        Assert.Equal(new CsvCellRange(0, 0, 2, 2), preview.SelectedCellRange);
+        SendCsvKey(scope.Window, Key.C, RawInputModifiers.Control);
+        Assert.Equal("a\tb\r\n1\t2", scope.Window.Clipboard!.TryGetTextAsync().GetAwaiter().GetResult());
+        SendCsvKey(scope.Window, Key.X, RawInputModifiers.Control);
+        Assert.Equal(",,c\n,,3\n4,5,6", document.Text);
+        scope.ViewModel.UndoCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(source, document.Text);
+        ClickCsvCell(scope.Window, preview, "B2");
+        scope.Window.Clipboard!.SetTextAsync("x\ty\r\n\"p\nq\"\t001").GetAwaiter().GetResult();
+        SendCsvKey(scope.Window, Key.V, RawInputModifiers.Control);
+        Assert.Equal("a,b,c\n1,x,y\n4,\"p\nq\",001", document.Text);
+        scope.ViewModel.UndoCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(source, document.Text);
+    });
+
+    [Fact]
+    public void CsvRangeFillClearAndRaggedEditingPreserveTableStructure() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\ragged.csv", new TextDocumentContent("a,b,c\nx\n1,2,3", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        var input = OpenCsvCellEditor(preview, "C2");
+        input.Text = "new";
+        SendCsvKey(scope.Window, Key.Enter, RawInputModifiers.Control);
+        Assert.Equal("a,b,c\nx,,new\n1,2,3", document.Text);
+        ClickCsvCell(scope.Window, preview, "A1");
+        SendCsvKey(scope.Window, Key.Right, RawInputModifiers.Shift);
+        SendCsvKey(scope.Window, Key.Down, RawInputModifiers.Shift);
+        SendCsvKey(scope.Window, Key.D, RawInputModifiers.Control);
+        Assert.Equal("a,b,c\na,b,new\n1,2,3", document.Text);
+        SendCsvKey(scope.Window, Key.R, RawInputModifiers.Control);
+        Assert.Equal("a,a,c\na,a,new\n1,2,3", document.Text);
+        SendCsvKey(scope.Window, Key.Delete);
+        Assert.Equal(",,c\n,,new\n1,2,3", document.Text);
+        scope.ViewModel.UndoCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("a,a,c\na,a,new\n1,2,3", document.Text);
+    });
+
+    [Fact]
+    public void CsvKeyboardEditingMovesActiveCellAndKeepsMultilineValues() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\navigation.csv", new TextDocumentContent("a,b\nx,y", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        ClickCsvCell(scope.Window, preview, "A1");
+        SendCsvKey(scope.Window, Key.Tab);
+        Assert.Equal((0, 1), preview.ActiveCell);
+        SendCsvKey(scope.Window, Key.Tab, RawInputModifiers.Shift);
+        Assert.Equal((0, 0), preview.ActiveCell);
+        SendCsvKey(scope.Window, Key.F2);
+        var input = preview.GetVisualDescendants().OfType<TextBox>().Single();
+        Assert.True(input.IsEffectivelyVisible);
+        input.Text = "first";
+        input.CaretIndex = input.Text.Length;
+        SendCsvKey(scope.Window, Key.Enter, RawInputModifiers.Alt);
+        Assert.True(input.IsEffectivelyVisible);
+        Assert.Contains("\n", input.Text);
+        input.Text += "second";
+        SendCsvKey(scope.Window, Key.Enter);
+        Assert.Equal("\"first\nsecond\",b\nx,y", document.Text);
+        Assert.Equal((1, 0), preview.ActiveCell);
+        SendCsvKey(scope.Window, Key.F2);
+        input.Text = "z";
+        SendCsvKey(scope.Window, Key.Tab);
+        Assert.Equal((1, 1), preview.ActiveCell);
+        Assert.Equal("\"first\nsecond\",b\nz,y", document.Text);
+    });
+
+    [Fact]
+    public void CsvHeaderInsertionUsesSelectedRowAndColumnCounts() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\insert.csv", new TextDocumentContent("a,b,c\n1,2,3\n4,5,6", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:1");
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:2", RawInputModifiers.Shift);
+        InvokeCsvHeaderMenu(preview, "CsvRowHeader:1", "CsvInsertBeforeMenuItem");
+        Assert.Equal(5, CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken).TotalRowCount);
+        Assert.Equal((true, 0, 2), preview.SelectedHeaders);
+        ClickCsvHeader(scope.Window, preview, "CsvColumnHeader:A");
+        ClickCsvHeader(scope.Window, preview, "CsvColumnHeader:B", RawInputModifiers.Shift);
+        InvokeCsvHeaderMenu(preview, "CsvColumnHeader:A", "CsvInsertAfterMenuItem");
+        Assert.Equal(5, CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken).TotalColumnCount);
+        Assert.Equal((false, 2, 2), preview.SelectedHeaders);
+    });
+
+    [Fact]
+    public void CsvPointerDragAndCellContextMenuUseTheRectangle() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.Load(@"C:\tmp\drag.csv", new TextDocumentContent("a,b,c\n1,2,3\n4,5,6", DocumentEncoding.Utf8, "\n"));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        PrepareCsvPointerInput(scope.Window);
+        var from = FindCsvCell(preview, "A1").TranslatePoint(new Point(20, 12), scope.Window)!.Value;
+        var to = FindCsvCell(preview, "B2").TranslatePoint(new Point(20, 12), scope.Window)!.Value;
+        scope.Window.MouseDown(from, MouseButton.Left);
+        scope.Window.MouseMove(to);
+        scope.Window.MouseUp(to, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(new CsvCellRange(0, 0, 2, 2), preview.SelectedCellRange);
+        scope.Window.MouseDown(from, MouseButton.Right);
+        scope.Window.MouseUp(from, MouseButton.Right);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(new CsvCellRange(0, 0, 2, 2), preview.SelectedCellRange);
+        var cell = FindCsvCell(preview, "A1");
+        var menu = cell.ContextMenu!;
+        menu.Open(cell);
+        menu.Items.OfType<MenuItem>().Single(item => item.Name == "CsvClearCellsMenuItem")
+            .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        menu.Close();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(",,c\n,,3\n4,5,6", document.Text);
+        Assert.True(document.CanUndo);
+    });
+
+    private static void SendCsvKey(MainWindow window, Key key, RawInputModifiers modifiers = RawInputModifiers.None)
+    {
+        window.KeyPress(key, modifiers, default, null);
+        window.KeyRelease(key, modifiers, default, null);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+    }
+
+    private static void ClickCsvCell(MainWindow window, CsvPreview preview, string address)
+    {
+        PrepareCsvPointerInput(window);
+        var cell = FindCsvCell(preview, address);
+        var point = cell.TranslatePoint(new Point(cell.Bounds.Width / 2, cell.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+    }
+
+    private static Border FindCsvCell(CsvPreview preview, string address)
+        => preview.GetVisualDescendants().OfType<Border>().Single(cell => Avalonia.Automation.AutomationProperties.GetName(cell) == address);
+
+    private static TextBox OpenCsvCellEditor(CsvPreview preview, string address)
+    {
+        var cell = FindCsvCell(preview, address);
+        cell.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+        Dispatcher.UIThread.RunJobs();
+        var input = preview.GetVisualDescendants().OfType<TextBox>().Single();
+        Assert.True(input.IsEffectivelyVisible);
+        return input;
+    }
+
+    [Fact]
+    public void CsvPreviewRendersCurrentSourceAndReturnsToEditing() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope(width: 720, height: 460);
+        var document = scope.ViewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\table.csv");
+        document.Text = "名前,値\nりんご,001\n\"a,b\",\"行1\n行2\"";
+        Assert.True(scope.ViewModel.TogglePreviewCommand.CanExecute(null));
+        scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
+        scope.ViewModel.SelectedPaletteCommand = scope.ViewModel.CommandPaletteResults.Single(entry => entry.Title == "Markdown / CSV プレビューを切り替え");
+        scope.ViewModel.RunSelectedPaletteCommandCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        Assert.True(preview.IsEffectivelyVisible);
+        Assert.False(editor.IsEffectivelyVisible);
+        Assert.Equal(document.Text, preview.Csv);
+        Assert.Contains(scope.Window.GetVisualDescendants().OfType<TextBlock>(), text => text.IsEffectivelyVisible && text.Text == "CSV");
+        Assert.Contains(preview.GetVisualDescendants().OfType<SelectableTextBlock>(), cell => cell.Text == "001");
+        Assert.Contains(preview.GetVisualDescendants().OfType<SelectableTextBlock>(), cell => cell.Text == "a,b");
+        var source = document.Text;
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(preview.IsEffectivelyVisible);
+        Assert.True(editor.IsEffectivelyVisible);
+        Assert.Equal(source, document.Text);
+        document.Text = "更新,002";
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Contains(preview.GetVisualDescendants().OfType<SelectableTextBlock>(), cell => cell.Text == "002");
+        document.MarkSaved(@"C:\tmp\plain.txt");
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(scope.ViewModel.TogglePreviewCommand.CanExecute(null));
+        Assert.True(editor.IsEffectivelyVisible);
+    });
+
+    [Fact]
+    public void CsvPreviewScrollsInBothDirectionsAndKeepsTabState() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope(width: 720, height: 460);
+        var document = scope.ViewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\wide.csv");
+        document.Text = string.Join("\n", Enumerable.Range(1, 80).Select(row => string.Join(",", Enumerable.Range(1, 20).Select(column => $"{row}:{column}"))));
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        var scroll = preview.GetVisualDescendants().OfType<ScrollViewer>().Single();
+        Assert.True(scroll.Extent.Width > scroll.Viewport.Width);
+        Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
+        scroll.Offset = new Vector(180, 120);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+        Assert.Equal(180, scroll.Offset.X);
+        Assert.Equal(120, scroll.Offset.Y);
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+        Assert.Equal(180, scroll.Offset.X);
+        Assert.Equal(120, scroll.Offset.Y);
+        scope.ViewModel.NewDocumentCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.False(preview.IsEffectivelyVisible);
+        scope.ViewModel.SelectedTab = document;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(preview.IsEffectivelyVisible);
+        Assert.Equal(document.Text, preview.Csv);
+    });
+
+    [Fact]
+    public void CsvPreviewBoundsLongCellDisplayWithoutChangingSource() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\long.csv");
+        var source = new string('a', 100_000);
+        document.Text = source;
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        var cell = Assert.Single(preview.GetVisualDescendants().OfType<SelectableTextBlock>());
+        Assert.True(cell.Text!.Length < 600);
+        Assert.Contains("続きは編集画面", cell.Text);
+        var tip = Assert.IsType<string>(ToolTip.GetTip(cell));
+        Assert.True(tip.Length < 4200);
+        Assert.Equal(source, document.Text);
+    });
+
+    [Fact]
+    public void CsvPreviewCellColorsFollowThemeChanges() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var document = scope.ViewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\theme.csv");
+        document.Text = "表示,確認";
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+        var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark, ThemeVariant.Light })
+        {
+            scope.Window.RequestedThemeVariant = theme;
+            Dispatcher.UIThread.RunJobs();
+            scope.Window.UpdateLayout();
+            Assert.True(scope.Window.TryFindResource("TextPrimary", theme, out var expected));
+            Assert.All(preview.GetVisualDescendants().OfType<SelectableTextBlock>(), cell => Assert.Equal(expected, cell.Foreground));
+        }
+    });
+
+    [Fact]
     public void MarkdownPreviewRendersTheCurrentDocumentAndUsesAnExplicitLabel() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
@@ -814,7 +1652,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         document.MarkSaved(@"C:\tmp\readme.md");
         document.Text = "# 見出し\n\n本文\n\n7. 項目";
 
-        scope.ViewModel.ToggleMarkdownPreviewCommand.Execute(null);
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
         var preview = scope.Window.GetVisualDescendants().OfType<MarkdownPreview>().Single();
@@ -826,7 +1664,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.All(
             preview.GetVisualDescendants().OfType<SelectableTextBlock>(),
             textBlock => Assert.NotNull(textBlock.Foreground));
-        Assert.Equal("編集へ戻る", document.MarkdownPreviewToggleLabel);
+        Assert.Equal("編集へ戻る", document.PreviewToggleLabel);
     });
 
     [Fact]
@@ -837,7 +1675,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         document.MarkSaved(@"C:\tmp\readme.md");
         document.Text = string.Join("\n\n", Enumerable.Range(1, 80).Select(number => $"段落 {number}"));
 
-        scope.ViewModel.ToggleMarkdownPreviewCommand.Execute(null);
+        scope.ViewModel.TogglePreviewCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         scope.Window.UpdateLayout();
 

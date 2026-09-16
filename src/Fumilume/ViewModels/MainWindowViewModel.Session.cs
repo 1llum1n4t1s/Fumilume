@@ -270,7 +270,8 @@ public sealed partial class MainWindowViewModel
         document.SelectionStart = selectionStart;
         document.SelectionLength = Math.Clamp(state.SelectionLength, 0, length - selectionStart);
 
-        document.IsMarkdownPreview = state.IsMarkdownPreview && document.CanShowMarkdownPreview;
+        document.IsMarkdownPreview = state.IsMarkdownPreview && document.IsMarkdown;
+        document.IsCsvPreview = state.IsCsvPreview && document.IsCsv;
 
         var lineCount = document.EditorDocument.LineCount;
         foreach (var line in state.Bookmarks.Distinct().Where(line => line >= 1 && line <= lineCount))
@@ -368,6 +369,7 @@ public sealed partial class MainWindowViewModel
         SelectionStart = tab.SelectionStart,
         SelectionLength = tab.SelectionLength,
         IsMarkdownPreview = tab.IsMarkdownPreview,
+        IsCsvPreview = tab.IsCsvPreview,
         Bookmarks = tab.Bookmarks is null ? [] : [.. tab.Bookmarks],
         PdfPage = tab.PdfPage,
         PdfZoom = tab.PdfZoom,
@@ -388,6 +390,7 @@ public sealed partial class MainWindowViewModel
         SelectionStart = document.SelectionStart,
         SelectionLength = document.SelectionLength,
         IsMarkdownPreview = document.IsMarkdownPreview,
+        IsCsvPreview = document.IsCsvPreview,
         IsPinned = document.IsPinned,
         Bookmarks = document.HasBookmarks ? [.. document.Bookmarks.Lines] : [],
         // 本文を控えるのは未保存のときだけ。保存済みで変更が無ければディスクが正本。

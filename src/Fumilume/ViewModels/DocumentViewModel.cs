@@ -13,6 +13,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     private string? _savedText = string.Empty;
     private DocumentEncoding _savedEncoding = DocumentEncoding.Utf8;
     private string _savedNewLine = Environment.NewLine;
+    private string? _csvPreviewSource;
+    private CsvDocument? _csvPreview;
 
     /// <summary>前回終了時の未保存内容から復元した文書か（保存するまで未保存のまま扱う）。</summary>
     private bool _restoredUnsaved;
@@ -47,7 +49,9 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     [NotifyPropertyChangedFor(nameof(TabTitle))]
     [NotifyPropertyChangedFor(nameof(TabTooltip))]
     [NotifyPropertyChangedFor(nameof(IsMarkdown))]
-    [NotifyPropertyChangedFor(nameof(CanShowMarkdownPreview))]
+    [NotifyPropertyChangedFor(nameof(IsCsv))]
+    [NotifyPropertyChangedFor(nameof(CanShowPreview))]
+    [NotifyPropertyChangedFor(nameof(PreviewFormatLabel))]
     private string? _filePath;
 
     [ObservableProperty]
@@ -57,7 +61,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEditorVisible))]
-    [NotifyPropertyChangedFor(nameof(MarkdownPreviewToggleLabel))]
+    [NotifyPropertyChangedFor(nameof(PreviewToggleLabel))]
     private bool _isMarkdownPreview;
 
     [ObservableProperty]
@@ -88,11 +92,20 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
     public bool IsMarkdown => string.Equals(Path.GetExtension(FilePath), ".md", StringComparison.OrdinalIgnoreCase);
 
-    public bool CanShowMarkdownPreview => IsMarkdown;
+    public bool IsCsv => string.Equals(Path.GetExtension(FilePath), ".csv", StringComparison.OrdinalIgnoreCase);
 
-    public bool IsEditorVisible => !IsMarkdownPreview;
+    public bool CanShowPreview => IsMarkdown || IsCsv;
 
-    public string MarkdownPreviewToggleLabel => IsMarkdownPreview ? "編集へ戻る" : "プレビュー";
+    public string PreviewFormatLabel => IsCsv ? "CSV" : "MD";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEditorVisible))]
+    [NotifyPropertyChangedFor(nameof(PreviewToggleLabel))]
+    private bool _isCsvPreview;
+
+    public bool IsEditorVisible => !IsMarkdownPreview && !IsCsvPreview;
+
+    public string PreviewToggleLabel => !IsEditorVisible ? "編集へ戻る" : "プレビュー";
 
     public string EncodingLabel => Encoding switch
     {
@@ -271,16 +284,110 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         UpdateModifiedState();
     }
 
-    public void ToggleMarkdownPreview()
+    public void TogglePreview()
     {
-        if (CanShowMarkdownPreview)
+        if (IsMarkdown)
         {
             IsMarkdownPreview = !IsMarkdownPreview;
         }
+        else if (IsCsv)
+        {
+            IsCsvPreview = !IsCsvPreview;
+        }
+    }
+
+    /// <summary>
+    /// CSV プレビューで確定したセル値を、表示時の本文が変わっていない場合だけ元テキストへ反映する。
+    /// 区切りと行末を保つため、CSV 全体を作り直さず対象フィールドの範囲だけを置き換える。
+    /// </summary>
+    public bool TryUpdateCsvCell(
+        string expectedSource,
+        int rowIndex,
+        int columnIndex,
+        string value)
+    {
+        if (!IsCsv
+            || rowIndex < 0
+            || rowIndex >= CsvDocumentParser.MaxPreviewRows
+            || columnIndex < 0
+            || columnIndex >= CsvDocumentParser.MaxPreviewColumns
+            || !string.Equals(Text, expectedSource, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var csv = GetCsvPreview(expectedSource);
+        if (csv.HasUnterminatedQuotedField || rowIndex >= csv.Rows.Count
+            || columnIndex >= csv.DisplayedColumnCount)
+        {
+            return false;
+        }
+
+        value ??= string.Empty;
+        var currentValue = columnIndex < csv.Rows[rowIndex].Count
+            ? csv.Rows[rowIndex][columnIndex]
+            : string.Empty;
+        if (string.Equals(currentValue, value, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var normalizedValue = DocumentFileService.NormalizeNewLines(value, NewLine);
+        if (string.Equals(currentValue, normalizedValue, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var ranges = csv.CellSourceRanges[rowIndex];
+        var replacement = CsvTableEditingService.EncodeCsvField(normalizedValue);
+        if (columnIndex < ranges.Count)
+        {
+            var range = ranges[columnIndex];
+            EditorDocument.Replace(range.Offset, range.Length, replacement);
+        }
+        else
+        {
+            // 不揃い行の欠落セルは、この行の最後のフィールドの直後に補完する。
+            var last = ranges[^1];
+            EditorDocument.Insert(last.Offset + last.Length,
+                new string(',', columnIndex - ranges.Count + 1) + replacement);
+        }
+
+        return true;
+    }
+
+    internal bool TryGetCsvPreview(string source, out CsvDocument parsed)
+    {
+        parsed = _csvPreview!;
+        return parsed is not null && string.Equals(_csvPreviewSource, source, StringComparison.Ordinal);
+    }
+
+    internal void CacheCsvPreview(string source, CsvDocument parsed)
+    {
+        if (string.Equals(Text, source, StringComparison.Ordinal))
+        {
+            _csvPreviewSource = source;
+            _csvPreview = parsed;
+        }
+    }
+
+    internal CsvDocument GetCsvPreview(string source)
+    {
+        if (TryGetCsvPreview(source, out var parsed))
+        {
+            return parsed;
+        }
+        parsed = CsvDocumentParser.Parse(source);
+        CacheCsvPreview(source, parsed);
+        return parsed;
     }
 
     partial void OnFilePathChanged(string? value)
     {
+        if (!IsCsv)
+        {
+            IsCsvPreview = false;
+        }
         if (!IsMarkdown)
         {
             IsMarkdownPreview = false;
@@ -308,6 +415,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
     private void OnEditorDocumentTextChanged(object? sender, EventArgs args)
     {
+        _csvPreviewSource = null;
+        _csvPreview = null;
         OnPropertyChanged(nameof(Text));
         UpdateTextStatistics();
         OnPropertyChanged(nameof(LineColumnText));

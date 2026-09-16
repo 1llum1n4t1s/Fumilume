@@ -494,15 +494,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private bool CanToggleMarkdownPreview() => SelectedDocument?.CanShowMarkdownPreview == true;
+    private bool CanTogglePreview() => SelectedDocument?.CanShowPreview == true;
 
-    [RelayCommand(CanExecute = nameof(CanToggleMarkdownPreview))]
-    private void ToggleMarkdownPreview()
+    [RelayCommand(CanExecute = nameof(CanTogglePreview))]
+    private void TogglePreview()
     {
-        SelectedDocument?.ToggleMarkdownPreview();
-        StatusMessage = SelectedDocument?.IsMarkdownPreview == true
-            ? "Markdown プレビューを表示しました"
-            : "Markdown の編集表示へ戻しました";
+        SelectedDocument?.TogglePreview();
+        StatusMessage = SelectedDocument?.IsEditorVisible == false
+            ? "プレビューを表示しました"
+            : "編集表示へ戻しました";
     }
 
     [RelayCommand]
@@ -962,7 +962,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(WindowTitle));
             OnPropertyChanged(nameof(CurrentPath));
             ReloadCommand.NotifyCanExecuteChanged();
-            ToggleMarkdownPreviewCommand.NotifyCanExecuteChanged();
+            TogglePreviewCommand.NotifyCanExecuteChanged();
+            RunEditorCommandCommand.NotifyCanExecuteChanged();
+        }
+
+        if (args.PropertyName == nameof(DocumentViewModel.IsCsvPreview))
+        {
+            RunEditorCommandCommand.NotifyCanExecuteChanged();
+            if (IsCommandPaletteOpen)
+            {
+                RefreshCommandPaletteResults();
+            }
         }
 
         if (args.PropertyName == nameof(DocumentViewModel.CanUndo))
@@ -1002,7 +1012,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SaveAsCommand.NotifyCanExecuteChanged();
         SaveAllCommand.NotifyCanExecuteChanged();
         ReloadCommand.NotifyCanExecuteChanged();
-        ToggleMarkdownPreviewCommand.NotifyCanExecuteChanged();
+        TogglePreviewCommand.NotifyCanExecuteChanged();
+        RunEditorCommandCommand.NotifyCanExecuteChanged();
         GoToLineCommand.NotifyCanExecuteChanged();
     }
 

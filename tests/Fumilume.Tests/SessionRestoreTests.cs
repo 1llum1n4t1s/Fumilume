@@ -12,6 +12,25 @@ namespace Fumilume.Tests;
 public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
 {
     [Fact]
+    public async Task CsvPreviewAndUnsavedSourceSurviveSessionRestore()
+    {
+        using var storage = new TemporaryStorage();
+        var first = CreateViewModel();
+        await first.InitializeAsync([]);
+        var document = first.SelectedDocument!;
+        document.MarkSaved(Path.Combine(storage.Path, "table.csv"));
+        document.Text = "名前,値\nりんご,001";
+        document.TogglePreview();
+        Assert.True(await first.PersistSessionStateAsync());
+        var restored = CreateViewModel();
+        await restored.InitializeAsync([]);
+        Assert.True(restored.SelectedDocument!.IsCsvPreview);
+        Assert.False(restored.SelectedDocument.IsMarkdownPreview);
+        Assert.Equal(document.Text, restored.SelectedDocument.Text);
+        Assert.True(restored.SelectedDocument.IsModified);
+    }
+
+    [Fact]
     public async Task DuplicateSavedPathsRestoreOnlyOnce()
     {
         using var storage = new TemporaryStorage();

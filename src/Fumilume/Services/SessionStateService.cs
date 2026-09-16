@@ -55,6 +55,8 @@ public sealed class SessionTabState
 
     public bool IsMarkdownPreview { get; set; }
 
+    public bool IsCsvPreview { get; set; }
+
     /// <summary>印の付いていた行番号。</summary>
     public List<int> Bookmarks { get; set; } = [];
 

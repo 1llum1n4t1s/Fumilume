@@ -27,7 +27,7 @@
         <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveAsCommand}" />
         <KeyBinding Gesture="Ctrl+Alt+S" Command="{Binding SaveAllCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+R" Command="{Binding ReloadCommand}" />
-        <KeyBinding Gesture="Ctrl+Shift+M" Command="{Binding ToggleMarkdownPreviewCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+M" Command="{Binding TogglePreviewCommand}" />
         <KeyBinding Gesture="Ctrl+W" Command="{Binding CloseTabCommand}" CommandParameter="{Binding SelectedTab}" />
         <KeyBinding Gesture="Ctrl+G" Command="{Binding GoToLineCommand}" />
         <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding OpenSettingsCommand}" />
@@ -308,16 +308,16 @@
 
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
                                     <!-- 今の文書でしか意味のないものだけを、この位置へ文脈で出す。 -->
-                                    <Button Classes="command" Command="{Binding ToggleMarkdownPreviewCommand}"
-                                            IsVisible="{Binding SelectedDocument.CanShowMarkdownPreview}"
-                                            AutomationProperties.Name="Markdown プレビュー切り替え"
-                                            ToolTip.Tip="Markdown プレビュー (Ctrl+Shift+M)">
+                                    <Button Classes="command" Command="{Binding TogglePreviewCommand}"
+                                            IsVisible="{Binding SelectedDocument.CanShowPreview}"
+                                            AutomationProperties.Name="プレビュー切り替え"
+                                            ToolTip.Tip="Markdown / CSV プレビュー (Ctrl+Shift+M)">
                                         <StackPanel Orientation="Horizontal" Spacing="7">
                                             <Border Padding="4,1" CornerRadius="4"
                                                     BorderBrush="{DynamicResource Divider}" BorderThickness="1">
-                                                <TextBlock Text="MD" FontSize="10" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding SelectedDocument.PreviewFormatLabel}" FontSize="10" FontWeight="SemiBold" />
                                             </Border>
-                                            <TextBlock Text="{Binding SelectedDocument.MarkdownPreviewToggleLabel}"
+                                            <TextBlock Text="{Binding SelectedDocument.PreviewToggleLabel}"
                                                        VerticalAlignment="Center" />
                                         </StackPanel>
                                     </Button>
@@ -341,6 +341,10 @@
                                 <v:MarkdownPreview Markdown="{Binding SelectedDocument.Text}"
                                                    IsVisible="{Binding SelectedDocument.IsMarkdownPreview}"
                                                    AutomationProperties.Name="Markdown プレビュー" />
+                                <v:CsvPreview Csv="{Binding SelectedDocument.Text}"
+                                              Document="{Binding SelectedDocument}"
+                                              IsVisible="{Binding SelectedDocument.IsCsvPreview}"
+                                              AutomationProperties.Name="CSV プレビュー" />
                             </Grid>
                         </Border>
 

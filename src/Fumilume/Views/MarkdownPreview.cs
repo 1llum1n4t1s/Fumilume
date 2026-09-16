@@ -50,7 +50,7 @@ public sealed class MarkdownPreview : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == MarkdownProperty)
+        if (change.Property == MarkdownProperty || change.Property == IsVisibleProperty)
         {
             ScheduleRender();
         }
@@ -82,6 +82,11 @@ public sealed class MarkdownPreview : UserControl
     private void Render()
     {
         _content.Children.Clear();
+        if (!IsVisible)
+        {
+            return;
+        }
+
         foreach (var block in MarkdownDocumentParser.Parse(Markdown))
         {
             _content.Children.Add(CreateBlock(block));

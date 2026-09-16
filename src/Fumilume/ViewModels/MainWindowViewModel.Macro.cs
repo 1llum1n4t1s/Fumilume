@@ -27,6 +27,8 @@ public sealed partial class MainWindowViewModel
 
     /// <summary>再生中は記録しない。マクロが自分自身を書き足して際限なく伸びるのを防ぐ。</summary>
     private bool _replayingMacro;
+    private bool _macroPlaybackAborted;
+    private object? _macroUndoGroupDescriptor;
 
     private ObservableCollection<KeyboardMacro>? _savedMacros;
 
@@ -191,28 +193,48 @@ public sealed partial class MainWindowViewModel
     /// </summary>
     private async Task PlayAsync(IReadOnlyList<MacroStep> steps, int repeat)
     {
-        if (SelectedDocument is not { } document || steps.Count == 0)
+        if (_replayingMacro || SelectedDocument is not { } document || steps.Count == 0)
         {
             return;
+        }
+        steps = steps.Select(Copy).ToArray();
+
+        // テキスト操作を含むマクロは編集面を表示してから再生し、非表示のCSVを行単位で書き換えない。
+        if (document.IsCsvPreview && steps.Any(step => step.Kind != MacroStepKind.Command
+            || step.Command is not (EditorCommandId.AppendCsvRow or EditorCommandId.AppendCsvColumn)))
+        {
+            document.IsCsvPreview = false;
         }
 
         // 記録中に実行すると、実行そのものが記録へ積まれて意味が変わる。記録は止めずに手だけ止める。
         _replayingMacro = true;
+        _macroPlaybackAborted = false;
         var undoStack = document.EditorDocument.UndoStack;
-        undoStack.StartUndoGroup();
+        _macroUndoGroupDescriptor = new object();
+        undoStack.StartUndoGroup(_macroUndoGroupDescriptor);
         try
         {
             for (var round = 0; round < repeat; round++)
             {
                 foreach (var step in steps)
                 {
+                    if (!ReferenceEquals(SelectedDocument, document))
+                    {
+                        StatusMessage = "文書が切り替わったためマクロを中止しました";
+                        return;
+                    }
                     await ApplyAsync(document, step);
+                    if (_macroPlaybackAborted)
+                    {
+                        return;
+                    }
                 }
             }
         }
         finally
         {
             undoStack.EndUndoGroup();
+            _macroUndoGroupDescriptor = null;
             _replayingMacro = false;
         }
 
@@ -226,7 +248,7 @@ public sealed partial class MainWindowViewModel
         switch (step.Kind)
         {
             case MacroStepKind.Command:
-                return RunEditorCommandAsync(step.Command);
+                return RunEditorCommandCoreAsync(step.Command, _macroUndoGroupDescriptor);
             case MacroStepKind.InsertText:
                 document.InsertText(step.Text);
                 break;

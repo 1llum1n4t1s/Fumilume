@@ -81,6 +81,74 @@ public sealed class MacroTests
     }
 
     [Fact]
+    public async Task CsvAppendCommandsReplayWithoutDependingOnThePreview()
+    {
+        var viewModel = CreateViewModel();
+        var document = viewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\macro.csv");
+        document.Text = "a,b";
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+        await viewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvRow);
+        await viewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvColumn);
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+        var changed = document.Text;
+        Assert.Equal(2, viewModel.RecordedStepCount);
+        Assert.Equal(2, CsvDocumentParser.Parse(changed, TestContext.Current.CancellationToken).TotalRowCount);
+        Assert.Equal(3, CsvDocumentParser.Parse(changed, TestContext.Current.CancellationToken).TotalColumnCount);
+        document.Text = "a,b";
+        document.IsCsvPreview = true;
+        await viewModel.RunMacroCommand.ExecuteAsync(null);
+        Assert.Equal(changed, document.Text);
+        Assert.True(document.IsCsvPreview);
+    }
+
+    [Fact]
+    public async Task RejectedCsvCommandStopsFollowingMacroSteps()
+    {
+        var viewModel = CreateViewModel();
+        var document = viewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\broken.csv");
+        document.Text = "a,\"broken";
+        var macro = new KeyboardMacro
+        {
+            Name = "不正CSV",
+            Steps =
+            [
+                new MacroStep { Kind = MacroStepKind.Command, Command = EditorCommandId.AppendCsvRow },
+                new MacroStep { Kind = MacroStepKind.InsertText, Text = "unexpected" },
+            ],
+        };
+        await viewModel.RunSavedMacroCommand.ExecuteAsync(macro);
+        Assert.Equal("a,\"broken", document.Text);
+        Assert.Contains("引用符", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task TextMacroLeavesCsvPreviewBeforeReplayingEveryStep()
+    {
+        var viewModel = CreateViewModel();
+        var document = viewModel.Documents.Single();
+        document.MarkSaved(@"C:\tmp\macro.csv");
+        document.Text = "a,b";
+        document.CaretIndex = 0;
+        document.IsCsvPreview = true;
+        var macro = new KeyboardMacro
+        {
+            Name = "CSVのテキスト操作",
+            Steps =
+            [
+                new MacroStep { Kind = MacroStepKind.InsertText, Text = "x" },
+                new MacroStep { Kind = MacroStepKind.Command, Command = EditorCommandId.DuplicateLine },
+            ],
+        };
+        await viewModel.RunSavedMacroCommand.ExecuteAsync(macro);
+        Assert.False(document.IsCsvPreview);
+        Assert.Equal("xa,b\r\nxa,b", document.Text);
+        document.EditorDocument.UndoStack.Undo();
+        Assert.Equal("a,b", document.Text);
+    }
+
+    [Fact]
     public async Task CommandsAreRecordedAndReplayed()
     {
         var viewModel = CreateViewModel();
