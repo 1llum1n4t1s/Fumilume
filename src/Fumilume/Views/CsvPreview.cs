@@ -416,6 +416,39 @@ public sealed class CsvPreview : UserControl
             return;
         }
 
+        if (action is CsvSelectionAction.SortAscending or CsvSelectionAction.SortDescending
+            or CsvSelectionAction.SortAscendingWithHeader or CsvSelectionAction.SortDescendingWithHeader)
+        {
+            if (state.SelectionKind != CsvSelectionKind.Columns || state.SelectionCount != 1)
+            {
+                _editHint.Text = "ソートの基準にする列を1つ選択してください。";
+                return;
+            }
+            var descending = action is CsvSelectionAction.SortDescending or CsvSelectionAction.SortDescendingWithHeader;
+            var keepFirstRow = action is CsvSelectionAction.SortAscendingWithHeader or CsvSelectionAction.SortDescendingWithHeader;
+            var document = Document!;
+            var snapshot = state.SourceSnapshot;
+            var selection = state.GetSelectionIdentity();
+            var column = state.SelectionStart;
+            StartTableOperation(async operationState =>
+            {
+                var edit = await document.PrepareCsvSortAsync(snapshot, column, descending, keepFirstRow,
+                    operationState.Cancellation.Token);
+                if (!CanUseTableOperationResult(operationState, document, snapshot, state, selection))
+                {
+                    return;
+                }
+                if (edit is null)
+                {
+                    _editHint.Text = GetOperationFailureMessage(document, snapshot, GetCsvLimitFailureMessage("ソート"));
+                    return;
+                }
+                TryApplyPreparedEdit(operationState, document, snapshot, state, selection, edit,
+                    GetCsvLimitFailureMessage("ソート"));
+            }, clipboardOperation: false, "CSVのソートに失敗しました。もう一度お試しください。");
+            return;
+        }
+
         if (state.SelectionKind == CsvSelectionKind.Cells)
         {
             return;
@@ -1266,6 +1299,10 @@ public sealed class CsvPreview : UserControl
         Clear,
         FillDown,
         FillRight,
+        SortAscending,
+        SortDescending,
+        SortAscendingWithHeader,
+        SortDescendingWithHeader,
     }
 
     private sealed class CsvTableOperationState(
@@ -1594,7 +1631,7 @@ public sealed class CsvPreview : UserControl
                 Focusable = true,
                 Width = bounds.Width,
                 Height = bounds.Height,
-                ContextMenu = CreateHeaderMenu(),
+                ContextMenu = CreateHeaderMenu(kind),
             };
             AutomationProperties.SetName(header, kind == CsvSelectionKind.Columns
                 ? $"CsvColumnHeader:{GetColumnName(index)}"
@@ -1607,7 +1644,7 @@ public sealed class CsvPreview : UserControl
             _headers.Children.Add(header);
         }
 
-        private ContextMenu CreateHeaderMenu()
+        private ContextMenu CreateHeaderMenu(CsvSelectionKind kind)
         {
             var insertBefore = CreateMenuItem("CsvInsertBeforeMenuItem", "前に追加", CsvSelectionAction.InsertBefore);
             var insertAfter = CreateMenuItem("CsvInsertAfterMenuItem", "後に追加", CsvSelectionAction.InsertAfter);
@@ -1617,7 +1654,7 @@ public sealed class CsvPreview : UserControl
             var clear = CreateMenuItem("CsvClearSelectionContentsMenuItem", "選択範囲の値を消去", CsvSelectionAction.Clear);
             var fillDown = CreateMenuItem("CsvFillSelectionDownMenuItem", "下方向へフィル", CsvSelectionAction.FillDown);
             var fillRight = CreateMenuItem("CsvFillSelectionRightMenuItem", "右方向へフィル", CsvSelectionAction.FillRight);
-            return new ContextMenu
+            var menu = new ContextMenu
             {
                 Items =
                 {
@@ -1626,6 +1663,15 @@ public sealed class CsvPreview : UserControl
                     new Separator(), fillDown, fillRight,
                 },
             };
+            if (kind == CsvSelectionKind.Columns)
+            {
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("CsvSortAscendingMenuItem", "この列で全行を昇順にソート", CsvSelectionAction.SortAscending));
+                menu.Items.Add(CreateMenuItem("CsvSortDescendingMenuItem", "この列で全行を降順にソート", CsvSelectionAction.SortDescending));
+                menu.Items.Add(CreateMenuItem("CsvSortAscendingWithHeaderMenuItem", "先頭行を固定して昇順にソート", CsvSelectionAction.SortAscendingWithHeader));
+                menu.Items.Add(CreateMenuItem("CsvSortDescendingWithHeaderMenuItem", "先頭行を固定して降順にソート", CsvSelectionAction.SortDescendingWithHeader));
+            }
+            return menu;
         }
 
         private ContextMenu CreateCellMenu()

@@ -166,6 +166,71 @@ public sealed class CsvOperationUiTests(HeadlessAppFixture fixture)
         }
     });
 
+    [Theory]
+    [InlineData("CsvSortAscendingMenuItem", "b,2\na,10\nname,value")]
+    [InlineData("CsvSortDescendingMenuItem", "name,value\na,10\nb,2")]
+    [InlineData("CsvSortAscendingWithHeaderMenuItem", "name,value\nb,2\na,10")]
+    [InlineData("CsvSortDescendingWithHeaderMenuItem", "name,value\na,10\nb,2")]
+    public void ColumnMenuSortMovesWholeRows(string menuName, string expected) => fixture.Run(() =>
+    {
+        const string source = "name,value\na,10\nb,2";
+        var (window, preview, document) = CreatePreview(source, new ControlledClipboard(null));
+        try
+        {
+            ClickHeader(window, preview, "CsvColumnHeader:B");
+            GetHeaderMenuItem(preview, "CsvColumnHeader:B", menuName)
+                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+            DrainTableOperation(preview);
+            Assert.Equal(expected, document.Text);
+            if (source != expected)
+            {
+                document.EditorDocument.UndoStack.Undo();
+                Assert.Equal(source, document.Text);
+            }
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void SortRequiresOneColumnAndIsAbsentFromRowMenu() => fixture.Run(() =>
+    {
+        var (window, preview, document) = CreatePreview("b,2\na,1", new ControlledClipboard(null));
+        try
+        {
+            var rowMenu = FindHeader(preview, "CsvRowHeader:1").ContextMenu!;
+            Assert.DoesNotContain(rowMenu.Items.OfType<MenuItem>(), item => item.Name?.StartsWith("CsvSort", StringComparison.Ordinal) == true);
+            ClickHeader(window, preview, "CsvColumnHeader:A");
+            ClickControl(window, FindHeader(preview, "CsvColumnHeader:B"), RawInputModifiers.Shift);
+            GetHeaderMenuItem(preview, "CsvColumnHeader:A", "CsvSortAscendingMenuItem")
+                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.Equal("b,2\na,1", document.Text);
+            Assert.Contains("列を1つ", preview.EditStatus);
+        }
+        finally { window.Close(); }
+    });
+
+    [Fact]
+    public void LargeSortIsCanceledWhenSelectionChanges() => fixture.Run(() =>
+    {
+        var source = string.Join('\n', Enumerable.Range(0, 40_000).Reverse().Select(value => $"{value},data"));
+        var (window, preview, document) = CreatePreview(source, new ControlledClipboard(null));
+        try
+        {
+            ClickHeader(window, preview, "CsvColumnHeader:A");
+            GetHeaderMenuItem(preview, "CsvColumnHeader:A", "CsvSortAscendingMenuItem")
+                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.True(preview.IsTableOperationInProgress);
+            // UIジョブを流す前に選択変更を伝え、処理が既に完了していても適用させない。
+            var header = FindHeader(preview, "CsvColumnHeader:B");
+            var point = header.TranslatePoint(new Point(header.Bounds.Width / 2, header.Bounds.Height / 2), window)!.Value;
+            window.MouseDown(point, MouseButton.Left);
+            window.MouseUp(point, MouseButton.Left);
+            DrainTableOperation(preview);
+            Assert.Equal(source, document.Text);
+        }
+        finally { window.Close(); }
+    });
+
     private static (Window Window, CsvPreview Preview, DocumentViewModel Document) CreatePreview(
         string source,
         ControlledClipboard clipboard)

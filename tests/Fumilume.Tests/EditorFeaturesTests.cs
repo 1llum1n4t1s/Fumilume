@@ -45,6 +45,60 @@ public sealed class EditorFeaturesTests
         Assert.Equal("行 3 へ移動しました", viewModel.StatusMessage);
     }
 
+    [Theory]
+    [InlineData(EditorCommandId.SortCsvAscending, "b,2\na,10\nname,value")]
+    [InlineData(EditorCommandId.SortCsvDescending, "name,value\na,10\nb,2")]
+    [InlineData(EditorCommandId.SortCsvAscendingWithHeader, "name,value\nb,2\na,10")]
+    [InlineData(EditorCommandId.SortCsvDescendingWithHeader, "name,value\na,10\nb,2")]
+    public async Task CsvPaletteSortUsesRequestedColumnAndSupportsUndo(EditorCommandId command, string expected)
+    {
+        var viewModel = CreateViewModel(new FakeDialogService { Answer = "2" });
+        var document = viewModel.SelectedDocument!;
+        const string source = "name,value\na,10\nb,2";
+        document.Load(@"C:\tmp\sort.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        document.IsCsvPreview = true;
+        Assert.True(viewModel.RunEditorCommandCommand.CanExecute(command));
+        viewModel.OpenCommandPaletteCommand.Execute(null);
+        Assert.Contains(viewModel.CommandPaletteResults, entry => entry.Title == EditorCommandCatalog.TitleOf(command));
+        await viewModel.RunEditorCommandCommand.ExecuteAsync(command);
+        Assert.Equal(expected, document.Text);
+        Assert.True(document.IsCsvPreview);
+        if (expected != source)
+        {
+            document.EditorDocument.UndoStack.Undo();
+            Assert.Equal(source, document.Text);
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("0")]
+    [InlineData("invalid")]
+    [InlineData("999")]
+    public async Task CsvSortRejectsCanceledOrInvalidColumn(string? answer)
+    {
+        var viewModel = CreateViewModel(new FakeDialogService { Answer = answer });
+        var document = viewModel.SelectedDocument!;
+        document.Load(@"C:\tmp\sort.csv", new TextDocumentContent("b\na", DocumentEncoding.Utf8, "\n"));
+        await viewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.SortCsvAscending);
+        Assert.Equal("b\na", document.Text);
+        Assert.False(document.CanUndo);
+    }
+
+    [Fact]
+    public async Task CsvSortRejectsChangesWhileColumnDialogIsOpen()
+    {
+        var dialogs = new FakeDialogService { Answer = "1" };
+        var viewModel = CreateViewModel(dialogs);
+        var document = viewModel.SelectedDocument!;
+        document.Load(@"C:\tmp\sort.csv", new TextDocumentContent("b\na", DocumentEncoding.Utf8, "\n"));
+        dialogs.OnPrompt = () => { document.Text = "changed"; document.Text = "b\na"; };
+        await viewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.SortCsvAscending);
+        Assert.Equal("b\na", document.Text);
+        document.MarkSaved(@"C:\tmp\sort.txt");
+        Assert.False(viewModel.RunEditorCommandCommand.CanExecute(EditorCommandId.SortCsvAscending));
+    }
+
     private static MainWindowViewModel CreateViewModel(FakeDialogService dialogs)
         => new(new FakeFileService(), dialogs);
 
@@ -64,6 +118,8 @@ public sealed class EditorFeaturesTests
     private sealed class FakeDialogService : IEditorDialogService
     {
         public int? RequestedLine { get; init; }
+        public string? Answer { get; init; }
+        public Action? OnPrompt { get; set; }
 
         public Task<IReadOnlyList<string>> PickOpenPathsAsync()
             => Task.FromResult<IReadOnlyList<string>>([]);
@@ -81,7 +137,10 @@ public sealed class EditorFeaturesTests
             => Task.FromResult(RequestedLine);
 
         public Task<string?> PromptTextAsync(string title, string message, string initialText)
-            => Task.FromResult<string?>(null);
+        {
+            OnPrompt?.Invoke();
+            return Task.FromResult(Answer);
+        }
 
         public Task<bool> ConfirmAsync(string title, string message) => Task.FromResult(true);
 

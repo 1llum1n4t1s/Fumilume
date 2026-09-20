@@ -691,7 +691,9 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         // パレットはカタログの 50 件に加えて、ファイル操作などのワークスペース操作も載せる。
         Assert.True(scope.ViewModel.CommandPaletteResults.Count > EditorCommandCatalog.All.Count);
         Assert.All(
-            EditorCommandCatalog.All.Where(command => command.Id is not (EditorCommandId.AppendCsvRow or EditorCommandId.AppendCsvColumn)),
+            EditorCommandCatalog.All.Where(command => command.Id is not (EditorCommandId.AppendCsvRow or EditorCommandId.AppendCsvColumn
+                or EditorCommandId.SortCsvAscending or EditorCommandId.SortCsvDescending
+                or EditorCommandId.SortCsvAscendingWithHeader or EditorCommandId.SortCsvDescendingWithHeader)),
             command => Assert.Contains(scope.ViewModel.CommandPaletteResults, entry => entry.Title == command.Title));
 
         scope.ViewModel.CommandPaletteQuery = "大文字";
@@ -1277,7 +1279,11 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     {
         using var scope = new WindowScope();
         var document = scope.ViewModel.Documents.Single();
-        document.Load(@"C:\tmp\edit.csv", new TextDocumentContent("name,value\r\napple,001\r\n", DocumentEncoding.ShiftJis, "\r\n"));
+        const string original = "名前,値\r\nりんご,001\r\n";
+        var path = Path.Combine(scope.StoragePath, "edit.csv");
+        var content = new TextDocumentContent(original, DocumentEncoding.ShiftJis, "\r\n");
+        new DocumentFileService().WriteAsync(path, content).GetAwaiter().GetResult();
+        document.Load(path, content);
         scope.ViewModel.TogglePreviewCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         scope.Window.UpdateLayout();
@@ -1299,15 +1305,15 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         input.Text = "a,\"b\"\nsecond";
         input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter, KeyModifiers = KeyModifiers.Control });
         Dispatcher.UIThread.RunJobs();
-        Assert.False(input.IsEffectivelyVisible);
-        const string changed = "name,value\r\napple,\"a,\"\"b\"\"\r\nsecond\"\r\n";
+        Assert.False(input.IsEffectivelyVisible, "Ctrl+Enterでセル編集欄が閉じる");
+        const string changed = "名前,値\r\nりんご,\"a,\"\"b\"\"\r\nsecond\"\r\n";
         Assert.Equal(changed, document.Text);
         Assert.True(document.IsModified, "セル値の適用で文書が変更済みになる");
         Assert.Equal(DocumentEncoding.ShiftJis, document.CreateSaveContent().Encoding);
         scope.Window.KeyPress(Key.Z, RawInputModifiers.Control, default, null);
         scope.Window.KeyRelease(Key.Z, RawInputModifiers.Control, default, null);
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal("name,value\r\napple,001\r\n", document.Text);
+        Assert.Equal(original, document.Text);
         Assert.False(document.IsModified);
         scope.Window.KeyPress(Key.Y, RawInputModifiers.Control, default, null);
         scope.Window.KeyRelease(Key.Y, RawInputModifiers.Control, default, null);

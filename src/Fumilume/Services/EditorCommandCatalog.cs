@@ -62,6 +62,10 @@ public enum EditorCommandId
     BookmarkPattern,
     AppendCsvRow,
     AppendCsvColumn,
+    SortCsvAscending,
+    SortCsvDescending,
+    SortCsvAscendingWithHeader,
+    SortCsvDescendingWithHeader,
 }
 
 /// <summary>コマンド 1 件の定義。メニューとコマンドパレットはこれを読んで並べる。</summary>
@@ -140,6 +144,10 @@ public static class EditorCommandCatalog
         new(EditorCommandId.InsertFilePath, InsertCategory, "フルパスを挿入"),
         new(EditorCommandId.AppendCsvRow, InsertCategory, "CSV の末尾に行を追加"),
         new(EditorCommandId.AppendCsvColumn, InsertCategory, "CSV の末尾に列を追加"),
+        new(EditorCommandId.SortCsvAscending, EditCategory, "CSV を列指定で昇順にソート"),
+        new(EditorCommandId.SortCsvDescending, EditCategory, "CSV を列指定で降順にソート"),
+        new(EditorCommandId.SortCsvAscendingWithHeader, EditCategory, "CSV の先頭行を固定して列指定で昇順にソート"),
+        new(EditorCommandId.SortCsvDescendingWithHeader, EditCategory, "CSV の先頭行を固定して列指定で降順にソート"),
 
         new(EditorCommandId.GoToLine, JumpCategory, "指定行へ移動", "Ctrl+G"),
         new(EditorCommandId.GoToMatchingBracket, JumpCategory, "対括弧の検索", "Ctrl+OemCloseBrackets"),

@@ -241,6 +241,37 @@ public sealed partial class DocumentViewModel
             cancellationToken);
     }
 
+    internal Task<CsvPreparedEdit?> PrepareCsvSortAsync(
+        string expectedSource,
+        int column,
+        bool descending,
+        bool keepFirstRow,
+        CancellationToken cancellationToken)
+    {
+        if (!IsCurrentCsvSource(expectedSource))
+        {
+            return Task.FromResult<CsvPreparedEdit?>(null);
+        }
+
+        var expectedNewLine = NewLine;
+        return RunCsvWorkAsync(
+            expectedSource.Length,
+            () => CreatePreparedCsvEdit(
+                expectedSource,
+                expectedNewLine,
+                CsvTableEditingService.TrySort(
+                    expectedSource,
+                    column,
+                    descending,
+                    keepFirstRow,
+                    out var editedSource,
+                    out var sourceEdits,
+                    cancellationToken),
+                editedSource,
+                sourceEdits),
+            cancellationToken);
+    }
+
     internal Task<string?> GetCsvCellRangeTextAsync(
         string expectedSource,
         CsvCellRange range,

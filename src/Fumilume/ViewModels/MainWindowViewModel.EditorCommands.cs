@@ -181,19 +181,19 @@ public sealed partial class MainWindowViewModel
             || entry.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// 非同期なのは「パターンに一致する行をマーク」だけが入力ダイアログを開くため。
-    /// 他の分岐は最初の <c>await</c> まで同期で走り切るので、キー割り当てからの体感は変わらない。
-    /// </summary>
-    /// <summary>
-    /// マクロに記録しないコマンド。どちらも入力ダイアログを開くので、記録できても再生時に止まる。
+    /// マクロに記録しないコマンド。入力ダイアログを開くので、記録できても再生時に止まる。
     /// 再生側で読み飛ばすのではなく記録の時点で弾くのは、一覧に「動かない手」を残さないため。
     /// </summary>
     private static readonly EditorCommandId[] NotRecordable =
-        [EditorCommandId.GoToLine, EditorCommandId.BookmarkPattern];
+        [EditorCommandId.GoToLine, EditorCommandId.BookmarkPattern,
+         EditorCommandId.SortCsvAscending, EditorCommandId.SortCsvDescending,
+         EditorCommandId.SortCsvAscendingWithHeader, EditorCommandId.SortCsvDescendingWithHeader];
 
     private bool CanRunEditorCommand(EditorCommandId commandId)
         => SelectedDocument is { } document &&
             (commandId is EditorCommandId.AppendCsvRow or EditorCommandId.AppendCsvColumn
+                or EditorCommandId.SortCsvAscending or EditorCommandId.SortCsvDescending
+                or EditorCommandId.SortCsvAscendingWithHeader or EditorCommandId.SortCsvDescendingWithHeader
                 ? document.IsCsv
                 : !document.IsCsvPreview);
 
@@ -230,6 +230,20 @@ public sealed partial class MainWindowViewModel
 
         switch (commandId)
         {
+            case EditorCommandId.SortCsvAscending:
+            case EditorCommandId.SortCsvDescending:
+            case EditorCommandId.SortCsvAscendingWithHeader:
+            case EditorCommandId.SortCsvDescendingWithHeader:
+                if (macroGroup is not null)
+                {
+                    _macroPlaybackAborted = true;
+                    StatusMessage = "入力が必要なCSVソートはマクロで再生できません";
+                    break;
+                }
+                await SortCsvAsync(document,
+                    commandId is EditorCommandId.SortCsvDescending or EditorCommandId.SortCsvDescendingWithHeader,
+                    commandId is EditorCommandId.SortCsvAscendingWithHeader or EditorCommandId.SortCsvDescendingWithHeader);
+                break;
             case EditorCommandId.AppendCsvRow:
             case EditorCommandId.AppendCsvColumn:
                 if (!await AppendCsvDimensionAsync(document, commandId == EditorCommandId.AppendCsvRow, macroGroup)
@@ -434,6 +448,60 @@ public sealed partial class MainWindowViewModel
 
         document.InsertText(fullPath ? path : Path.GetFileName(path));
         StatusMessage = fullPath ? "フルパスを挿入しました" : "ファイル名を挿入しました";
+    }
+
+    private async Task SortCsvAsync(DocumentViewModel document, bool descending, bool keepFirstRow)
+    {
+        var source = document.Text;
+        using var cancellation = new CancellationTokenSource();
+        void CancelOnChange(object? sender, PropertyChangedEventArgs args)
+        {
+            if ((ReferenceEquals(sender, document)
+                 && args.PropertyName is nameof(DocumentViewModel.Text) or nameof(DocumentViewModel.NewLine) or nameof(DocumentViewModel.FilePath))
+                || (ReferenceEquals(sender, this) && args.PropertyName == nameof(SelectedTab)
+                    && !ReferenceEquals(SelectedDocument, document)))
+            {
+                cancellation.Cancel();
+            }
+        }
+        document.PropertyChanged += CancelOnChange;
+        PropertyChanged += CancelOnChange;
+        try
+        {
+            var answer = await _dialogs.PromptTextAsync("CSVのソート",
+                "基準にする列番号（1から）を入力してください。行全体を並べ替えます。" +
+                (keepFirstRow ? "先頭行は固定します。" : "先頭行も含めます。"), "1");
+            if (answer is null || cancellation.IsCancellationRequested)
+            {
+                return;
+            }
+            if (!int.TryParse(answer.Trim(), out var column) || column < 1)
+            {
+                StatusMessage = "列番号には1以上の整数を入力してください";
+                return;
+            }
+            var edit = await document.PrepareCsvSortAsync(source, column - 1, descending, keepFirstRow, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (!ReferenceEquals(SelectedDocument, document))
+            {
+                return;
+            }
+            StatusMessage = edit is not null && document.TryApplyPreparedCsvEdit(edit)
+                ? $"CSVを第{column}列で{(descending ? "降順" : "昇順")}にソートしました"
+                : "CSVをソートできませんでした。列番号・引用符と操作上限を確認してください";
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            if (ReferenceEquals(SelectedDocument, document))
+            {
+                StatusMessage = "CSVが変更されたためソートを中止しました";
+            }
+        }
+        finally
+        {
+            document.PropertyChanged -= CancelOnChange;
+            PropertyChanged -= CancelOnChange;
+        }
     }
 
     private async Task<bool> AppendCsvDimensionAsync(DocumentViewModel document, bool rows, object? macroGroup)

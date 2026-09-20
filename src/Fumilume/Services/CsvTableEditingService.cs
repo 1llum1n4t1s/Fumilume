@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace Fumilume.Services;
@@ -80,6 +81,305 @@ public static class CsvTableEditingService
                 source, document, index, count, out editedSource, out sourceEdits, cancellationToken),
             _ => false,
         };
+    }
+
+    internal static bool TrySort(
+        string source,
+        int column,
+        bool descending,
+        bool keepFirstRow,
+        out string editedSource,
+        out IReadOnlyList<CsvSourceEdit> sourceEdits,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        cancellationToken.ThrowIfCancellationRequested();
+        editedSource = source;
+        sourceEdits = [];
+        if (source.Length > MaximumSourceLength || column < 0)
+        {
+            return false;
+        }
+
+        var document = CsvDocumentParser.ParseSource(source, cancellationToken);
+        if (document is null
+            || document.HasUnterminatedQuotedField
+            || column >= document.TotalColumnCount)
+        {
+            return false;
+        }
+
+        var firstSortableRow = keepFirstRow ? 1 : 0;
+        var sortableRowCount = Math.Max(0, document.Rows.Count - firstSortableRow);
+        if (sortableRowCount < 2)
+        {
+            return true;
+        }
+
+        var rowIndexes = new int[sortableRowCount];
+        var buffer = new int[sortableRowCount];
+        var keyKinds = new byte[sortableRowCount];
+        var numericKeys = new decimal[sortableRowCount];
+        for (var index = 0; index < sortableRowCount; index++)
+        {
+            if ((index & 4_095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            rowIndexes[index] = index;
+            var row = document.Rows[firstSortableRow + index];
+            if (column >= row.Values.Count || row.Values[column].Length == 0)
+            {
+                keyKinds[index] = 2;
+            }
+            else if (decimal.TryParse(
+                         row.Values[column],
+                         NumberStyles.Float,
+                         CultureInfo.InvariantCulture,
+                         out var numericKey))
+            {
+                keyKinds[index] = 0;
+                numericKeys[index] = numericKey;
+            }
+            else
+            {
+                keyKinds[index] = 1;
+            }
+        }
+
+        StableSortRows(
+            document,
+            column,
+            firstSortableRow,
+            descending,
+            rowIndexes,
+            buffer,
+            keyKinds,
+            numericKeys,
+            cancellationToken);
+
+        var firstChangedRow = -1;
+        var lastChangedRow = -1;
+        for (var index = 0; index < sortableRowCount; index++)
+        {
+            if ((index & 4_095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (rowIndexes[index] != index)
+            {
+                firstChangedRow = firstChangedRow < 0 ? index : firstChangedRow;
+                lastChangedRow = index;
+            }
+        }
+
+        if (firstChangedRow < 0)
+        {
+            return true;
+        }
+
+        long resultLength = 0;
+        for (var targetIndex = 0; targetIndex < document.Rows.Count; targetIndex++)
+        {
+            if ((targetIndex & 4_095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            var sourceIndex = targetIndex < firstSortableRow
+                ? targetIndex
+                : firstSortableRow + rowIndexes[targetIndex - firstSortableRow];
+            var sourceRow = document.Rows[sourceIndex];
+            var targetRow = document.Rows[targetIndex];
+            resultLength += sourceRow.ContentLength + (long)targetRow.DelimiterLength;
+            if (ShouldMaterializeEmptyRecord(source, document, targetIndex, sourceRow))
+            {
+                resultLength += 2;
+            }
+
+            if (resultLength > MaximumResultLength)
+            {
+                return false;
+            }
+        }
+
+        var firstChangedTarget = firstSortableRow + firstChangedRow;
+        var lastChangedTarget = firstSortableRow + lastChangedRow;
+        var editOffset = document.Rows[firstChangedTarget].Offset;
+        var lastChangedSourceRow = document.Rows[lastChangedTarget];
+        var editEnd = lastChangedSourceRow.Offset + lastChangedSourceRow.ContentLength;
+        var suffixLength = source.Length - editEnd;
+        var replacementLength = resultLength - editOffset - suffixLength;
+        var replacement = new StringBuilder((int)replacementLength);
+        for (var targetIndex = firstChangedTarget; targetIndex <= lastChangedTarget; targetIndex++)
+        {
+            if ((targetIndex & 4_095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            var sourceIndex = targetIndex < firstSortableRow
+                ? targetIndex
+                : firstSortableRow + rowIndexes[targetIndex - firstSortableRow];
+            var sourceRow = document.Rows[sourceIndex];
+            var targetRow = document.Rows[targetIndex];
+            if (ShouldMaterializeEmptyRecord(source, document, targetIndex, sourceRow))
+            {
+                replacement.Append("\"\"");
+            }
+            else
+            {
+                replacement.Append(source, sourceRow.Offset, sourceRow.ContentLength);
+            }
+
+            if (targetIndex < lastChangedTarget)
+            {
+                replacement.Append(
+                    source,
+                    targetRow.Offset + targetRow.ContentLength,
+                    targetRow.DelimiterLength);
+            }
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return TryApplySingleEdit(
+            source,
+            new CsvSourceEdit(editOffset, editEnd - editOffset, replacement.ToString()),
+            out editedSource,
+            out sourceEdits,
+            cancellationToken);
+    }
+
+    private static bool ShouldMaterializeEmptyRecord(
+        string source,
+        CsvSourceDocument document,
+        int targetIndex,
+        CsvSourceRow sourceRow)
+    {
+        if (sourceRow.ContentLength != 0)
+        {
+            return false;
+        }
+
+        var targetRow = document.Rows[targetIndex];
+        if (targetRow.DelimiterLength == 0)
+        {
+            // 改行のない末尾では空文字を明示しないと、空レコード自体が失われる。
+            return true;
+        }
+
+        if (targetIndex == 0 || targetRow.DelimiterLength != 1)
+        {
+            return false;
+        }
+
+        var previousTargetRow = document.Rows[targetIndex - 1];
+        return previousTargetRow.DelimiterLength == 1
+            && source[previousTargetRow.Offset + previousTargetRow.ContentLength] == '\r'
+            && source[targetRow.Offset + targetRow.ContentLength] == '\n';
+    }
+
+    private static void StableSortRows(
+        CsvSourceDocument document,
+        int column,
+        int firstSortableRow,
+        bool descending,
+        int[] rowIndexes,
+        int[] buffer,
+        byte[] keyKinds,
+        decimal[] numericKeys,
+        CancellationToken cancellationToken)
+    {
+        var sourceIndexes = rowIndexes;
+        var targetIndexes = buffer;
+        for (var width = 1; width < rowIndexes.Length; width *= 2)
+        {
+            for (var left = 0; left < rowIndexes.Length; left += width * 2)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var middle = Math.Min(left + width, rowIndexes.Length);
+                var end = Math.Min(left + (width * 2), rowIndexes.Length);
+                var leftIndex = left;
+                var rightIndex = middle;
+                var outputIndex = left;
+                while (leftIndex < middle && rightIndex < end)
+                {
+                    if ((outputIndex & 4_095) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
+                    if (CompareRows(sourceIndexes[leftIndex], sourceIndexes[rightIndex]) <= 0)
+                    {
+                        targetIndexes[outputIndex++] = sourceIndexes[leftIndex++];
+                    }
+                    else
+                    {
+                        targetIndexes[outputIndex++] = sourceIndexes[rightIndex++];
+                    }
+                }
+
+                while (leftIndex < middle)
+                {
+                    if ((outputIndex & 4_095) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
+                    targetIndexes[outputIndex++] = sourceIndexes[leftIndex++];
+                }
+
+                while (rightIndex < end)
+                {
+                    if ((outputIndex & 4_095) == 0)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
+                    targetIndexes[outputIndex++] = sourceIndexes[rightIndex++];
+                }
+            }
+
+            (sourceIndexes, targetIndexes) = (targetIndexes, sourceIndexes);
+        }
+
+        if (!ReferenceEquals(sourceIndexes, rowIndexes))
+        {
+            sourceIndexes.CopyTo(rowIndexes, 0);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return;
+
+        int CompareRows(int left, int right)
+        {
+            var leftKind = keyKinds[left];
+            var rightKind = keyKinds[right];
+            if (leftKind == 2 || rightKind == 2)
+            {
+                return leftKind == rightKind ? 0 : leftKind == 2 ? 1 : -1;
+            }
+
+            int comparison;
+            if (leftKind != rightKind)
+            {
+                comparison = leftKind.CompareTo(rightKind);
+            }
+            else if (leftKind == 0)
+            {
+                comparison = numericKeys[left].CompareTo(numericKeys[right]);
+            }
+            else
+            {
+                comparison = StringComparer.OrdinalIgnoreCase.Compare(
+                    document.Rows[firstSortableRow + left].Values[column],
+                    document.Rows[firstSortableRow + right].Values[column]);
+            }
+
+            return descending ? -comparison : comparison;
+        }
     }
 
     public static string? GetSelectionText(

@@ -123,6 +123,21 @@ public sealed class MacroTests
         Assert.Contains("引用符", viewModel.StatusMessage);
     }
 
+    [Theory]
+    [InlineData(EditorCommandId.SortCsvAscending)]
+    [InlineData(EditorCommandId.SortCsvDescending)]
+    [InlineData(EditorCommandId.SortCsvAscendingWithHeader)]
+    [InlineData(EditorCommandId.SortCsvDescendingWithHeader)]
+    public async Task CsvSortWithColumnPromptIsNotRecorded(EditorCommandId command)
+    {
+        var viewModel = CreateViewModel(new StubDialogService { Answer = "1" });
+        viewModel.SelectedDocument!.Load(@"C:\tmp\sort.csv",
+            new TextDocumentContent("key\nb\na", DocumentEncoding.Utf8, "\n"));
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+        await viewModel.RunEditorCommandCommand.ExecuteAsync(command);
+        Assert.Equal(0, viewModel.RecordedStepCount);
+    }
+
     [Fact]
     public async Task TextMacroLeavesCsvPreviewBeforeReplayingEveryStep()
     {
