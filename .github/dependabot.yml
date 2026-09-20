@@ -7,6 +7,10 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Tokyo"
+    groups:
+      dotnet-sdk-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "nuget"
     directory: "/"
