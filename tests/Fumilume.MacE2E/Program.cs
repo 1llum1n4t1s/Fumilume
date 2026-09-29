@@ -194,7 +194,11 @@ internal static class Program
                 await vm.OpenPathsAsync([path]);
                 var document = vm.SelectedDocument!;
                 var editor = window.FindControl<TextEditor>("Editor")!;
-                editor.Focus();
+                // プレビューからの切り替えは binding/layout の反映後にフォーカスを当てる。
+                // AvaloniaEdit の RoutedCommand は GotFocus の入力元へ実行される。
+                await WaitAsync(() => editor.IsVisible && ReferenceEquals(editor.Document, document.EditorDocument));
+                editor.TextArea.Focus();
+                await WaitAsync(() => editor.TextArea.IsFocused);
                 foreach (var modifier in new[] { KeyModifiers.Alt, KeyModifiers.Meta })
                 foreach (var key in new[] { Key.Back, Key.Delete })
                 {
@@ -224,7 +228,11 @@ internal static class Program
                     vm.ToggleMacroRecordingCommand.Execute(null);
                     var expectedText = document.Text;
                     var expectedCaret = editor.CaretOffset;
-                    Require(expectedText != original && vm.RecordedStepCount == 1, "Control word deletion did not execute/record");
+                    Require(expectedText != original && vm.RecordedStepCount == 1,
+                        $"Control word deletion did not execute/record: key={key}, offset={offset}, selected={selected}, " +
+                        $"source={JsonSerializer.Serialize(original)}, actual={JsonSerializer.Serialize(expectedText)}, " +
+                        $"steps={vm.RecordedStepCount}, visible={editor.IsVisible}, focus={editor.TextArea.IsFocused}, " +
+                        $"boundDocument={ReferenceEquals(editor.Document, document.EditorDocument)}");
                     if (selected) Require(expectedText == original.Remove(2, 4), "Word deletion ignored selected text");
                     document.Text = original;
                     if (selected) { editor.Select(2, 4); editor.CaretOffset = 6; }
@@ -310,8 +318,9 @@ internal static class Program
                 var document = restored.Documents.Single(d => d.FilePath == path);
                 Require(document.Text == "未保存の日本語\n復元対象\n" && document.IsModified && document.CaretIndex == 3,
                     "Unsaved buffer/caret not restored");
-                Require(restored.SettingsTab is not null && restored.SelectedTab == restored.SettingsTab,
-                    "Settings tab/selection not restored");
+                // 設定の開閉は SettingsTabOpen として保存し、復元時の選択は文書へ戻す仕様。
+                Require(restored.SettingsTab is not null && restored.Tabs[^1] == restored.SettingsTab
+                    && restored.SelectedTab is DocumentViewModel, "Settings tab/content selection not restored");
                 Require(restored.Options.EditorFontSize == 19 && restored.Options.WordWrap, "Restored options changed");
                 await CaptureAsync(reopened, "restored-settings-window.png");
                 desktop.MainWindow = reopened;
@@ -418,8 +427,22 @@ internal static class Program
     private static byte[] Encode(Encoding encoding, string text) => [.. encoding.GetPreamble(), .. encoding.GetBytes(text)];
 
     private static void SendKey(TextEditor editor, Key key, KeyModifiers modifiers)
-        => editor.TextArea.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent,
-            Key = key, KeyModifiers = modifiers });
+    {
+        var before = new { text = editor.Text, caret = editor.CaretOffset,
+            selectionStart = editor.SelectionStart, selectionLength = editor.SelectionLength };
+        var args = new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent,
+            Source = editor.TextArea, Key = key, KeyModifiers = modifiers };
+        editor.TextArea.RaiseEvent(args);
+        var vm = TopLevel.GetTopLevel(editor)?.DataContext as MainWindowViewModel;
+        File.AppendAllText(Path.Combine(_output, "key-input.jsonl"),
+            JsonSerializer.Serialize(new { key = key.ToString(), modifiers = modifiers.ToString(), before,
+                after = new { text = editor.Text, caret = editor.CaretOffset,
+                    selectionStart = editor.SelectionStart, selectionLength = editor.SelectionLength },
+                args.Handled, source = args.Source?.GetType().Name, editor.IsVisible,
+                editor.IsKeyboardFocusWithin, textAreaFocused = editor.TextArea.IsFocused,
+                boundDocument = ReferenceEquals(editor.Document, vm?.SelectedDocument?.EditorDocument),
+                recordedStepCount = vm?.RecordedStepCount }) + Environment.NewLine);
+    }
 
     private static void RequireColoredPixels(Bitmap bitmap, int page)
     {

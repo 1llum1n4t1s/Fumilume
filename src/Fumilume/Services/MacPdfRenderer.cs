@@ -163,8 +163,8 @@ public sealed class MacPdfRenderer : IPdfRenderer
                     var destination = new CGRect(0, 0, width, height);
                     CGContextSetRGBFillColor(context, 1, 1, 1, 1);
                     CGContextFillRect(context, destination);
-                    CGContextTranslateCTM(context, 0, height);
-                    CGContextScaleCTM(context, 1, -1);
+                    // ビットマップコンテキストには画面用の上下反転を加えず、
+                    // PDF の回転と出力サイズへの変換を Core Graphics に任せる。
                     var transform = CGPDFPageGetDrawingTransform(
                         page,
                         CGPDFBox.Crop,
@@ -359,12 +359,6 @@ public sealed class MacPdfRenderer : IPdfRenderer
 
     [DllImport(CoreGraphics)]
     private static extern void CGContextFillRect(nint context, CGRect rectangle);
-
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextTranslateCTM(nint context, double tx, double ty);
-
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextScaleCTM(nint context, double sx, double sy);
 
     [DllImport(CoreGraphics)]
     private static extern void CGContextConcatCTM(nint context, CGAffineTransform transform);
