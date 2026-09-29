@@ -170,12 +170,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// 未保存の文書は「確認せずに閉じる代わりにセッションへ預ける」約束なので、預け先へ書けなかった
     /// ときは終了させない。書けたか（＝閉じてよいか）を戻り値で返す。
     /// </summary>
-    public async Task<bool> PersistSessionStateAsync()
+    public async Task<bool> PersistSessionStateAsync(bool requireSuccessfulSave = false)
     {
         // OnOpened より前は前回セッションがまだ正本。空の初期タブで上書きしてはいけない。
         if (_initialization is null)
         {
-            return true;
+            return !requireSuccessfulSave;
         }
 
         // 復元の途中で書くと、まだ戻していないタブの控えを「使われていない」と判断して消してしまう。
@@ -187,13 +187,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         // 失われるものが無ければ、保存できなくても終了は妨げない。
-        if (!Documents.Any(document => document.IsModified))
+        if (!requireSuccessfulSave && !Documents.Any(document => document.IsModified))
         {
             return true;
         }
 
         await _dialogs.ShowErrorAsync(
-            "未保存の内容を引き継げません",
+            requireSuccessfulSave ? "セッションを保存できません" : "未保存の内容を引き継げません",
             $"作業中の内容を {AppStoragePaths.Directory} へ控えられませんでした。\n\n"
             + "空き容量とアクセス権を確認するか、必要な文書を保存してから終了してください。");
         return false;

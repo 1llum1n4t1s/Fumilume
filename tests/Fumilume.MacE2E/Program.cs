@@ -9,11 +9,16 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using AvaloniaEdit;
 using Fumilume.Models;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 using Fumilume.Views;
+using Velopack;
+using Velopack.Locators;
+using Velopack.Sources;
+using VelopackUpdateDialog;
 
 namespace Fumilume.MacE2E;
 
@@ -302,6 +307,8 @@ internal static class Program
                 // 同じ製品 renderer の入力境界で拒否を確認する。
             });
 
+            await VerifyUpdateShutdownAsync(window, vm, desktop);
+
             await CaseAsync("settings-unsaved-session-restoration-native-window", async () =>
             {
                 var path = Path.Combine(_output, "復元する文書.txt");
@@ -384,6 +391,113 @@ internal static class Program
             WriteResults();
             desktop.Shutdown(_exitCode);
         }
+    }
+
+    private static async Task VerifyUpdateShutdownAsync(MainWindow window, MainWindowViewModel vm,
+        IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        var path = Path.Combine(_output, "更新前の未保存文書.txt");
+        await File.WriteAllTextAsync(path, "保存済み\n");
+        await vm.OpenPathsAsync([path]);
+        var document = vm.SelectedDocument!;
+        const string pendingText = "更新前に引き継ぐ未保存の日本語\n";
+        document.Text = pendingText;
+        var storage = AppStoragePaths.Directory;
+        var script = Path.Combine(_output, "update-start-boundary.sh");
+        // SDK のプロセス境界から実プロセスを起動し、その時点の保存内容を別成果物へ写す。
+        // アプリの置換自体は配布パッケージの検証で行う。
+        await File.WriteAllTextAsync(script,
+            "set -eu\ncp \"$3/session.json\" \"$2.session.json\"\n"
+            + "cp -R \"$3/session\" \"$2.session\"\nprintf 'started\\n' > \"$2\"\n");
+        var originalProcess = VelopackLocator.CreateDefaultForPlatform().Process;
+        using var updateVm = new UpdateDialogViewModel(new UpdateManager(
+            new SimpleFileSource(new DirectoryInfo(_output)), null,
+            new TestVelopackLocator("Fumilume", "1.0.0", Path.Combine(_output, "update-gate-packages"))));
+        var updateWindow = new UpdateDialogWindow(updateVm);
+        var modal = updateWindow.ShowDialog(window);
+        try
+        {
+            await CaseAsync("update-restart-persists-before-process-start", async () =>
+            {
+                var marker = Path.Combine(_output, "update-started");
+                var process = new UpdateService.SessionSavingUpdateProcess(originalProcess, window.PrepareForUpdateRestartAsync);
+                await Task.Run(() => process.StartProcess("/bin/sh", [script, "apply", marker, storage], _output, false));
+                await WaitAsync(() => File.Exists(marker));
+                var snapshot = JsonSerializer.Deserialize<SessionState>(await File.ReadAllTextAsync(marker + ".session.json"))!;
+                var tab = snapshot.Tabs.Single(item => item.FilePath == path);
+                Require(tab.IsModified && tab.BufferFile is not null, "Updater started without unsaved document metadata");
+                Require(await File.ReadAllTextAsync(Path.Combine(marker + ".session", tab.BufferFile!)) == pendingText,
+                    "Updater started before the unsaved Japanese buffer was persisted");
+                await CaptureAsync(updateWindow, "update-session-before-restart.png");
+            });
+
+            await CaseAsync("update-restart-save-failure-does-not-start-or-exit", async () =>
+            {
+                var blocker = Path.Combine(_output, "update-storage-blocker");
+                await File.WriteAllTextAsync(blocker, "This file prevents creation of the session directory.");
+                var marker = Path.Combine(_output, "update-save-failure-started");
+                var process = new UpdateService.SessionSavingUpdateProcess(originalProcess, window.PrepareForUpdateRestartAsync);
+                AppStoragePaths.OverrideDirectory(blocker);
+                try
+                {
+                    var application = Task.Run(() => process.StartProcess("/bin/sh", [script, "apply", marker, storage], _output, false));
+                    await DismissEditorDialogAsync(desktop, window, updateWindow, "閉じる", "update-save-error.png");
+                    await RequireUpdateRejectedAsync(application, process, marker);
+                    Require(window.IsVisible && document.Text == pendingText && document.IsModified,
+                        "Failed update lost the live document/window");
+                }
+                finally { AppStoragePaths.OverrideDirectory(storage); }
+            });
+
+            await CaseAsync("update-restart-unsaved-cancel-does-not-start-or-exit", async () =>
+            {
+                var marker = Path.Combine(_output, "update-cancelled-started");
+                var process = new UpdateService.SessionSavingUpdateProcess(originalProcess, window.PrepareForUpdateRestartAsync);
+                vm.Options.RestoreSession = false;
+                try
+                {
+                    var application = Task.Run(() => process.StartProcess("/bin/sh", [script, "apply", marker, storage], _output, false));
+                    await DismissEditorDialogAsync(desktop, window, updateWindow, "キャンセル", "update-unsaved-cancel.png");
+                    await RequireUpdateRejectedAsync(application, process, marker);
+                    Require(window.IsVisible && document.Text == pendingText && document.IsModified,
+                        "Cancelled update lost the live document/window");
+                }
+                finally { vm.Options.RestoreSession = true; }
+            });
+        }
+        finally
+        {
+            updateWindow.Close();
+            await modal;
+        }
+    }
+
+    private static async Task DismissEditorDialogAsync(IClassicDesktopStyleApplicationLifetime desktop,
+        MainWindow window, Window updateWindow, string buttonText, string screenshot)
+    {
+        await WaitAsync(() => desktop.Windows.Any(candidate => candidate != window && candidate != updateWindow && candidate.IsVisible));
+        var dialog = desktop.Windows.Last(candidate => candidate != window && candidate != updateWindow && candidate.IsVisible);
+        await CaptureAsync(dialog, screenshot);
+        var button = dialog.GetVisualDescendants().OfType<Button>().Single(item => Equals(item.Content, buttonText));
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    }
+
+    private static async Task RequireUpdateRejectedAsync(Task application,
+        UpdateService.SessionSavingUpdateProcess process, string marker)
+    {
+        try
+        {
+            await application.WaitAsync(TimeSpan.FromSeconds(15));
+            throw new InvalidDataException("Update process was accepted after cancellation/save failure");
+        }
+        catch (InvalidOperationException) { }
+        Require(!File.Exists(marker), "Updater process started after cancellation/save failure");
+        try
+        {
+            process.Exit(0);
+            throw new InvalidDataException("Update exit was accepted without successful persistence");
+        }
+        catch (InvalidOperationException) { }
     }
 
     private static async Task CaseAsync(string name, Func<Task> run)

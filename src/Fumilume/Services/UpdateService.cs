@@ -1,6 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Threading;
+using Fumilume.Views;
 using Velopack;
+using Velopack.Locators;
 using Velopack.Sources;
 using VelopackUpdateDialog;
 
@@ -26,8 +29,16 @@ public static class UpdateService
 
         try
         {
+            if (owner is not MainWindow mainWindow)
+            {
+                throw new InvalidOperationException("更新を適用するには作業中のウィンドウが必要です。");
+            }
+
+            var currentLocator = VelopackLocator.Current;
+            var process = new SessionSavingUpdateProcess(currentLocator.Process, mainWindow.PrepareForUpdateRestartAsync);
+            var locator = VelopackLocator.CreateDefaultForPlatform(process, currentLocator.Log);
             var manager = new UpdateManager(new SimpleWebSource(CanonicalUpdateBaseUrl),
-                new UpdateOptions { ExplicitChannel = OperatingSystem.IsMacOS() ? "osx-arm64" : null });
+                new UpdateOptions { ExplicitChannel = OperatingSystem.IsMacOS() ? "osx-arm64" : null }, locator);
             using var timeout = manually ? null : new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var options = CreateOptions(owner);
             options.ErrorOccurred += LogUpdateError;
@@ -80,6 +91,51 @@ public static class UpdateService
 
     private static void LogUpdateError(Exception exception)
         => AppLogger.For("Fumilume.UpdateService").Error("Fumilume の更新確認に失敗しました。", exception);
+
+    // 更新 UI はワーカースレッドで適用する。updater 起動後には取り消せないため、
+    // Exit ではなく StartProcess の手前で保存を確定させる。
+    internal sealed class SessionSavingUpdateProcess(IProcessImpl process, Func<Task<bool>> prepareRestart) : IProcessImpl
+    {
+        private bool _prepared;
+
+        public string GetCurrentProcessPath() => process.GetCurrentProcessPath();
+
+        public uint GetCurrentProcessId() => process.GetCurrentProcessId();
+
+        public void StartProcess(string exePath, IEnumerable<string> args, string workDir, bool showWindow)
+        {
+            var arguments = args.ToArray();
+            if (arguments.Contains("apply", StringComparer.Ordinal))
+            {
+                _prepared = false;
+                if (Dispatcher.UIThread.CheckAccess())
+                {
+                    throw new InvalidOperationException("更新の適用は UI スレッドから実行できません。");
+                }
+
+                if (!Dispatcher.UIThread.InvokeAsync(prepareRestart).GetAwaiter().GetResult())
+                {
+                    throw new InvalidOperationException("保存が完了しなかったため、更新の適用を中止しました。");
+                }
+
+                process.StartProcess(exePath, arguments, workDir, showWindow);
+                _prepared = true;
+                return;
+            }
+
+            process.StartProcess(exePath, arguments, workDir, showWindow);
+        }
+
+        public void Exit(int exitCode)
+        {
+            if (!_prepared)
+            {
+                throw new InvalidOperationException("保存前に更新のため終了することはできません。");
+            }
+
+            process.Exit(exitCode);
+        }
+    }
 
     private sealed class FumilumeUpdateDialogStrings : IUpdateDialogStrings
     {

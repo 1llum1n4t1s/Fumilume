@@ -1188,6 +1188,30 @@ public sealed partial class MainWindow : Window
             : WindowDecorations.BorderOnly;
     }
 
+    internal async Task<bool> PrepareForUpdateRestartAsync()
+    {
+        if (!IsVisible || _closeConfirmed || _closeCheckInProgress)
+        {
+            return false;
+        }
+
+        _closeCheckInProgress = true;
+        try
+        {
+            if (!await _viewModel.CanCloseAsync())
+            {
+                return false;
+            }
+
+            SaveWindowBounds();
+            return await _viewModel.PersistSessionStateAsync(requireSuccessfulSave: true);
+        }
+        finally
+        {
+            _closeCheckInProgress = false;
+        }
+    }
+
     private async void OnClosing(object? sender, WindowClosingEventArgs args)
     {
         if (_closeConfirmed)

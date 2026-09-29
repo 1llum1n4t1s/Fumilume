@@ -27,7 +27,8 @@ internal static class Program
         {
             StartupArgs = args;
             log.InfoFormat("Fumilume を起動します。引数: {0} 件", args.Length);
-            var velopack = VelopackApp.Build();
+            // 保存を取り消したダウンロード済み更新も、次回起動で保存確認を迂回しない。
+            var velopack = VelopackApp.Build().SetAutoApplyOnStartup(false);
 #if WINDOWS
             velopack
                 .OnAfterInstallFastCallback(_ => FileAssociationService.RefreshAssociatedFileTypes())

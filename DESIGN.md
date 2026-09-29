@@ -152,6 +152,8 @@ Avalonia のドロップイベントは Bubble のため、`TextArea` のクラ�
 
 アプリ側の `UpdateService` は `VelopackUpdateDialog.Avalonia` を介して更新確認・ダウンロード・適用・再起動を行います。配布側は `scripts/release-local.ps1` が x64 / ARM64 を順番にNative AOT発行し、コード署名、Velopackパッケージ化、Cloudflare R2へのアップロード、固定URLのキャッシュパージ、公開ファイルの版・ハッシュ・サイズ・署名照合を行います。
 
+更新適用では updater の起動前に未保存文書の確認とセッション保存を完了し、取消・保存失敗時は適用も終了も行いません。ダウンロード済み更新の起動時自動適用は無効にし、次回も更新UIから同じ保存境界を通します。
+
 Apple Silicon向けは `.github/workflows/macos-release.yml` のarm64 Macで `scripts/build-macos-arm64.sh` を実行し、locked restore、Native AOT発行、Developer ID署名、Apple公証、PKG・ZIP・更新パッケージ作成を行います。実AvaloniaとCore Graphicsを使う `tests/Fumilume.MacE2E`、配布物の署名・公証とNative AOT起動結果をCI成果物へ残します。主アプリは空entitlementsを使い、同梱ネイティブライブラリを同じTeam IDで個別署名します。`scripts/release-all.ps1` は現在のHEADと一致するMac CI成功結果を取得し、Windows版リリース後にMac成果物を `scripts/publish-macos.ps1` で同じR2 bucketへ公開・SHA256照合します。Mac専用チャンネルは `osx-arm64`、更新フィードは `releases.osx-arm64.json` です。Windows の `packages.lock.json` と macOS の lockfile は分離し、片方の restore が他方の依存グラフを消さないようにします。
 
 ## 永続データと外部境界
