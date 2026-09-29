@@ -173,6 +173,23 @@ if [[ "${CI:-}" == true ]]; then
   sudo installer -pkg "$installer" -target /
   codesign --verify --deep --strict /Applications/Fumilume.app
   spctl --assess --type execute --verbose=4 /Applications/Fumilume.app
+  # PKG の postinstall が起動した、今回インストールした実行ファイルだけを停止する。
+  # その後、専用 HOME で通常起動・終了を検証する。
+  installed_pid="$(pgrep -x Fumilume || true)"
+  if [[ -n "$installed_pid" ]]; then
+    [[ "$installed_pid" =~ ^[0-9]+$ ]]
+    installed_command="$(ps -p "$installed_pid" -o command=)"
+    [[ "$installed_command" == /Applications/Fumilume.app/Contents/MacOS/Fumilume* ]]
+    kill "$installed_pid"
+    for attempt in {1..30}; do
+      ! kill -0 "$installed_pid" 2>/dev/null && break
+      sleep 1
+    done
+    if kill -0 "$installed_pid" 2>/dev/null; then
+      echo "今回のインストールが起動したプロセスを停止できませんでした。" >&2
+      exit 1
+    fi
+  fi
   bash scripts/macos/verify-native-launch.sh /Applications/Fumilume.app "$verification/installed-launch"
 fi
 bash scripts/macos/verify-update-apply.sh "$bundle" "$artifacts" "$verification/update-apply"
