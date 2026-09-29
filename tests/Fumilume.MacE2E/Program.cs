@@ -223,6 +223,9 @@ internal static class Program
                     var offset = key == Key.Back ? original.Length : 0;
                     if (selected) { editor.Select(2, 4); editor.CaretOffset = 6; }
                     else { editor.Select(offset, 0); editor.CaretOffset = offset; }
+                    // CRLF の中間 offset はエディタが行区切り全体へ補正する。
+                    var selectionStart = editor.SelectionStart;
+                    var selectionLength = editor.SelectionLength;
                     vm.ToggleMacroRecordingCommand.Execute(null);
                     SendKey(editor, key, KeyModifiers.Control);
                     vm.ToggleMacroRecordingCommand.Execute(null);
@@ -233,7 +236,8 @@ internal static class Program
                         $"source={JsonSerializer.Serialize(original)}, actual={JsonSerializer.Serialize(expectedText)}, " +
                         $"steps={vm.RecordedStepCount}, visible={editor.IsVisible}, focus={editor.TextArea.IsFocused}, " +
                         $"boundDocument={ReferenceEquals(editor.Document, document.EditorDocument)}");
-                    if (selected) Require(expectedText == original.Remove(2, 4), "Word deletion ignored selected text");
+                    if (selected) Require(expectedText == original.Remove(selectionStart, selectionLength),
+                        "Word deletion ignored the native editor's selected text");
                     document.Text = original;
                     if (selected) { editor.Select(2, 4); editor.CaretOffset = 6; }
                     else { editor.Select(offset, 0); editor.CaretOffset = offset; }
