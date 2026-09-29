@@ -2,9 +2,9 @@
 
 ## 目的と範囲
 
-Fumilume は、複数のテキスト文書を垂直タブで扱うデスクトップエディタです。文字コードと改行コードを維持した編集、Markdownプレビュー、PDF閲覧、サクラエディタを参考にした編集操作、設定・更新・ファイル関連付けを提供します。公開配布は現在 Windows 向けで、Apple Silicon macOS 向けはローカル検証用のビルド経路を用意しています。
+Fumilume は、複数のテキスト文書を垂直タブで扱うデスクトップエディタです。文字コードと改行コードを維持した編集、Markdownプレビュー、PDF閲覧、サクラエディタを参考にした編集操作、設定・更新・ファイル関連付けを提供します。WindowsとApple Silicon macOS向けに公開配布します。
 
-Windows の対象は `net10.0-windows10.0.26100.0`、最低対応OSは Windows 10 バージョン1809です。macOS の対象は `net10.0` / `osx-arm64`、最低対応OSは macOS 14 です。各 OS で自己完結型 Native AOT アプリを作ります。
+Windows の対象は `net10.0-windows10.0.26100.0`、最低対応OSは Windows 10 バージョン1809です。macOS の対象は `net10.0` / `osx-arm64`、最低対応OSは macOS 15 です。各 OS で自己完結型 Native AOT アプリを作ります。
 
 ## システム構成
 
@@ -17,7 +17,7 @@ Windows の対象は `net10.0-windows10.0.26100.0`、最低対応OSは Windows 1
 | PDFモデル | `PdfDocumentViewModel` | PDFの読込、ページ範囲、拡大率、非同期レンダリング、画像ライフタイム |
 | 設定モデル | `AppOptionsViewModel`, `SettingsTabViewModel` | UIへ公開する設定、値の即時反映、永続化、関連付け操作 |
 | サービス | `Services/` | 文書I/O、設定、ログ、更新、ダイアログ、テーマ、関連付け、Markdown解析、PDFレンダリング、フォルダ横断検索、構文ハイライト、書式整形、アウトライン解析、キーボードマクロ |
-| ビルド・配布 | `scripts/build-macos-arm64.sh`, `scripts/release-local.ps1`, `../vps-web/lp/fumilume/` | macOS ローカル検証用バンドル、Windows 署名付き Velopack 成果物、R2配信、更新マニフェスト、ランディングページ |
+| ビルド・配布 | `scripts/build-macos-arm64.sh`, `scripts/release-local.ps1`, `../vps-web/lp/fumilume/` | macOS公証済みPKG・ZIP、Windows署名付きVelopack成果物、R2配信、更新マニフェスト、ランディングページ |
 
 ViewModel は状態と操作を持ち、View は表示とAvalonia固有の接続を担当します。ファイルシステム、Windows API、更新UIなどの副作用はサービスへ分離し、ViewModelテストから代替実装を渡せる境界を保ちます。
 
@@ -152,7 +152,7 @@ Avalonia のドロップイベントは Bubble のため、`TextArea` のクラ�
 
 アプリ側の `UpdateService` は `VelopackUpdateDialog.Avalonia` を介して更新確認・ダウンロード・適用・再起動を行います。配布側は `scripts/release-local.ps1` が x64 / ARM64 を順番にNative AOT発行し、コード署名、Velopackパッケージ化、Cloudflare R2へのアップロード、固定URLのキャッシュパージ、公開ファイルの版・ハッシュ・サイズ・署名照合を行います。
 
-Apple Silicon 向けは `scripts/build-macos-arm64.sh` を Apple Silicon Mac 上で実行し、`packages.macos.lock.json` の locked restore、Native AOT 発行、`.app` 構築、ローカル検証用のアドホック署名と ZIP 作成を行います。この経路は公証・公開を行いません。Windows の `packages.lock.json` と macOS の lockfile は分離し、片方の restore が他方の依存グラフを消さないようにします。
+Apple Silicon向けは `.github/workflows/macos-release.yml` のarm64 Macで `scripts/build-macos-arm64.sh` を実行し、locked restore、Native AOT発行、Developer ID署名、Apple公証、PKG・ZIP・更新パッケージ作成を行います。実AvaloniaとCore Graphicsを使う `tests/Fumilume.MacE2E`、配布物の署名・公証とNative AOT起動結果をCI成果物へ残します。主アプリは空entitlementsを使い、同梱ネイティブライブラリを同じTeam IDで個別署名します。`scripts/release-all.ps1` は現在のHEADと一致するMac CI成功結果を取得し、Windows版リリース後にMac成果物を `scripts/publish-macos.ps1` で同じR2 bucketへ公開・SHA256照合します。Mac専用チャンネルは `osx-arm64`、更新フィードは `releases.osx-arm64.json` です。Windows の `packages.lock.json` と macOS の lockfile は分離し、片方の restore が他方の依存グラフを消さないようにします。
 
 ## 永続データと外部境界
 

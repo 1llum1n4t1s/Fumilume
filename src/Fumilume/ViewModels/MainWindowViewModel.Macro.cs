@@ -271,10 +271,10 @@ public sealed partial class MainWindowViewModel
                 document.MoveCaret(step.Motion, step.ExtendSelection);
                 break;
             case MacroStepKind.DeleteBack:
-                document.DeleteBack();
+                document.DeleteBack(step.Motion == MacroMotion.WordLeft);
                 break;
             case MacroStepKind.DeleteForward:
-                document.DeleteForward();
+                document.DeleteForward(step.Motion == MacroMotion.WordRight);
                 break;
             case MacroStepKind.FindNext:
                 document.FindNext(step.Text, step.MatchCase, step.UseRegex);

@@ -1,8 +1,8 @@
 # Fumilume
 
-Fumilume（フミルメ）は、複数の文書を Chrome のような垂直タブで行き来できる無料テキストエディタです。開いたファイルの文字コードと改行コードを保ったまま編集できます。Windows 版を公開配布し、Apple Silicon macOS 版はローカル検証用です。
+Fumilume（フミルメ）は、複数の文書を Chrome のような垂直タブで行き来できる無料テキストエディタです。開いたファイルの文字コードと改行コードを保ったまま編集できます。WindowsとApple Silicon Macに対応しています。
 
-[公式サイト](https://fumilume.kagayoi.com/) ・ [Windows x64 版をダウンロード](https://fumilume.kagayoi.com/Fumilume-win-Setup.exe) ・ [Windows ARM64 版をダウンロード](https://fumilume.kagayoi.com/Fumilume-win-arm64-Setup.exe)
+[公式サイト](https://fumilume.kagayoi.com/) ・ [Windows x64 版をダウンロード](https://fumilume.kagayoi.com/Fumilume-win-Setup.exe) ・ [Windows ARM64 版をダウンロード](https://fumilume.kagayoi.com/Fumilume-win-arm64-Setup.exe) ・ [Apple Silicon Mac版をダウンロード](https://fumilume.kagayoi.com/Fumilume-osx-arm64-Setup.pkg)
 
 ![Fumilume の画面](https://fumilume.kagayoi.com/hero-app.png)
 
@@ -51,7 +51,9 @@ Fumilume は Windows 10 バージョン 1809 以降と Windows 11 に対応し�
 
 PC の種類が分からない場合は、Windows の「設定」→「システム」→「バージョン情報」にある「システムの種類」を確認してください。迷った場合は x64 版を選びます。
 
-Apple Silicon macOS 版は、現時点では公開インストーラーと自動更新を提供していません。試用版の動作確認では、文書の開く・保存・再起動後の復元と PDF 表示を確認してください。
+Apple Silicon Mac（M1以降、macOS 15以降）では、[Mac版インストーラー](https://fumilume.kagayoi.com/Fumilume-osx-arm64-Setup.pkg)を開いてインストールしてください。Developer ID署名とAppleの公証を行っています。起動時、または設定画面の「今すぐ更新を確認」から更新できます。Intel Macには対応していません。
+
+Macでは新規・開く・保存・コピー・貼り付け・検索などに `Command` キーを使います。設定は `⌘,`、コマンドパレットは `⇧⌘P`、Markdown / CSVプレビューは `⇧⌘M` で開けます。ファイルの既定アプリはFinderの「情報を見る」から変更してください。
 
 ## 基本的な使い方
 

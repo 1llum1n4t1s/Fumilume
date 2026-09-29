@@ -373,6 +373,18 @@ foreach ($m in $manifests) {
         if ($asset.FileName) { $keep[$asset.FileName] = $true }
     }
 }
+# 別OSの公開フィードが参照する成果物も保持する。Windowsだけの発行でMac更新を壊さない。
+foreach ($channel in @('win', 'win-arm64', 'osx-arm64')) {
+    if (Test-Path -LiteralPath (Join-Path $ArtifactsDir "releases.$channel.json")) { continue }
+    try {
+        $publishedFeed = Invoke-RestMethod -Uri "$BaseUrl/releases.$channel.json" -TimeoutSec 30
+        foreach ($asset in $publishedFeed.Assets) {
+            if ($asset.FileName) { $keep[$asset.FileName] = $true }
+        }
+    } catch {
+        if ($_.Exception.Response.StatusCode -ne 404) { throw }
+    }
+}
 Write-Host "  保持対象 nupkg: $($keep.Count) 件"
 
 $api = "https://api.cloudflare.com/client/v4/accounts/$AccountId/r2/buckets/$Bucket"

@@ -1,6 +1,6 @@
 {
   "localRelease": {
-    "run": "pwsh -NoProfile -File scripts/release-local.ps1",
+    "run": "pwsh -NoProfile -File scripts/release-all.ps1",
     "precheck": "pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly",
     "precheckFailMessage": "リリースの事前確認に失敗しました。SimplySign Desktop、ネットワーク、Cloudflare 認証、Wrangler の状態を確認してください"
   }

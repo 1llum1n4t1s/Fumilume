@@ -14,8 +14,7 @@ public static class UpdateService
 
     public static async Task CheckAsync(Window? owner, bool manually)
     {
-        // 公開中の更新フィードは Windows 用。macOS のローカル検証ビルドでは照会しない。
-        if (!OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows() && !OperatingSystem.IsMacOS())
         {
             return;
         }
@@ -27,7 +26,8 @@ public static class UpdateService
 
         try
         {
-            var manager = new UpdateManager(new SimpleWebSource(CanonicalUpdateBaseUrl));
+            var manager = new UpdateManager(new SimpleWebSource(CanonicalUpdateBaseUrl),
+                new UpdateOptions { ExplicitChannel = OperatingSystem.IsMacOS() ? "osx-arm64" : null });
             using var timeout = manually ? null : new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var options = CreateOptions(owner);
             options.ErrorOccurred += LogUpdateError;

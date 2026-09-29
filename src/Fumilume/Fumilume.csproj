@@ -55,5 +55,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Fumilume.Tests" />
+    <InternalsVisibleTo Include="Fumilume.MacE2E" />
   </ItemGroup>
 </Project>

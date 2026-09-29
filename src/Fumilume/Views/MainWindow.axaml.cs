@@ -237,7 +237,7 @@ public sealed partial class MainWindow : Window
             StartForwardedOpen(arguments);
         }
 
-        if (OperatingSystem.IsWindows() && _options.CheckUpdatesOnStartup)
+        if (_options.CheckUpdatesOnStartup)
         {
             _ = UpdateService.CheckAsync(this, manually: false);
         }
@@ -1038,8 +1038,15 @@ public sealed partial class MainWindow : Window
             ? Motion(motion, shift)
             : args.Key switch
         {
-            Key.Back => new MacroStep { Kind = MacroStepKind.DeleteBack },
-            Key.Delete => new MacroStep { Kind = MacroStepKind.DeleteForward },
+            // 削除の binding は OS 共通。Alt / Meta など無操作の組み合わせは記録しない。
+            Key.Back when args.KeyModifiers is KeyModifiers.None or KeyModifiers.Shift
+                => new MacroStep { Kind = MacroStepKind.DeleteBack },
+            Key.Back when args.KeyModifiers == KeyModifiers.Control
+                => new MacroStep { Kind = MacroStepKind.DeleteBack, Motion = MacroMotion.WordLeft },
+            Key.Delete when args.KeyModifiers == KeyModifiers.None
+                => new MacroStep { Kind = MacroStepKind.DeleteForward },
+            Key.Delete when args.KeyModifiers == KeyModifiers.Control
+                => new MacroStep { Kind = MacroStepKind.DeleteForward, Motion = MacroMotion.WordRight },
             Key.Enter or Key.Return => new MacroStep { Kind = MacroStepKind.InsertNewLine },
 
             // Tab は、実際に文字が入るときだけ記録する。選択があるときは字下げ、

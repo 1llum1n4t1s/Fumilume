@@ -130,7 +130,7 @@ public sealed partial class MainWindowViewModel
             yield return Entry(ViewCategory, "PDF を高さに合わせる", null, () => pdf.FitHeightCommand.ExecuteAsync(null));
             yield return Entry(ViewCategory, "PDF を幅に合わせる", null, () => pdf.FitWidthCommand.ExecuteAsync(null));
         }
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
         {
             yield return Entry(ViewCategory, "更新を確認", null, () => _dialogs.CheckForUpdatesAsync(manually: true));
         }
@@ -164,7 +164,7 @@ public sealed partial class MainWindowViewModel
             yield return new CommandPaletteEntry(
                 definition.Category,
                 definition.Title,
-                definition.Gesture,
+                definition.Id == EditorCommandId.GoToLine ? PrimaryShortcut("G") : definition.Gesture,
                 () => RunEditorCommandAsync(definition.Id));
         }
     }

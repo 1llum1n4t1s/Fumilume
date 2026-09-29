@@ -4,10 +4,10 @@
 
 ## 対象と構成
 
-- `src/Fumilume/`: Windows 向け Avalonia デスクトップアプリと Apple Silicon macOS 向けローカル検証ビルド
+- `src/Fumilume/`: WindowsとApple Silicon macOS向けAvaloniaデスクトップアプリ
 - `tests/Fumilume.Tests/`: xUnit v3 と Avalonia.Headless による単体・統合テスト
 - `scripts/release-local.ps1`: x64 / ARM64 の Native AOT、署名、Velopack パッケージ化、R2 配布、公開検証
-- `scripts/build-macos-arm64.sh`: Apple Silicon Mac 上で Native AOT のローカル検証用 `.app` と ZIP を作成
+- `scripts/build-macos-arm64.sh`: Apple Silicon Mac上でNative AOT・Developer ID署名・公証済みPKG/ZIPと更新パッケージを作成
 - `../vps-web/lp/fumilume/`: `fumilume.kagayoi.com` のVPS配信のランディングページ
 - `Directory.Build.props`: 対象フレームワーク、版番号、対応プラットフォーム、警告・lock file 方針の正本
 
@@ -63,10 +63,10 @@ dotnet test Fumilume.slnx -c Release --no-restore
 pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 ```
 
-- 署名付きローカル成果物までの確認には `-SkipUpload` を使う。完全なリリースは引数なしで1回だけ実行し、x64 / ARM64 の発行・署名・R2アップロード・キャッシュパージ・公開ハッシュ検証を同じ処理で完走させる。
+- 署名付きローカル成果物までの確認には `-SkipUpload` を使う。完全なリリースは `scripts/release-all.ps1` を1回実行し、同じHEADのMac CI成功確認、Windows x64/ARM64とMac arm64の署名・公開ハッシュ検証を完走させる。
 - リリース出力の清掃は `local-release/` 内の `artifacts`、`remote-verification`、`publish-win-x64`、`publish-win-arm64` を対象とし、`build-*` 内の `bin` / `obj` とその親ディレクトリを保持する。
 - リリーススクリプトが読む証明書・Cloudflare認証情報はリポジトリ外の正本を使う。秘密値をコード、ログ、fixture、Git差分へ出力しない。
-- GitHub Actions のリリースCIは存在しないため、ローカル検証と `scripts/release-local.ps1` の成功結果を出荷判定にする。
+- Windowsはローカル検証と `scripts/release-local.ps1`、Macは `.github/workflows/macos-release.yml` のNative AOT・署名・公証・E2E成功と公開ハッシュ一致を出荷判定にする。
 
 ## 変更時の確認先
 

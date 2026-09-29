@@ -1,0 +1,66 @@
+name: macOS release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fumilume-macos-release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Apple Silicon runner を確認
+        run: test "$(uname -m)" = arm64
+      - name: 固定 .NET SDK を導入
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: 実アプリ経路の E2E 検証
+        run: |
+          dotnet restore tests/Fumilume.MacE2E/Fumilume.MacE2E.csproj -p:FumilumeTargetMac=true --locked-mode
+          dotnet run --project tests/Fumilume.MacE2E -p:FumilumeTargetMac=true -c Release --no-restore -- "$PWD/local-macos-build/e2e"
+      - name: Native AOT 発行・署名・公証・起動検証
+        env:
+          APPLE_CERT_APP_P12_BASE64: ${{ secrets.APPLE_CERT_APP_P12_BASE64 }}
+          APPLE_CERT_INSTALLER_P12_BASE64: ${{ secrets.APPLE_CERT_INSTALLER_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_SIGN_APP_IDENTITY: ${{ secrets.APPLE_SIGN_APP_IDENTITY }}
+          APPLE_SIGN_INSTALL_IDENTITY: ${{ secrets.APPLE_SIGN_INSTALL_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: bash scripts/build-macos-arm64.sh
+      - name: 更新フィードとパッケージの取得を検証
+        run: dotnet run --project tests/Fumilume.MacE2E -p:FumilumeTargetMac=true -c Release --no-restore -- --verify-updates "$PWD/local-macos-build/artifacts" "$PWD/local-macos-build/verification/update-sdk"
+      # 配信は署名済み artifact の検証後に既存の R2 配布経路で行う。
+      - name: 配布物を保存
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: velopack.osx-arm64
+          path: local-macos-build/artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: 検証記録を保存
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verification.osx-arm64
+          path: |
+            local-macos-build/e2e/
+            local-macos-build/verification/native-launch/
+            local-macos-build/verification/installed-launch/
+            local-macos-build/verification/SHA256SUMS
+            local-macos-build/verification/distribution.json
+            local-macos-build/verification/update-sdk/update-results.json
+          if-no-files-found: warn
+          retention-days: 14

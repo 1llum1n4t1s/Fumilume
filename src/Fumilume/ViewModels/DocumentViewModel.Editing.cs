@@ -265,8 +265,8 @@ public sealed partial class DocumentViewModel
         SetSelection(target, 0);
     }
 
-    /// <summary>選択があればそれを、無ければカーソルの手前 1 つを消す（Backspace 相当）。</summary>
-    public void DeleteBack()
+    /// <summary>選択があればそれを、無ければ手前の文字または単語を消す（Backspace 相当）。</summary>
+    public void DeleteBack(bool byWord = false)
     {
         if (DeleteSelectionIfAny())
         {
@@ -274,7 +274,10 @@ public sealed partial class DocumentViewModel
         }
 
         var offset = ClampOffset(CaretIndex);
-        if (NextCaretPosition(offset, LogicalDirection.Backward) is not { } start)
+        var target = byWord
+            ? ResolveWordDeletionBoundary(offset, LogicalDirection.Backward)
+            : ResolveCharacterDeletionBoundary(offset, LogicalDirection.Backward);
+        if (target is not { } start)
         {
             return;
         }
@@ -283,8 +286,8 @@ public sealed partial class DocumentViewModel
         SetSelection(start, 0);
     }
 
-    /// <summary>選択があればそれを、無ければカーソルの後ろ 1 つを消す（Delete 相当）。</summary>
-    public void DeleteForward()
+    /// <summary>選択があればそれを、無ければ後ろの文字または単語を消す（Delete 相当）。</summary>
+    public void DeleteForward(bool byWord = false)
     {
         if (DeleteSelectionIfAny())
         {
@@ -292,7 +295,10 @@ public sealed partial class DocumentViewModel
         }
 
         var offset = ClampOffset(CaretIndex);
-        if (NextCaretPosition(offset, LogicalDirection.Forward) is not { } end)
+        var target = byWord
+            ? ResolveWordDeletionBoundary(offset, LogicalDirection.Forward)
+            : ResolveCharacterDeletionBoundary(offset, LogicalDirection.Forward);
+        if (target is not { } end)
         {
             return;
         }
@@ -369,6 +375,65 @@ public sealed partial class DocumentViewModel
         EditorDocument.Remove(offset, length);
         SetSelection(offset, 0);
         return true;
+    }
+
+    /// <summary>行境界の削除では CRLF の途中で止まらず、改行全体を対象にする。</summary>
+    private int? ResolveCharacterDeletionBoundary(int offset, LogicalDirection direction)
+    {
+        var line = EditorDocument.GetLineByOffset(offset);
+        if (direction == LogicalDirection.Backward)
+        {
+            return offset == line.Offset && line.PreviousLine is { } previousLine
+                ? previousLine.EndOffset
+                : NextCaretPosition(offset, direction, CaretPositioningMode.EveryCodepoint);
+        }
+
+        return offset == line.EndOffset && line.NextLine is { } nextLine
+            ? nextLine.Offset
+            : NextCaretPosition(offset, direction);
+    }
+
+    /// <summary>AvaloniaEdit の単語削除と同じく、WordStart と行末の停止位置を使う。</summary>
+    private int ResolveWordDeletionBoundary(int offset, LogicalDirection direction)
+    {
+        var line = EditorDocument.GetLineByOffset(offset);
+        var next = NextCaretPosition(offset, direction, CaretPositioningMode.WordStart);
+        if (direction == LogicalDirection.Backward)
+        {
+            // 行内の単語境界が無ければ、直前の行末で止まる。
+            return next is { } previous && previous >= line.Offset
+                ? previous
+                : line.PreviousLine is { } previousLine
+                    ? previousLine.Offset + previousLine.Length
+                    : 0;
+        }
+
+        var lineEnd = line.Offset + line.Length;
+        if (next is { } following && following <= lineEnd)
+        {
+            return following;
+        }
+
+        if (offset < lineEnd)
+        {
+            return lineEnd;
+        }
+
+        // 行末からの削除は、次行の最初の単語境界（空行なら行頭）へ進む。
+        if (line.NextLine is not { } nextLine)
+        {
+            return EditorDocument.TextLength;
+        }
+
+        if (nextLine.Length == 0)
+        {
+            return nextLine.Offset;
+        }
+
+        return Math.Min(
+            NextCaretPosition(nextLine.Offset - 1, direction, CaretPositioningMode.WordStart)
+                ?? EditorDocument.TextLength,
+            nextLine.Offset + nextLine.Length);
     }
 
     private int ResolveMotion(MacroMotion motion)

@@ -459,9 +459,6 @@
                                     <Button x:Name="ManualUpdateButton" Classes="cmd" HorizontalAlignment="Left" Margin="0,10,0,0"
                                             Content="今すぐ更新を確認"
                                             Command="{Binding CheckForUpdatesCommand}" />
-                                    <TextBlock x:Name="MacUpdateNotice" Classes="settingscaption" IsVisible="False"
-                                               TextWrapping="Wrap"
-                                               Text="Apple Silicon 版はローカル検証用です。更新は新しいビルドで行ってください。" />
                                 </StackPanel>
                             </HeaderedContentControl>
 
