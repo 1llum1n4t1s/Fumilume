@@ -36,6 +36,8 @@ fi
 work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/fumilume-release.XXXXXX")"
 keychain="$work_dir/signing.keychain-db"
 keychain_password="$(openssl rand -base64 32)"
+pack_pid=""
+monitor_pid=""
 original_keychains=()
 while IFS= read -r item; do
   item="$(printf '%s' "$item" | sed 's/^[[:space:]]*"//;s/"[[:space:]]*$//')"
@@ -44,6 +46,8 @@ done < <(security list-keychains -d user)
 cleanup() {
   status=$?
   trap - EXIT
+  [[ -n "$monitor_pid" ]] && kill "$monitor_pid" 2>/dev/null || true
+  [[ -n "$pack_pid" ]] && kill "$pack_pid" 2>/dev/null || true
   security list-keychains -d user -s "${original_keychains[@]}" || true
   security delete-keychain "$keychain" >/dev/null 2>&1 || true
   rm -rf -- "$work_dir"
@@ -109,14 +113,36 @@ while IFS= read -r -d '' item; do
   fi
 done < <(find "$publish" -mindepth 1 -maxdepth 1 -print0)
 test -f "$prepared_bundle/Contents/Resources/Assets/Fonts/LICENSE-FLUENT-SYSTEM-ICONS.txt"
+du -sk "$prepared_bundle" "$prepared_bundle/Contents/Resources"
 dotnet tool install vpk --version 1.2.161 --tool-path "$work_dir/tools"
-"$work_dir/tools/vpk" pack --packId Fumilume --packTitle Fumilume --packVersion "$version" \
+"$work_dir/tools/vpk" --verbose pack --packId Fumilume --packTitle Fumilume --packVersion "$version" \
   --mainExe Fumilume --packDir "$prepared_bundle" --outputDir "$artifacts" \
   --runtime osx-arm64 --channel osx-arm64 --icon "$work_dir/Fumilume.icns" \
   --plist "$work_dir/Info.plist" --signAppIdentity "$APPLE_SIGN_APP_IDENTITY" \
   --signInstallIdentity "$APPLE_SIGN_INSTALL_IDENTITY" --signDisableDeep \
   --signEntitlements "$repo_dir/scripts/macos/NativeAot.entitlements" \
-  --notaryProfile fumilume-notary --keychain "$keychain"
+  --notaryProfile fumilume-notary --keychain "$keychain" &
+pack_pid=$!
+# CLI引数には署名情報があるため、診断は実行ファイル名とCPU・メモリーだけに限定する。
+(
+  while kill -0 "$pack_pid" 2>/dev/null; do
+    date -u '+%Y-%m-%dT%H:%M:%SZ'
+    ps -Ao pid,ppid,state,%cpu,rss,etime,comm | \
+      awk 'NR == 1 || /vpk|dotnet|ditto|\/cp$|notarytool|codesign|productbuild/'
+    sleep 30
+  done
+) &
+monitor_pid=$!
+if wait "$pack_pid"; then
+  pack_status=0
+else
+  pack_status=$?
+fi
+pack_pid=""
+kill "$monitor_pid" 2>/dev/null || true
+wait "$monitor_pid" 2>/dev/null || true
+monitor_pid=""
+[[ "$pack_status" == 0 ]] || exit "$pack_status"
 # 配布 ZIP の中身を検証し、そのまま起動確認に使う。
 portable="$artifacts/Fumilume-osx-arm64-Portable.zip"
 installer="$artifacts/Fumilume-osx-arm64-Setup.pkg"
