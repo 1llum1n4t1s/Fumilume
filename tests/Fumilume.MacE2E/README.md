@@ -27,4 +27,4 @@ dotnet run --project tests/Fumilume.MacE2E/Fumilume.MacE2E.csproj -c Release -p:
 
 `TestVelopackLocator` で隔離した旧版 1.0.0 のインストール状態を与え、実フィードが選ぶ版・アプリ ID・チャネル・ダウンロードサイズ・SHA256 を生成物と照合する。JSON とダウンロード済み nupkg を成果物へ残す。これは認証やデスクトップを要求せず、Windows でも managed DLL から実行可能。
 
-この SDK 検証単独では実アプリの置換を行わず、結果 JSON は `appReplacementVerified: false` とする。配布スクリプトは別途 `scripts/macos/verify-update-apply.sh` で署名済み実 `.app` のコピーを同版 full.nupkg へ置換し、inode変更、署名、Gatekeeper、自動再起動と通常終了を確認する。専用 HOME を使い、ログと JSON を `verification/update-apply` に残す。実インストール先の所有者・権限も記録するが、管理者認証の対話を必要とする更新はこの CI 検証に含まない。
+この SDK 検証単独では実アプリの置換を行わず、結果 JSON は `appReplacementVerified: false` とする。配布スクリプトは別途 `scripts/macos/verify-update-apply.sh` で署名済み実 `.app` のコピーを同版 full.nupkg へ置換し、inode変更、署名、Gatekeeper、自動再起動と通常終了を確認する。CIではPKGで導入した `/Applications/Fumilume.app` にも管理者として適用し、通常ユーザーで再起動する。専用 HOME を使い、ログと JSON を `verification/update-apply` に残す。実インストール先の所有者・権限も記録するが、管理者認証ダイアログの対話はこの CI 検証に含まない。

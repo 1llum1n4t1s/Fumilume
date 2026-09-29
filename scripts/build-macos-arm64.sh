@@ -95,9 +95,23 @@ while IFS= read -r -d '' binary; do
     codesign --verify --strict "$binary"
   fi
 done < <(find "$publish" -type f -print0)
+# MacOS はコード専用の場所なので、ライセンスなどのデータは Resources に配置する。
+# フォント本体は AvaloniaResource として実行ファイルへ組み込まれている。
+prepared_bundle="$work_dir/Fumilume.app"
+mkdir -p "$prepared_bundle/Contents/MacOS" "$prepared_bundle/Contents/Resources"
+cp "$work_dir/Info.plist" "$prepared_bundle/Contents/Info.plist"
+cp "$work_dir/Fumilume.icns" "$prepared_bundle/Contents/Resources/Fumilume.icns"
+while IFS= read -r -d '' item; do
+  if [[ -f "$item" ]] && file -b "$item" | grep -q 'Mach-O'; then
+    mv "$item" "$prepared_bundle/Contents/MacOS/"
+  else
+    mv "$item" "$prepared_bundle/Contents/Resources/"
+  fi
+done < <(find "$publish" -mindepth 1 -maxdepth 1 -print0)
+test -f "$prepared_bundle/Contents/Resources/Assets/Fonts/LICENSE-FLUENT-SYSTEM-ICONS.txt"
 dotnet tool install vpk --version 1.2.161 --tool-path "$work_dir/tools"
 "$work_dir/tools/vpk" pack --packId Fumilume --packTitle Fumilume --packVersion "$version" \
-  --mainExe Fumilume --packDir "$publish" --outputDir "$artifacts" \
+  --mainExe Fumilume --packDir "$prepared_bundle" --outputDir "$artifacts" \
   --runtime osx-arm64 --channel osx-arm64 --icon "$work_dir/Fumilume.icns" \
   --plist "$work_dir/Info.plist" --signAppIdentity "$APPLE_SIGN_APP_IDENTITY" \
   --signInstallIdentity "$APPLE_SIGN_INSTALL_IDENTITY" --signDisableDeep \
@@ -135,6 +149,7 @@ if [[ "${CI:-}" == true ]]; then
   spctl --assess --type execute --verbose=4 /Applications/Fumilume.app
   bash scripts/macos/verify-native-launch.sh /Applications/Fumilume.app "$verification/installed-launch"
 fi
+bash scripts/macos/verify-update-apply.sh "$bundle" "$artifacts" "$verification/update-apply"
 (cd "$artifacts" && shasum -a 256 ./*) > "$verification/SHA256SUMS"
 printf '{"version":"%s","runtime":"osx-arm64","vpk":"1.2.161","signed":true,"notarizedApp":true,"notarizedInstaller":true,"machOVerified":true,"nativeLaunchVerified":true}\n' \
   "$version" > "$verification/distribution.json"

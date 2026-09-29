@@ -5,6 +5,8 @@ Set-StrictMode -Version Latest
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 $repository = '1llum1n4t1s/Fumilume'
+$version = ([xml](Get-Content (Join-Path $repoRoot 'Directory.Build.props') -Raw)).Project.PropertyGroup.Version
+$releaseBranch = "release/$version"
 $head = (& git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Git HEADを取得できません。' }
 $dirty = @(& git status --porcelain --untracked-files=all)
@@ -18,17 +20,17 @@ $run = Get-MacRun
 if (-not $run) {
     $remoteHead = (& gh api "repos/$repository/git/ref/heads/main" | ConvertFrom-Json).object.sha
     if ($LASTEXITCODE -ne 0 -or $remoteHead -ne $head) { throw '公開済みmainとローカルHEADが一致しません。' }
-    & gh workflow run macos-release.yml --repo $repository --ref main
+    $releaseHead = (& gh api "repos/$repository/git/ref/heads/$releaseBranch" | ConvertFrom-Json).object.sha
+    if ($LASTEXITCODE -ne 0 -or $releaseHead -ne $head) { throw 'リリースブランチと検証対象HEADが一致しません。' }
+    & gh workflow run macos-release.yml --repo $repository --ref $releaseBranch
     if ($LASTEXITCODE -ne 0) { throw 'Mac CIの開始に失敗しました。' }
     Start-Sleep -Seconds 5
     $run = Get-MacRun
     if (-not $run) { throw 'Mac CIの実行を特定できません。' }
 }
-$deadline = [DateTime]::UtcNow.AddMinutes(60)
-while ($run.status -ne 'completed') {
-    if ([DateTime]::UtcNow -gt $deadline) { throw "Mac CI待機が期限を超えました。run=$($run.id)" }
-    Write-Host "Mac CI: run=$($run.id), status=$($run.status)"
-    Start-Sleep -Seconds 30
+if ($run.status -ne 'completed') {
+    & gh run watch $run.id --repo $repository --compact --exit-status
+    if ($LASTEXITCODE -ne 0) { throw "Mac CIが成功しませんでした: $($run.html_url)" }
     $run = (& gh api "repos/$repository/actions/runs/$($run.id)" | ConvertFrom-Json)
     if ($LASTEXITCODE -ne 0) { throw 'Mac CIの取得失敗。' }
 }

@@ -59,6 +59,7 @@ jobs:
             local-macos-build/e2e/
             local-macos-build/verification/native-launch/
             local-macos-build/verification/installed-launch/
+            local-macos-build/verification/update-apply/
             local-macos-build/verification/SHA256SUMS
             local-macos-build/verification/distribution.json
             local-macos-build/verification/update-sdk/update-results.json

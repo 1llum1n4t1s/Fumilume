@@ -51,6 +51,11 @@ kill -0 "$pid"
 logs="$home_dir/Library/Application Support/Fumilume/logs"
 test -d "$logs"
 grep -R -q 'Fumilume を起動します。' "$logs"
+# Finder と同じ AppleEvent 経路で、配布した Native AOT アプリへ文書を渡す。
+document="$record_dir/Native AOT 日本語.txt"
+printf 'Native AOT で開く日本語の文書\n' > "$document"
+open -a "$bundle" "$document"
+sleep 2
 # quit AppleEvent を送り、強制終了なしで閉じることを確認する。
 osascript - "$bundle" <<'APPLESCRIPT'
 on run arguments
@@ -69,10 +74,17 @@ if kill -0 "$pid" 2>/dev/null; then
 fi
 wait "$open_pid"
 grep -R -q 'Fumilume を終了します。' "$logs"
+python3 - "$home_dir/Library/Application Support/Fumilume/session.json" "$document" <<'PY'
+import json, pathlib, sys
+session, document = pathlib.Path(sys.argv[1]), sys.argv[2]
+state = json.loads(session.read_text(encoding='utf-8-sig'))
+assert any(tab.get('FilePath') == document for tab in state['Tabs']), 'Finder document activation was not persisted'
+assert pathlib.Path(document).read_text(encoding='utf-8') == 'Native AOT で開く日本語の文書\n'
+PY
 if grep -R -E '\[(ERROR|FATAL)\]|Unhandled exception|Segmentation fault|dyld\[' \
   "$logs" "$record_dir/stdout.log" "$record_dir/stderr.log"; then
   echo "Native AOT 起動・終了中に実行エラーを検出しました。" >&2
   exit 1
 fi
-printf '{"architecture":"arm64","launchServices":true,"survivedStartup":true,"normalExit":true,"runtimeErrors":false}\n' \
+printf '{"architecture":"arm64","launchServices":true,"finderDocumentOpen":true,"survivedStartup":true,"normalExit":true,"runtimeErrors":false}\n' \
   > "$record_dir/result.json"

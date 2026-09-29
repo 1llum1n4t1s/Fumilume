@@ -44,6 +44,13 @@ try {
         $destination = Join-Path $verify $file.Name
         & curl.exe --fail --silent --show-error --location --retry 2 --connect-timeout 20 --max-time 180 --output $destination "$baseUrl/$($file.Name)?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
         if ($LASTEXITCODE -ne 0) { throw "Mac公開物の取得失敗: $($file.Name)" }
+        if ((Get-FileHash $destination -Algorithm SHA256).Hash -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) {
+            $stale += $file
+            continue
+        }
+        # 更新クライアントが使う固定URLも照合する。query別キャッシュの旧版・404も検出する。
+        & curl.exe --silent --show-error --location --retry 2 --connect-timeout 20 --max-time 180 --output $destination "$baseUrl/$($file.Name)"
+        if ($LASTEXITCODE -ne 0) { throw "Mac固定URLの取得失敗: $($file.Name)" }
         if ((Get-FileHash $destination -Algorithm SHA256).Hash -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) { $stale += $file }
     }
     if ($stale.Count -gt 0) {
@@ -52,8 +59,10 @@ try {
         if (-not $purge.success) { throw 'Mac配信のキャッシュ更新失敗。' }
         foreach ($file in $stale) {
             $destination = Join-Path $verify $file.Name
-            & curl.exe --fail --silent --show-error --location --retry 2 --max-time 180 --output $destination "$baseUrl/$($file.Name)?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-            if ($LASTEXITCODE -ne 0 -or (Get-FileHash $destination -Algorithm SHA256).Hash -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) { throw "Mac公開ハッシュ不一致: $($file.Name)" }
+            foreach ($url in @("$baseUrl/$($file.Name)?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())", "$baseUrl/$($file.Name)")) {
+                & curl.exe --fail --silent --show-error --location --retry 2 --max-time 180 --output $destination $url
+                if ($LASTEXITCODE -ne 0 -or (Get-FileHash $destination -Algorithm SHA256).Hash -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) { throw "Mac公開ハッシュ不一致: $($file.Name)" }
+            }
         }
     }
     Write-Host "Mac v$version 配信確認完了: $($files.Count)ファイルのSHA256一致"
