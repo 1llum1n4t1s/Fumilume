@@ -41,13 +41,14 @@ internal sealed class SingleInstanceCoordinator : IDisposable
         FileStream? lease;
         try
         {
+            // Unix の DeleteOnClose はロック用パスを先に消し、後続起動が別ファイルを作れる。
             lease = new FileStream(
                 lockPath,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
                 FileShare.None,
                 bufferSize: 1,
-                FileOptions.DeleteOnClose);
+                OperatingSystem.IsWindows() ? FileOptions.DeleteOnClose : FileOptions.None);
         }
         catch (IOException)
         {

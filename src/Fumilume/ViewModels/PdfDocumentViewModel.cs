@@ -29,7 +29,11 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         string filePath,
         Func<WorkspaceTabViewModel, Task> closeAsync)
     {
+#if WINDOWS
         var renderer = await WindowsPdfRenderer.OpenAsync(filePath);
+#else
+        var renderer = await MacPdfRenderer.OpenAsync(filePath);
+#endif
         var viewModel = new PdfDocumentViewModel(filePath, renderer, closeAsync);
         await viewModel.RenderCurrentPageAsync();
         return viewModel;
@@ -41,7 +45,7 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
     public override string TabTitle => Path.GetFileName(FilePath);
 
-    public override string TabGlyph => "";
+    public override string TabGlyph => "";
 
     public override string TabTooltip => FilePath;
 

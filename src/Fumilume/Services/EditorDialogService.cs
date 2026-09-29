@@ -11,14 +11,14 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
 {
     private static readonly FilePickerFileType SupportedFileType = new("対応ファイル")
     {
-        Patterns = FileAssociationService.SupportedTypes
+        Patterns = SupportedFileTypes.All
             .Select(type => $"*{type.Extension}")
             .ToArray(),
     };
 
     private static readonly FilePickerFileType EditableFileType = new("テキスト・Markdownファイル")
     {
-        Patterns = FileAssociationService.SupportedTypes
+        Patterns = SupportedFileTypes.All
             .Where(type => type.IsEditable)
             .Select(type => $"*{type.Extension}")
             .ToArray(),

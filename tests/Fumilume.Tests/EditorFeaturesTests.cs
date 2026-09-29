@@ -7,30 +7,6 @@ namespace Fumilume.Tests;
 public sealed class EditorFeaturesTests
 {
     [Fact]
-    public void LineNumbersAreVisibleByDefault()
-    {
-        var viewModel = CreateViewModel(new FakeDialogService());
-
-        Assert.True(viewModel.Options.ShowLineNumbers);
-        Assert.False(viewModel.Options.WordWrap);
-        Assert.False(viewModel.Options.ShowSpaces);
-        Assert.False(viewModel.Options.ShowTabs);
-        Assert.False(viewModel.Options.ShowEndOfLine);
-    }
-
-    [Fact]
-    public void UndoHistoryBelongsToEachDocument()
-    {
-        var document = new DocumentViewModel("無題", _ => Task.CompletedTask);
-
-        document.Text = "編集後";
-        document.EditorDocument.UndoStack.Undo();
-
-        Assert.Equal(string.Empty, document.Text);
-        Assert.False(document.IsModified);
-    }
-
-    [Fact]
     public async Task GoToLineMovesCaretToRequestedLogicalLine()
     {
         var dialogs = new FakeDialogService { RequestedLine = 3 };

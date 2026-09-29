@@ -1,16 +1,36 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <ApplicationIcon>icon\app_crystal_warm.ico</ApplicationIcon>
+    <ApplicationIcon Condition="'$(FumilumeTargetMac)' != 'true'">icon\app_crystal_warm.ico</ApplicationIcon>
     <Optimize>true</Optimize>
     <DebugType>portable</DebugType>
     <PublishAot>true</PublishAot>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <NoWarn>$(NoWarn);IL3053</NoWarn>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(FumilumeTargetMac)' != 'true'">win-x64</RuntimeIdentifier>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(FumilumeTargetMac)' == 'true'">
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <RuntimeIdentifiers>osx-arm64</RuntimeIdentifiers>
+    <NuGetLockFilePath>$(MSBuildProjectDirectory)/packages.macos.lock.json</NuGetLockFilePath>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <SupportedOSPlatformVersion></SupportedOSPlatformVersion>
+    <DefineConstants>$(DefineConstants);FUMILUME_MACOS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(FumilumeTargetMac)' == 'true'">
+    <Compile Remove="Services\FileAssociationService.cs" />
+    <Compile Remove="Services\WindowsPdfRenderer.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(FumilumeTargetMac)' != 'true'">
+    <Compile Remove="Services\MacFileAssociationService.cs" />
+    <Compile Remove="Services\MacPdfRenderer.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="icon\app_icon_crystal_warm.png" />

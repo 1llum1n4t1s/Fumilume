@@ -45,7 +45,10 @@ public sealed partial class SettingsTabViewModel : WorkspaceTabViewModel
             .. FileAssociationService.SupportedTypes
                 .Select(type => new FileAssociationItemViewModel(type.Extension, type.Description)),
         ];
-        LoadAssociationStatus();
+        if (IsFileAssociationAvailable)
+        {
+            LoadAssociationStatus();
+        }
         foreach (var item in Associations)
         {
             item.PropertyChanged += OnAssociationChanged;
@@ -59,10 +62,12 @@ public sealed partial class SettingsTabViewModel : WorkspaceTabViewModel
     /// <summary>関連付けの一覧。トグルを動かすとその場でレジストリへ反映する。</summary>
     public ObservableCollection<FileAssociationItemViewModel> Associations { get; }
 
+    public bool IsFileAssociationAvailable => OperatingSystem.IsWindows();
+
     public override string TabTitle => "設定";
 
-    /// <summary>Segoe Fluent Icons の歯車。</summary>
-    public override string TabGlyph => "";
+    /// <summary>同梱 Fluent System Icons の歯車。</summary>
+    public override string TabGlyph => "";
 
     public override string TabTooltip => "アプリの設定";
 
@@ -90,6 +95,11 @@ public sealed partial class SettingsTabViewModel : WorkspaceTabViewModel
     /// <summary>一括切り替え。項目ごとに書き込むとレジストリ往復が拡張子の数だけ走るので、1 回にまとめる。</summary>
     private void SetAllAssociations(bool isAssociated)
     {
+        if (!IsFileAssociationAvailable)
+        {
+            return;
+        }
+
         _suppressAssociationApply = true;
         foreach (var item in Associations)
         {
@@ -124,6 +134,11 @@ public sealed partial class SettingsTabViewModel : WorkspaceTabViewModel
 
     private void ApplyAssociations()
     {
+        if (!IsFileAssociationAvailable)
+        {
+            return;
+        }
+
         var failures = FileAssociationService.ApplyAssociations(
             Associations.Where(item => item.IsAssociated).Select(item => item.Extension));
         if (failures.Count == 0)

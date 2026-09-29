@@ -4,8 +4,6 @@ using System.Runtime.Versioning;
 
 namespace Fumilume.Services;
 
-public sealed record SupportedFileType(string Extension, string Description, bool IsEditable = true);
-
 /// <summary>
 /// 現在のWindowsユーザーに対するファイル関連付けを管理します。
 /// </summary>
@@ -17,26 +15,7 @@ public static class FileAssociationService
     private const uint AssociationChanged = 0x08000000;
     private const uint IdList = 0x0000;
 
-    public static IReadOnlyList<SupportedFileType> SupportedTypes { get; } =
-    [
-        new(".txt", "テキスト文書 (.txt)"),
-        new(".md", "Markdown文書 (.md)"),
-        new(".pdf", "PDF文書 (.pdf)", IsEditable: false),
-        new(".log", "ログファイル (.log)"),
-        new(".csv", "CSVファイル (.csv)"),
-        new(".json", "JSONファイル (.json)"),
-        new(".xml", "XMLファイル (.xml)"),
-        new(".yaml", "YAMLファイル (.yaml)"),
-        new(".yml", "YAMLファイル (.yml)"),
-        new(".ini", "設定ファイル (.ini)"),
-        new(".config", "構成ファイル (.config)"),
-        new(".cs", "C#ソースファイル (.cs)"),
-        new(".axaml", "Avalonia XAMLファイル (.axaml)"),
-        new(".js", "JavaScriptファイル (.js)"),
-        new(".ts", "TypeScriptファイル (.ts)"),
-        new(".html", "HTMLファイル (.html)"),
-        new(".css", "CSSファイル (.css)"),
-    ];
+    public static IReadOnlyList<SupportedFileType> SupportedTypes => SupportedFileTypes.All;
 
     private static string ApplicationPath =>
         Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Fumilume.exe");

@@ -21,7 +21,7 @@ public abstract partial class WorkspaceTabViewModel : ObservableObject
     /// <summary>タブ一覧に出す表示名。</summary>
     public abstract string TabTitle { get; }
 
-    /// <summary>タブ一覧のアイコン（Segoe Fluent Icons のグリフ）。</summary>
+    /// <summary>タブ一覧のアイコン（同梱 Fluent System Icons のグリフ）。</summary>
     public abstract string TabGlyph { get; }
 
     /// <summary>タブ一覧のツールチップ。</summary>
@@ -49,7 +49,7 @@ public abstract partial class WorkspaceTabViewModel : ObservableObject
     private bool _isPinned;
 
     /// <summary>現在の状態が一目で分かるピン操作のグリフ。</summary>
-    public string PinGlyph => IsPinned ? "\uE77A" : "\uE718";
+    public string PinGlyph => IsPinned ? "\uF603" : "\uF601";
 
     /// <summary>現在の状態に対応するピン操作の説明。</summary>
     public string PinTooltip => IsPinned ? "ピン留めを解除" : "タブをピン留め";

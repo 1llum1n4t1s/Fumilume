@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Fumilume.Services;
 
-/// <summary>アプリ設定（%LocalAppData%\Fumilume\settings.json に永続化）。</summary>
+/// <summary>アプリ設定（OS ごとの AppStoragePaths.Directory に永続化）。</summary>
 public sealed class AppSettings
 {
     // ===== 表示 =====

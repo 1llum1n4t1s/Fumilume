@@ -18,6 +18,11 @@ namespace Fumilume.Views;
 /// <summary>CSV を表として描画し、セルと表構造を編集するプレビュー。</summary>
 public sealed class CsvPreview : UserControl
 {
+    private static readonly KeyModifiers PrimaryShortcutModifier = OperatingSystem.IsMacOS()
+        ? KeyModifiers.Meta
+        : KeyModifiers.Control;
+    private static readonly string CopyShortcutLabel = OperatingSystem.IsMacOS() ? "⌘C" : "Ctrl+C";
+
     public static readonly StyledProperty<string?> CsvProperty =
         AvaloniaProperty.Register<CsvPreview, string?>(nameof(Csv));
     public static readonly StyledProperty<DocumentViewModel?> DocumentProperty =
@@ -74,12 +79,14 @@ public sealed class CsvPreview : UserControl
         Focusable = true;
         KeyBindings.Add(new KeyBinding
         {
-            Gesture = new KeyGesture(Key.Z, KeyModifiers.Control),
+            Gesture = new KeyGesture(Key.Z, PrimaryShortcutModifier),
             Command = new RelayCommand(() => Document?.EditorDocument.UndoStack.Undo(), () => !_editPanel.IsVisible && Document?.CanUndo == true),
         });
         KeyBindings.Add(new KeyBinding
         {
-            Gesture = new KeyGesture(Key.Y, KeyModifiers.Control),
+            Gesture = OperatingSystem.IsMacOS()
+                ? new KeyGesture(Key.Z, KeyModifiers.Meta | KeyModifiers.Shift)
+                : new KeyGesture(Key.Y, KeyModifiers.Control),
             Command = new RelayCommand(() => Document?.EditorDocument.UndoStack.Redo(), () => !_editPanel.IsVisible && Document?.CanRedo == true),
         });
         // ウィンドウ側のエディタ用ショートカットより先に、表の操作として処理する。
@@ -132,7 +139,11 @@ public sealed class CsvPreview : UserControl
         _editPanel.Children.Add(_cellLabel);
         _editPanel.Children.Add(_cellEditor);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var apply = new Button { Name = "ApplyCsvCellEdit", Content = "適用 (Ctrl+Enter)" };
+        var apply = new Button
+        {
+            Name = "ApplyCsvCellEdit",
+            Content = OperatingSystem.IsMacOS() ? "適用 (⌘Enter)" : "適用 (Ctrl+Enter)",
+        };
         var cancel = new Button { Name = "CancelCsvCellEdit", Content = "キャンセル (Esc)" };
         apply.Click += (_, _) => ApplyCellEdit();
         cancel.Click += (_, _) => { CancelCellEdit(); Focus(); };
@@ -147,7 +158,7 @@ public sealed class CsvPreview : UserControl
                 Focus();
                 args.Handled = true;
             }
-            else if (args.Key == Key.Enter && args.KeyModifiers.HasFlag(KeyModifiers.Control))
+            else if (args.Key == Key.Enter && args.KeyModifiers.HasFlag(PrimaryShortcutModifier))
             {
                 ApplyCellEdit(0, 0);
                 args.Handled = true;
@@ -299,34 +310,34 @@ public sealed class CsvPreview : UserControl
         }
 
         var state = _surface.ViewState;
-        var control = args.KeyModifiers.HasFlag(KeyModifiers.Control);
+        var primaryShortcut = args.KeyModifiers.HasFlag(PrimaryShortcutModifier);
         var shift = args.KeyModifiers.HasFlag(KeyModifiers.Shift);
-        if (control && args.Key == Key.C
+        if (primaryShortcut && args.Key == Key.C
             && args.Source is SelectableTextBlock selectedText
             && selectedText.SelectionStart != selectedText.SelectionEnd)
         {
             return;
         }
-        if (control && args.Key == Key.C)
+        if (primaryShortcut && args.Key == Key.C)
         {
             StartCopySelection(false);
             args.Handled = state.SelectionKind != CsvSelectionKind.None;
         }
-        else if (control && args.Key == Key.X)
+        else if (primaryShortcut && args.Key == Key.X)
         {
             StartCopySelection(true);
             args.Handled = state.SelectionKind != CsvSelectionKind.None;
         }
-        else if (control && args.Key == Key.V)
+        else if (primaryShortcut && args.Key == Key.V)
         {
             StartPasteSelection();
             args.Handled = state.SelectionKind == CsvSelectionKind.Cells;
         }
-        else if (control && args.Key == Key.D)
+        else if (primaryShortcut && args.Key == Key.D)
         {
             args.Handled = StartCellAction(CsvSelectionAction.FillDown);
         }
-        else if (control && args.Key == Key.R)
+        else if (primaryShortcut && args.Key == Key.R)
         {
             args.Handled = StartCellAction(CsvSelectionAction.FillRight);
         }
@@ -346,7 +357,7 @@ public sealed class CsvPreview : UserControl
         {
             args.Handled = MoveActiveCell(0, shift ? -1 : 1, false);
         }
-        else if (!control && args.Key is (Key.Left or Key.Right or Key.Up or Key.Down))
+        else if (!primaryShortcut && args.Key is (Key.Left or Key.Right or Key.Up or Key.Down))
         {
             var (rowDelta, columnDelta) = args.Key switch
             {
@@ -1062,8 +1073,8 @@ public sealed class CsvPreview : UserControl
         var state = _surface.ViewState;
         _editHint.Text = state.SelectionKind switch
         {
-            CsvSelectionKind.Rows => $"{state.SelectionStart + 1:N0}～{state.SelectionEnd + 1:N0} 行を選択中。Ctrl+C または右クリックで操作できます。",
-            CsvSelectionKind.Columns => $"{CsvGridSurface.GetColumnName(state.SelectionStart)}～{CsvGridSurface.GetColumnName(state.SelectionEnd)} 列を選択中。Ctrl+C・右クリックで操作（表示外を含む全行が対象）。",
+            CsvSelectionKind.Rows => $"{state.SelectionStart + 1:N0}～{state.SelectionEnd + 1:N0} 行を選択中。{CopyShortcutLabel} または右クリックで操作できます。",
+            CsvSelectionKind.Columns => $"{CsvGridSurface.GetColumnName(state.SelectionStart)}～{CsvGridSurface.GetColumnName(state.SelectionEnd)} 列を選択中。{CopyShortcutLabel}・右クリックで操作（表示外を含む全行が対象）。",
             CsvSelectionKind.Cells => $"{CsvGridSurface.GetColumnName(state.CellStartColumn)}{state.CellStartRow + 1}～{CsvGridSurface.GetColumnName(state.CellEndColumn)}{state.CellEndRow + 1} を選択中。",
             _ => EditHint,
         };

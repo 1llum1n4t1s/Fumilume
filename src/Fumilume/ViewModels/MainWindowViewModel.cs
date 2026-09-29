@@ -200,7 +200,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// OS・アプリ終了ではダイアログや非同期待機を挟めないため、現在の状態を同期的に控える。
+    /// OS 終了ではダイアログや非同期待機を挟めないため、現在の状態を同期的に控える。
     /// 初回復元中は、現在の編集内容へ未処理の前回タブを混ぜてどちらも欠落させない。
     /// </summary>
     internal bool PersistSessionStateForShutdown()

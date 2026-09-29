@@ -4,9 +4,10 @@
 
 ## 対象と構成
 
-- `src/Fumilume/`: Windows 向け Avalonia デスクトップアプリ
+- `src/Fumilume/`: Windows 向け Avalonia デスクトップアプリと Apple Silicon macOS 向けローカル検証ビルド
 - `tests/Fumilume.Tests/`: xUnit v3 と Avalonia.Headless による単体・統合テスト
 - `scripts/release-local.ps1`: x64 / ARM64 の Native AOT、署名、Velopack パッケージ化、R2 配布、公開検証
+- `scripts/build-macos-arm64.sh`: Apple Silicon Mac 上で Native AOT のローカル検証用 `.app` と ZIP を作成
 - `../vps-web/lp/fumilume/`: `fumilume.kagayoi.com` のVPS配信のランディングページ
 - `Directory.Build.props`: 対象フレームワーク、版番号、対応プラットフォーム、警告・lock file 方針の正本
 
@@ -16,7 +17,7 @@
 - UI は Avalonia の compiled bindings を維持する。ViewModel の公開プロパティ名を変更するときは、AXAML の binding と Headless 統合テストも同時に更新する。
 - UI 状態と操作は `ViewModels/`、ファイル・設定・更新・関連付けなどの外部処理は `Services/` に置く。OS API やダイアログはサービス境界で隔離し、テストでは差し替え可能にする。
 - テキスト保存では、利用者がステータスバーから変更しない限り、読込時の文字コードと改行コードを維持する。対応形式や変換操作を増やす場合は `TextDocumentContent`、`DocumentFileService`、README、テストを同じ変更で揃える。
-- 設定は `%LocalAppData%\Fumilume\settings.json` を正本とし、既存プロパティ名との互換性、範囲補正、破損時の既定値フォールバック、原子的な保存を維持する。
+- 設定は Windows では `%LocalAppData%\Fumilume\settings.json`、macOS では `~/Library/Application Support/Fumilume/settings.json` を正本とし、既存プロパティ名との互換性、範囲補正、破損時の既定値フォールバック、原子的な保存を維持する。
 - 起動・セッション経路を変更するときは、同じユーザーの通常起動を単一プロセスへ集約し、後続起動のファイル引数を初回セッション復元後に開く順序を維持する。相対パスは送信側プロセスで絶対化する。
 - ワークスペースには文書・PDF・検索結果・設定を `WorkspaceTabViewModel` 派生型として載せる。設定タブは1個だけで末尾に置き、文書・PDF・検索結果が0件になると空文書を補う。
 - ファイルを開く経路は直列化し、大文字・小文字を区別しない絶対パスごとに文書・PDFタブを1個だけ保つ。既に開いている場合は同じファイルを読み直さず、そのタブを選択する。
@@ -28,7 +29,7 @@
 - マクロへ記録できないコマンド（入力ダイアログを開くもの）を足したときは `NotRecordable` へ加える。再生側で読み飛ばす作りにしない。
 - 設定画面へまとまりを足すときは `HeaderedContentControl Classes="settingscard"` で囲う。検索の索引はこの目印で作るので、付け忘れると検索から漏れる。
 - 構文ハイライトは [DESIGN.md の「構文ハイライト」](DESIGN.md#構文ハイライト) に定めた One Dark / One Light の意味別配色と、入れ子のルールセットまで辿る挙動を維持する。AvaloniaEdit 同梱の定義を個別に使い、テーマ切替では元色から再計算する。
-- PDF は `Windows.Data.Pdf` による読み取り専用表示として扱う。テキスト文書向けの保存・編集コマンドをPDF選択中に有効化しない。
+- PDF は Windows では `Windows.Data.Pdf`、macOS では Core Graphics による読み取り専用表示として扱う。テキスト文書向けの保存・編集コマンドをPDF選択中に有効化しない。
 - Markdown プレビューは `.md` 文書だけに提供し、編集元テキストを正本とする。プレビューは Avalonia コントロールで構築し、外部ブラウザ実行環境へ依存させない。
 - CSV プレビューは `.csv` 文書を表で表示し、Markdownと共通の切り替え操作を使う。セル値の修正は元テキストの対象範囲だけを置換し、Undo/Redo・文字コード・行区切りを維持する。先頭行もデータとして扱い、型変換・数式実行をせず、編集元テキストを正本とする。
 - CSV の行列編集・コピーでは表示上限外のデータも対象に含める。列操作は全行へ適用し、コピーは引用符付きTSVとして生成する。列幅・行高はタブごとの表示状態とし、CSV本文を書き換えない。
@@ -47,8 +48,9 @@ dotnet test Fumilume.slnx -c Release --no-restore
 ```
 
 - UI、binding、テーマ、タブ状態を変更した場合は `MainWindowIntegrationTests` を含む全テストを実行する。
+- macOS 向けの変更では `dotnet restore src/Fumilume/Fumilume.csproj -p:FumilumeTargetMac=true -r osx-arm64 --locked-mode` を通す。Apple Silicon Mac で `bash scripts/build-macos-arm64.sh` を実行し、文書の開く・保存・再起動後の復元・PDFの通常ページと回転ページを実機確認する。Windows では macOS Native AOT の発行と実機確認を完了扱いにしない。
 - ファイルのドロップ経路を変更するときは、[DESIGN.md の入力境界](DESIGN.md#ファイルのドロップ)を維持し、`MainWindowIntegrationTests` で未知の拡張子・拡張子なし・重複ドロップ・フォルダ除外・文字ドラッグ設定の両状態を確認する。
-- ファイルI/O、設定永続化、文字変換、Markdown、PDFを変更した場合は対応するサービステストに正常系と境界条件を追加する。
+- ファイルI/O、設定永続化、文字変換、Markdown、PDFを変更した場合は、実際の経路を通る E2E テストで正常系と境界条件を確認し、再現可能な成果物を残す。
 - NuGet依存関係を変更した場合は、アプリとテストの `packages.lock.json` を同時に更新し、locked restore を通す。
 - Native AOT、RID依存API、配布物へ影響する変更では、リリース前に両アーキテクチャを検証する。直接発行する場合は `win-x64` に `PlatformTarget=x64`、`win-arm64` に `PlatformTarget=ARM64` を対応させる。
 

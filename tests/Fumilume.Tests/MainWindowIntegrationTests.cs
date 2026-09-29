@@ -1830,6 +1830,55 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         }
     });
 
+    // ネイティブ終了通知の直後から、実ウィンドウ・確認ダイアログ・保存までを通す。
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ApplicationQuitKeepsUnsavedTextWhenCancelledOrSessionSaveFails(bool failSessionSave) => fixture.Run(() =>
+    {
+        using var storage = new TemporaryStorage();
+        var window = ShowWindow();
+        var viewModel = (MainWindowViewModel)window.DataContext!;
+        var sessionPath = Path.Combine(storage.Path, "session.json");
+        try
+        {
+            viewModel.Options.RestoreSession = failSessionSave;
+            viewModel.SelectedDocument!.Text = "終了で失ってはいけない本文";
+            if (failSessionSave)
+            {
+                Directory.CreateDirectory(sessionPath);
+            }
+
+            // Avalonia の lifetime が通知するものと同じ CloseCore 経路を呼ぶ。
+            var closeCore = typeof(Window).GetMethod("CloseCore",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            closeCore.Invoke(window, [WindowCloseReason.ApplicationShutdown, false, false]);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(window.IsVisible);
+            var dialog = Assert.Single(window.OwnedWindows);
+            Assert.Equal(failSessionSave ? "未保存の内容を引き継げません" : "変更の保存", dialog.Title);
+            dialog.Close();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(window.IsVisible);
+            Assert.Equal("終了で失ってはいけない本文", window.FindControl<TextEditor>("Editor")!.Text);
+        }
+        finally
+        {
+            foreach (var dialog in window.OwnedWindows.ToArray())
+            {
+                dialog.Close();
+            }
+            Dispatcher.UIThread.RunJobs();
+            if (Directory.Exists(sessionPath))
+            {
+                Directory.Delete(sessionPath);
+            }
+            viewModel.Options.RestoreSession = true;
+            CloseWindow(window);
+        }
+    });
+
     private static MainWindow ShowWindow()
     {
         // 起動時の更新確認は外部通信になるためテストでは切る。

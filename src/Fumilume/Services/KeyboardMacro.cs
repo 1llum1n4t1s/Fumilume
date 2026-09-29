@@ -129,7 +129,7 @@ public sealed class MacroLibrary
 internal sealed partial class MacroJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// 保存したマクロの読み書き（<c>%LocalAppData%\Fumilume\macros.json</c>）。
+/// 保存したマクロの読み書き（OS ごとの <see cref="AppStoragePaths.Directory"/> 配下の macros.json）。
 ///
 /// 設定と分けているのは、設定が「小さくて頻繁に読み書きする正本」だから。マクロは
 /// 手数によっては長くなるうえ、書けなくてもアプリの動作には影響しない。

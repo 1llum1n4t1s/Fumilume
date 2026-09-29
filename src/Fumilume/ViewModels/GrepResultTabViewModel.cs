@@ -34,8 +34,8 @@ public sealed partial class GrepResultTabViewModel : WorkspaceTabViewModel, IDis
 
     public ObservableCollection<GrepMatchItem> Matches { get; } = [];
 
-    /// <summary>Segoe Fluent Icons の虫眼鏡。</summary>
-    public override string TabGlyph => "";
+    /// <summary>同梱 Fluent System Icons の虫眼鏡。</summary>
+    public override string TabGlyph => "\uF68F";
 
     public override string TabTitle => $"検索: {Query.Pattern}";
 

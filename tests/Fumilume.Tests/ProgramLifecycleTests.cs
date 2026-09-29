@@ -56,7 +56,7 @@ public sealed class ProgramLifecycleTests
 
     [Theory]
     [InlineData(WindowCloseReason.OSShutdown, true)]
-    [InlineData(WindowCloseReason.ApplicationShutdown, true)]
+    [InlineData(WindowCloseReason.ApplicationShutdown, false)]
     [InlineData(WindowCloseReason.WindowClosing, false)]
     [InlineData(WindowCloseReason.OwnerWindowClosing, false)]
     public void OnlySystemShutdownUsesSynchronousSessionPersistence(

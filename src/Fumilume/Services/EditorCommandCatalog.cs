@@ -91,14 +91,14 @@ public static class EditorCommandCatalog
 
     /// <summary>
     /// 区分の見出しへ添えるアイコン。
-    /// アイコンは Segoe Fluent Icons のコードポイントで、フォントに実在することを確認済み。
+    /// アイコンは同梱 Fluent System Icons のコードポイント。
     /// </summary>
     public static IReadOnlyList<EditorCommandCategoryIcon> CategoryIcons { get; } =
     [
-        new(EditCategory, ""),
-        new(ConvertCategory, ""),
-        new(InsertCategory, ""),
-        new(JumpCategory, ""),
+        new(EditCategory, ""),
+        new(ConvertCategory, ""),
+        new(InsertCategory, ""),
+        new(JumpCategory, ""),
     ];
 
     public static IReadOnlyList<EditorCommandDefinition> All { get; } =
@@ -178,5 +178,5 @@ public sealed record EditorCommandGroup(string Category, IReadOnlyList<EditorCom
 
 /// <summary>区分の見出しに添えるアイコン 1 個ぶん。</summary>
 /// <param name="Category">対応する区分名。</param>
-/// <param name="Glyph">Segoe Fluent Icons のグリフ。</param>
+/// <param name="Glyph">同梱 Fluent System Icons のグリフ。</param>
 public sealed record EditorCommandCategoryIcon(string Category, string Glyph);

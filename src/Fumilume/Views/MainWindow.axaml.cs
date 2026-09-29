@@ -22,6 +22,8 @@ namespace Fumilume.Views;
 
 public sealed partial class MainWindow : Window
 {
+    private static readonly bool UsesMacPlatformConventions = OperatingSystem.IsMacOS();
+
     static MainWindow()
     {
         // DragDrop は Bubble のみ。クラスハンドラーで AvaloniaEdit の文字ドロップより先に受ける。
@@ -75,6 +77,7 @@ public sealed partial class MainWindow : Window
 
         var workspaceGrid = this.FindControl<Grid>("WorkspaceGrid")
             ?? throw new InvalidOperationException("ワークスペースを初期化できませんでした。");
+        ConfigurePlatformWindowChrome(workspaceGrid);
         _sidePanelColumn = workspaceGrid.ColumnDefinitions[0];
         _sidePanelColumn.Width = new GridLength(Math.Clamp(
             settings.SidePanelWidth,
@@ -92,6 +95,7 @@ public sealed partial class MainWindow : Window
         ApplyTabHeight();
 
         BuildEditorContextMenu();
+        ApplyPlatformShortcutLabels();
         RoundedClip.Attach(this.FindControl<Border>("ContentIsland"));
         ApplyWindowDecorations(WindowState);
         ApplyBackdrop();
@@ -123,6 +127,62 @@ public sealed partial class MainWindow : Window
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    private void ConfigurePlatformWindowChrome(Grid workspaceGrid)
+    {
+        if (!UsesMacPlatformConventions)
+        {
+            return;
+        }
+
+        ExtendClientAreaToDecorationsHint = false;
+        ExtendClientAreaTitleBarHeightHint = 0;
+        WindowDecorations = WindowDecorations.Full;
+
+        // macOS ではシステムのタイトルバーと traffic lights を使い、自前の Windows 用行を畳む。
+        if (this.FindControl<Grid>("TitleBar") is { } titleBar)
+        {
+            titleBar.IsVisible = false;
+            workspaceGrid.RowDefinitions[0].Height = new GridLength(0);
+        }
+    }
+
+    private void ApplyPlatformShortcutLabels()
+    {
+        if (!UsesMacPlatformConventions)
+        {
+            return;
+        }
+
+        SetShortcutTip("NewDocumentToolbarButton", "新しい文書 (⌘N)");
+        SetShortcutTip("OpenToolbarButton", "ファイルを開く (⌘O)");
+        SetShortcutTip("SaveToolbarButton", "保存 (⌘S)");
+        SetShortcutTip("UndoToolbarButton", "元に戻す (⌘Z)");
+        SetShortcutTip("RedoToolbarButton", "やり直す (⇧⌘Z)");
+        SetShortcutTip("FindToolbarButton", "検索 (⌘F)");
+        SetShortcutTip("CommandPaletteButton", "すべての機能を名前で探す (⇧⌘P)");
+        SetShortcutTip("TogglePreviewToolbarButton", "Markdown / CSV プレビュー (⇧⌘M)");
+        SetShortcutTip("SettingsToolbarButton", "設定 (⌘,)");
+        SetShortcutTip("GrepToolbarButton", "新しい検索 (⇧⌘F)");
+
+        if (this.FindControl<TextBlock>("CommandPaletteShortcutLabel") is { } paletteShortcut)
+        {
+            paletteShortcut.Text = "⇧⌘P";
+        }
+
+        if (this.FindControl<TextBlock>("PdfRendererLabel") is { } rendererLabel)
+        {
+            rendererLabel.Text = "macOS 標準 PDF レンダラー";
+        }
+    }
+
+    private void SetShortcutTip(string controlName, string tip)
+    {
+        if (this.FindControl<Button>(controlName) is { } button)
+        {
+            ToolTip.SetTip(button, tip);
+        }
+    }
 
     private static string[] GetDroppedFilePaths(DragEventArgs args)
         => args.DataTransfer.TryGetFiles()?
@@ -177,7 +237,7 @@ public sealed partial class MainWindow : Window
             StartForwardedOpen(arguments);
         }
 
-        if (_options.CheckUpdatesOnStartup)
+        if (OperatingSystem.IsWindows() && _options.CheckUpdatesOnStartup)
         {
             _ = UpdateService.CheckAsync(this, manually: false);
         }
@@ -639,10 +699,11 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void BuildEditorContextMenu()
     {
-        var cut = CreateEditorAction("切り取り", new KeyGesture(Key.X, KeyModifiers.Control), () => _editor.Cut());
-        var copy = CreateEditorAction("コピー", new KeyGesture(Key.C, KeyModifiers.Control), () => _editor.Copy());
-        var paste = CreateEditorAction("貼り付け", new KeyGesture(Key.V, KeyModifiers.Control), () => _editor.Paste());
-        var selectAll = CreateEditorAction("すべて選択", new KeyGesture(Key.A, KeyModifiers.Control), () => _editor.SelectAll());
+        var primaryModifier = UsesMacPlatformConventions ? KeyModifiers.Meta : KeyModifiers.Control;
+        var cut = CreateEditorAction("切り取り", new KeyGesture(Key.X, primaryModifier), () => _editor.Cut());
+        var copy = CreateEditorAction("コピー", new KeyGesture(Key.C, primaryModifier), () => _editor.Copy());
+        var paste = CreateEditorAction("貼り付け", new KeyGesture(Key.V, primaryModifier), () => _editor.Paste());
+        var selectAll = CreateEditorAction("すべて選択", new KeyGesture(Key.A, primaryModifier), () => _editor.SelectAll());
 
         var flyout = new MenuFlyout();
         flyout.Items.Add(cut);
@@ -697,7 +758,7 @@ public sealed partial class MainWindow : Window
             .FirstOrDefault(icon => icon.Category == category)?.Glyph;
         return glyph is null
             ? null
-            : new TextBlock { Text = glyph, FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 14 };
+            : new TextBlock { Text = glyph, FontFamily = new FontFamily("fonts:Fumilume#FluentSystemIcons-Regular"), FontSize = 14 };
     }
 
     /// <summary>メニュー右端へ出すキー表示。読めない書式は表示しないだけで、機能は動く。</summary>
@@ -791,6 +852,11 @@ public sealed partial class MainWindow : Window
 
     private void OnGlobalKeyDown(object? sender, KeyEventArgs args)
     {
+        if (TryHandleMacShortcut(args))
+        {
+            return;
+        }
+
         var controlOnly = args.KeyModifiers == KeyModifiers.Control;
         if (_formatDocumentChordPending)
         {
@@ -814,7 +880,8 @@ public sealed partial class MainWindow : Window
         }
 
         // フォルダ横断検索はどのタブを見ていても始められる（結果タブからの再検索を含む）。
-        if (args.KeyModifiers.HasFlag(KeyModifiers.Control)
+        var primaryModifier = UsesMacPlatformConventions ? KeyModifiers.Meta : KeyModifiers.Control;
+        if (args.KeyModifiers.HasFlag(primaryModifier)
             && args.KeyModifiers.HasFlag(KeyModifiers.Shift)
             && args.Key == Key.F)
         {
@@ -828,12 +895,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (args.KeyModifiers.HasFlag(KeyModifiers.Control) && args.Key == Key.F)
+        if (args.KeyModifiers.HasFlag(primaryModifier) && args.Key == Key.F)
         {
             OpenSearch(replace: false);
             args.Handled = true;
         }
-        else if (args.KeyModifiers.HasFlag(KeyModifiers.Control) && args.Key == Key.H)
+        else if (args.KeyModifiers.HasFlag(primaryModifier) && args.Key == Key.H)
         {
             OpenSearch(replace: true);
             args.Handled = true;
@@ -864,6 +931,95 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private bool TryHandleMacShortcut(KeyEventArgs args)
+    {
+        if (!UsesMacPlatformConventions)
+        {
+            return false;
+        }
+
+        var commandOnly = args.KeyModifiers == KeyModifiers.Meta;
+        var commandShift = args.KeyModifiers == (KeyModifiers.Meta | KeyModifiers.Shift);
+        var commandAlt = args.KeyModifiers == (KeyModifiers.Meta | KeyModifiers.Alt);
+        if (commandShift)
+        {
+            switch (args.Key)
+            {
+                case Key.Z when _editor.IsKeyboardFocusWithin:
+                    _viewModel.RedoCommand.Execute(null);
+                    break;
+                case Key.S:
+                    _viewModel.SaveAsCommand.Execute(null);
+                    break;
+                case Key.R:
+                    _viewModel.ReloadCommand.Execute(null);
+                    break;
+                case Key.M:
+                    _viewModel.TogglePreviewCommand.Execute(null);
+                    break;
+                case Key.P:
+                    _viewModel.OpenCommandPaletteCommand.Execute(null);
+                    break;
+                default:
+                    // Command+Shift+F は下の検索処理で扱う。
+                    return false;
+            }
+        }
+        else if (commandOnly)
+        {
+            switch (args.Key)
+            {
+                case Key.N:
+                    _viewModel.NewDocumentCommand.Execute(null);
+                    break;
+                case Key.O:
+                    _viewModel.OpenCommand.Execute(null);
+                    break;
+                case Key.S:
+                    _viewModel.SaveCommand.Execute(null);
+                    break;
+                case Key.W:
+                    _viewModel.CloseTabCommand.Execute(_viewModel.SelectedTab);
+                    break;
+                case Key.G:
+                    _viewModel.GoToLineCommand.Execute(null);
+                    break;
+                case Key.OemComma:
+                    _viewModel.OpenSettingsCommand.Execute(null);
+                    break;
+                case Key.Z when _editor.IsKeyboardFocusWithin:
+                    _viewModel.UndoCommand.Execute(null);
+                    break;
+                case Key.X when _editor.IsKeyboardFocusWithin:
+                    _editor.Cut();
+                    break;
+                case Key.C when _editor.IsKeyboardFocusWithin:
+                    _editor.Copy();
+                    break;
+                case Key.V when _editor.IsKeyboardFocusWithin:
+                    _editor.Paste();
+                    break;
+                case Key.A when _editor.IsKeyboardFocusWithin:
+                    _editor.SelectAll();
+                    break;
+                default:
+                    // Command+F / Command+H は下の検索処理で扱う。
+                    return false;
+            }
+        }
+        else if (commandAlt && args.Key == Key.S)
+        {
+            _viewModel.SaveAllCommand.Execute(null);
+        }
+        else
+        {
+            return false;
+        }
+
+        args.Handled = true;
+        return true;
+    }
+
     // ===== キーボードマクロの記録 =====
 
     /// <summary>
@@ -877,16 +1033,11 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var ctrl = args.KeyModifiers.HasFlag(KeyModifiers.Control);
         var shift = args.KeyModifiers.HasFlag(KeyModifiers.Shift);
-        var step = args.Key switch
+        var step = ResolveRecordedMotion(args.Key, args.KeyModifiers) is { } motion
+            ? Motion(motion, shift)
+            : args.Key switch
         {
-            Key.Left => Motion(ctrl ? MacroMotion.WordLeft : MacroMotion.CharacterLeft, shift),
-            Key.Right => Motion(ctrl ? MacroMotion.WordRight : MacroMotion.CharacterRight, shift),
-            Key.Up => Motion(MacroMotion.LineUp, shift),
-            Key.Down => Motion(MacroMotion.LineDown, shift),
-            Key.Home => Motion(ctrl ? MacroMotion.DocumentStart : MacroMotion.LineStart, shift),
-            Key.End => Motion(ctrl ? MacroMotion.DocumentEnd : MacroMotion.LineEnd, shift),
             Key.Back => new MacroStep { Kind = MacroStepKind.DeleteBack },
             Key.Delete => new MacroStep { Kind = MacroStepKind.DeleteForward },
             Key.Enter or Key.Return => new MacroStep { Kind = MacroStepKind.InsertNewLine },
@@ -902,6 +1053,44 @@ public sealed partial class MainWindow : Window
         {
             _viewModel.RecordMacroStep(step);
         }
+    }
+
+    private static MacroMotion? ResolveRecordedMotion(Key key, KeyModifiers modifiers)
+    {
+        if (!UsesMacPlatformConventions)
+        {
+            var ctrl = modifiers.HasFlag(KeyModifiers.Control);
+            return key switch
+            {
+                Key.Left => ctrl ? MacroMotion.WordLeft : MacroMotion.CharacterLeft,
+                Key.Right => ctrl ? MacroMotion.WordRight : MacroMotion.CharacterRight,
+                Key.Up => MacroMotion.LineUp,
+                Key.Down => MacroMotion.LineDown,
+                Key.Home => ctrl ? MacroMotion.DocumentStart : MacroMotion.LineStart,
+                Key.End => ctrl ? MacroMotion.DocumentEnd : MacroMotion.LineEnd,
+                _ => null,
+            };
+        }
+
+        // AvaloniaEdit は Avalonia.Native の macOS 用 hotkey 設定をそのまま使う。
+        // Shift は選択範囲の拡張なので、移動単位を決めるときだけ除く。
+        var navigationModifiers = modifiers & ~KeyModifiers.Shift;
+        return (key, navigationModifiers) switch
+        {
+            (Key.Left, KeyModifiers.None) => MacroMotion.CharacterLeft,
+            (Key.Right, KeyModifiers.None) => MacroMotion.CharacterRight,
+            (Key.Left, KeyModifiers.Alt) => MacroMotion.WordLeft,
+            (Key.Right, KeyModifiers.Alt) => MacroMotion.WordRight,
+            (Key.Left, KeyModifiers.Meta) => MacroMotion.LineStart,
+            (Key.Right, KeyModifiers.Meta) => MacroMotion.LineEnd,
+            (Key.Up, KeyModifiers.None) => MacroMotion.LineUp,
+            (Key.Down, KeyModifiers.None) => MacroMotion.LineDown,
+            (Key.Home, KeyModifiers.None) => MacroMotion.LineStart,
+            (Key.End, KeyModifiers.None) => MacroMotion.LineEnd,
+            (Key.Home, KeyModifiers.Meta) => MacroMotion.DocumentStart,
+            (Key.End, KeyModifiers.Meta) => MacroMotion.DocumentEnd,
+            _ => null,
+        };
     }
 
     private void OnEditorTextEnteredForMacro(object? sender, TextInputEventArgs args)
@@ -980,9 +1169,17 @@ public sealed partial class MainWindow : Window
     /// 残すためのもの。最大化・全画面ではリサイズできないので枠に用は無く、画面の端に線が 1 本残るだけになる。
     /// </summary>
     private void ApplyWindowDecorations(WindowState state)
-        => WindowDecorations = state is WindowState.Maximized or WindowState.FullScreen
+    {
+        if (UsesMacPlatformConventions)
+        {
+            WindowDecorations = WindowDecorations.Full;
+            return;
+        }
+
+        WindowDecorations = state is WindowState.Maximized or WindowState.FullScreen
             ? WindowDecorations.None
             : WindowDecorations.BorderOnly;
+    }
 
     private async void OnClosing(object? sender, WindowClosingEventArgs args)
     {
@@ -1042,7 +1239,7 @@ public sealed partial class MainWindow : Window
     }
 
     internal static bool RequiresSynchronousShutdownPersistence(WindowCloseReason reason)
-        => reason is WindowCloseReason.ApplicationShutdown or WindowCloseReason.OSShutdown;
+        => reason == WindowCloseReason.OSShutdown;
 
     // ===== タイトルバー =====
 

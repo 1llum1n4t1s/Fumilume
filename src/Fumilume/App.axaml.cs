@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Fumilume.Services;
 using Fumilume.Views;
@@ -23,6 +24,27 @@ public sealed class App : Application
             desktop.MainWindow = mainWindow;
             Program.SingleInstance?.SetArgumentsHandler(arguments =>
                 Dispatcher.UIThread.Post(() => mainWindow.OpenForwardedArguments(arguments)));
+
+            if (OperatingSystem.IsMacOS() && this.TryGetFeature<IActivatableLifetime>() is { } lifetime)
+            {
+                // Finder からの「このアプリで開く」は起動引数ではなく activation として届く。
+                lifetime.Activated += (_, args) =>
+                {
+                    if (args is not FileActivatedEventArgs fileArgs)
+                    {
+                        return;
+                    }
+
+                    var paths = fileArgs.Files
+                        .Select(file => file.TryGetLocalPath())
+                        .OfType<string>()
+                        .ToArray();
+                    if (paths.Length > 0)
+                    {
+                        Dispatcher.UIThread.Post(() => mainWindow.OpenForwardedArguments(paths));
+                    }
+                };
+            }
         }
 
         base.OnFrameworkInitializationCompleted();

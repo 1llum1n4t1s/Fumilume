@@ -93,44 +93,47 @@ public sealed partial class MainWindowViewModel
     /// </summary>
     private IEnumerable<CommandPaletteEntry> EnumeratePaletteEntries()
     {
-        yield return Entry(FileCategory, "新しい文書", "Ctrl+N", NewDocument);
-        yield return Entry(FileCategory, "ファイルを開く", "Ctrl+O", () => OpenAsync());
+        yield return Entry(FileCategory, "新しい文書", PrimaryShortcut("N"), NewDocument);
+        yield return Entry(FileCategory, "ファイルを開く", PrimaryShortcut("O"), () => OpenAsync());
 
         if (IsDocumentSelected)
         {
-            yield return Entry(FileCategory, "保存", "Ctrl+S", () => SaveAsync());
-            yield return Entry(FileCategory, "名前を付けて保存", "Ctrl+Shift+S", () => SaveAsAsync());
+            yield return Entry(FileCategory, "保存", PrimaryShortcut("S"), () => SaveAsync());
+            yield return Entry(FileCategory, "名前を付けて保存", PrimaryShiftShortcut("S"), () => SaveAsAsync());
         }
 
         if (Documents.Any(document => document.IsModified))
         {
-            yield return Entry(FileCategory, "すべて保存", "Ctrl+Alt+S", () => SaveAllAsync());
+            yield return Entry(FileCategory, "すべて保存", PrimaryAltShortcut("S"), () => SaveAllAsync());
         }
 
         if (CanReload())
         {
-            yield return Entry(FileCategory, "ディスクから開き直す", "Ctrl+Shift+R", () => ReloadAsync());
+            yield return Entry(FileCategory, "ディスクから開き直す", PrimaryShiftShortcut("R"), () => ReloadAsync());
         }
 
         if (SelectedTab is { } tab)
         {
-            yield return Entry(FileCategory, "このタブを閉じる", null, () => CloseTabCoreAsync(tab));
+            yield return Entry(FileCategory, "このタブを閉じる", PrimaryShortcut("W"), () => CloseTabCoreAsync(tab));
         }
 
-        yield return Entry(SearchCategory, "フォルダから探す", "Ctrl+Shift+F", () => GrepAsync());
+        yield return Entry(SearchCategory, "フォルダから探す", PrimaryShiftShortcut("F"), () => GrepAsync());
 
         if (CanTogglePreview())
         {
-            yield return Entry(ViewCategory, "Markdown / CSV プレビューを切り替え", "Ctrl+Shift+M", TogglePreview);
+            yield return Entry(ViewCategory, "Markdown / CSV プレビューを切り替え", PrimaryShiftShortcut("M"), TogglePreview);
         }
 
-        yield return Entry(ViewCategory, "設定を開く", "Ctrl+,", () => EnsureSettingsTab(select: true));
+        yield return Entry(ViewCategory, "設定を開く", PrimaryShortcut(","), () => EnsureSettingsTab(select: true));
         if (SelectedPdf is { } pdf)
         {
             yield return Entry(ViewCategory, "PDF を高さに合わせる", null, () => pdf.FitHeightCommand.ExecuteAsync(null));
             yield return Entry(ViewCategory, "PDF を幅に合わせる", null, () => pdf.FitWidthCommand.ExecuteAsync(null));
         }
-        yield return Entry(ViewCategory, "更新を確認", null, () => _dialogs.CheckForUpdatesAsync(manually: true));
+        if (OperatingSystem.IsWindows())
+        {
+            yield return Entry(ViewCategory, "更新を確認", null, () => _dialogs.CheckForUpdatesAsync(manually: true));
+        }
 
         yield return Entry(MacroCategory, MacroRecordingTitle, "Shift+F1", ToggleMacroRecording);
         if (HasRecordedMacro)
@@ -168,6 +171,15 @@ public sealed partial class MainWindowViewModel
 
     private static CommandPaletteEntry Entry(string category, string title, string? gesture, Func<Task> run)
         => new(category, title, gesture, run);
+
+    private static string PrimaryShortcut(string key)
+        => OperatingSystem.IsMacOS() ? $"⌘{key}" : $"Ctrl+{key}";
+
+    private static string PrimaryShiftShortcut(string key)
+        => OperatingSystem.IsMacOS() ? $"⇧⌘{key}" : $"Ctrl+Shift+{key}";
+
+    private static string PrimaryAltShortcut(string key)
+        => OperatingSystem.IsMacOS() ? $"⌥⌘{key}" : $"Ctrl+Alt+{key}";
 
     private static CommandPaletteEntry Entry(string category, string title, string? gesture, Action run)
         => new(category, title, gesture, () =>

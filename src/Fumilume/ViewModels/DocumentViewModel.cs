@@ -31,8 +31,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
     public string UntitledName { get; }
 
-    /// <summary>Segoe Fluent Icons の文書アイコン。</summary>
-    public override string TabGlyph => "";
+    /// <summary>同梱 Fluent System Icons の文書アイコン。</summary>
+    public override string TabGlyph => "";
 
     public override string TabTitle => DisplayTitle;
 

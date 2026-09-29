@@ -14,6 +14,12 @@ public static class UpdateService
 
     public static async Task CheckAsync(Window? owner, bool manually)
     {
+        // 公開中の更新フィードは Windows 用。macOS のローカル検証ビルドでは照会しない。
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         if (Interlocked.CompareExchange(ref _isChecking, 1, 0) != 0)
         {
             return;

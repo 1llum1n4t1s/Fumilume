@@ -35,6 +35,40 @@ public sealed partial class SettingsView : UserControl
                 .OrderBy(font => font.Name, StringComparer.CurrentCultureIgnoreCase),
         ];
         InitializeComponent();
+        if (OperatingSystem.IsMacOS())
+        {
+            if (this.FindControl<TextBlock>("SearchShortcutHint") is { } searchShortcutHint)
+            {
+                searchShortcutHint.Text =
+                    "ここで決めた条件は、検索 (⌘F) や置換 (⌘H) を開くたびに適用されます。開いたあとで個別に変えることもできます。";
+            }
+
+            if (this.FindControl<TextBlock>("FileSettingsSubtitle") is { } fileSettingsSubtitle)
+            {
+                fileSettingsSubtitle.Text = "開くとき・保存するときの振る舞いを決めます";
+            }
+
+            if (this.FindControl<CheckBox>("AutoUpdateCheckBox") is { } autoUpdateCheckBox)
+            {
+                autoUpdateCheckBox.IsVisible = false;
+            }
+
+            if (this.FindControl<Button>("ManualUpdateButton") is { } manualUpdateButton)
+            {
+                manualUpdateButton.IsVisible = false;
+            }
+
+            if (this.FindControl<TextBlock>("MacUpdateNotice") is { } macUpdateNotice)
+            {
+                macUpdateNotice.IsVisible = true;
+            }
+
+            if (this.FindControl<TextBlock>("SettingsStoragePath") is { } settingsStoragePath)
+            {
+                settingsStoragePath.Text = "設定は ~/Library/Application Support/Fumilume/settings.json に保存されます。";
+            }
+        }
+
         BuildSearchIndex();
     }
 

@@ -27,11 +27,14 @@ internal static class Program
         {
             StartupArgs = args;
             log.InfoFormat("Fumilume を起動します。引数: {0} 件", args.Length);
-            VelopackApp.Build()
+            var velopack = VelopackApp.Build();
+#if WINDOWS
+            velopack
                 .OnAfterInstallFastCallback(_ => FileAssociationService.RefreshAssociatedFileTypes())
                 .OnAfterUpdateFastCallback(_ => FileAssociationService.RefreshAssociatedFileTypes())
-                .OnBeforeUninstallFastCallback(_ => CleanupBeforeUninstall())
-                .Run();
+                .OnBeforeUninstallFastCallback(_ => CleanupBeforeUninstall());
+#endif
+            velopack.Run();
 
             using var singleInstance = SingleInstanceCoordinator.Create();
             if (!singleInstance.IsPrimary)

@@ -30,6 +30,7 @@ public sealed partial class AppDialogWindow : Window
         _actionHost = this.FindControl<StackPanel>("DialogActionHost")
             ?? throw new InvalidOperationException("ダイアログの操作領域を初期化できませんでした。");
 
+        ConfigurePlatformWindowChrome();
         RoundedClip.Attach(this.FindControl<Border>("DialogSurface"));
         TransparencyLevelHint = useAcrylic
             ? [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.None]
@@ -59,6 +60,25 @@ public sealed partial class AppDialogWindow : Window
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    private void ConfigurePlatformWindowChrome()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
+        ExtendClientAreaToDecorationsHint = false;
+        ExtendClientAreaTitleBarHeightHint = 0;
+        WindowDecorations = WindowDecorations.Full;
+
+        // macOS ではネイティブのタイトルバーへ任せ、Windows 用の自前キャプションを畳む。
+        if (this.FindControl<Grid>("TitleBar") is { Parent: Grid layout } titleBar)
+        {
+            titleBar.IsVisible = false;
+            layout.RowDefinitions[0].Height = new GridLength(0);
+        }
+    }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {

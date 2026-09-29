@@ -2,6 +2,7 @@
 **/obj/
 artifacts/
 local-release/
+local-macos-build/
 .release-tools/
 .vs/
 *.user
