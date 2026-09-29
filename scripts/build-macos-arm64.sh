@@ -61,7 +61,7 @@ for name in APPLE_CERT_APP_P12_BASE64 APPLE_CERT_INSTALLER_P12_BASE64; do
   p12="$work_dir/$name.p12"
   printf '%s' "${!name}" | base64 --decode > "$p12"
   security import "$p12" -P "$APPLE_CERT_PASSWORD" -t cert -f pkcs12 \
-    -k "$keychain" -T /usr/bin/codesign -T /usr/bin/productsign >/dev/null
+    -k "$keychain" -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/productbuild >/dev/null
   rm -f -- "$p12"
 done
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
