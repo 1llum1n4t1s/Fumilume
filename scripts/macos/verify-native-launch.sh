@@ -14,6 +14,7 @@ printf '{"CheckUpdatesOnStartup":false,"RestoreSession":true,"ConfirmOnExit":fal
   > "$home_dir/Library/Application Support/Fumilume/settings.json"
 pid=""
 open_pid=""
+stage=launch
 cleanup() {
   status=$?
   trap - EXIT
@@ -28,6 +29,10 @@ cleanup() {
   if [[ -d "$home_dir/Library/Application Support/Fumilume/logs" ]]; then
     mkdir -p "$record_dir/logs"
     cp -R "$home_dir/Library/Application Support/Fumilume/logs/." "$record_dir/logs/"
+  fi
+  if [[ "$status" -ne 0 ]]; then
+    printf 'Native AOT 検証が失敗しました: stage=%s, exit=%s\n' "$stage" "$status" >&2
+    printf '{"success":false,"stage":"%s","exitCode":%s}\n' "$stage" "$status" > "$record_dir/result.json"
   fi
   rm -rf -- "$home_dir"
   exit "$status"
@@ -47,16 +52,19 @@ if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 sleep 5
+stage=verify-startup
 kill -0 "$pid"
 logs="$home_dir/Library/Application Support/Fumilume/logs"
 test -d "$logs"
 grep -R -q 'Fumilume を起動します。' "$logs"
 # Finder と同じ AppleEvent 経路で、配布した Native AOT アプリへ文書を渡す。
 document="$record_dir/Native AOT 日本語.txt"
+stage=finder-activation
 printf 'Native AOT で開く日本語の文書\n' > "$document"
 open -a "$bundle" "$document"
 sleep 2
 # quit AppleEvent を送り、強制終了なしで閉じることを確認する。
+stage=quit
 osascript - "$bundle" <<'APPLESCRIPT'
 on run arguments
   tell application (item 1 of arguments) to quit
@@ -72,8 +80,11 @@ if kill -0 "$pid" 2>/dev/null; then
   echo "通常の終了操作後に Fumilume が終了しませんでした。" >&2
   exit 1
 fi
+stage=wait-launch-services
 wait "$open_pid"
+stage=verify-shutdown-log
 grep -R -q 'Fumilume を終了します。' "$logs"
+stage=verify-finder-session
 python3 - "$home_dir/Library/Application Support/Fumilume/session.json" "$document" <<'PY'
 import json, pathlib, sys
 session, document = pathlib.Path(sys.argv[1]), sys.argv[2]

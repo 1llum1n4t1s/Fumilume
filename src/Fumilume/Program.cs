@@ -6,6 +6,7 @@ namespace Fumilume;
 
 internal static class Program
 {
+    private static int _shutdownCompleted;
     public static string[] StartupArgs { get; private set; } = [];
 
     internal static SingleInstanceCoordinator? SingleInstance { get; private set; }
@@ -54,8 +55,21 @@ internal static class Program
         }
         finally
         {
-            SingleInstance = null;
-            log.Info("Fumilume を終了します。");
+            CompleteShutdown();
+        }
+    }
+
+    internal static void CompleteShutdown()
+    {
+        if (Interlocked.Exchange(ref _shutdownCompleted, 1) != 0)
+        {
+            return;
+        }
+
+        SingleInstance = null;
+        if (AppLogger.IsInitialized)
+        {
+            AppLogger.For("Fumilume.Program").Info("Fumilume を終了します。");
             AppLogger.Shutdown();
         }
     }

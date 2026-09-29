@@ -22,6 +22,12 @@ public sealed class App : Application
             ThemeService.Initialize(this, settings);
             var mainWindow = new MainWindow(settings);
             desktop.MainWindow = mainWindow;
+            if (OperatingSystem.IsMacOS())
+            {
+                // Cocoa の終了は Main の finally より先にプロセスを終えることがある。
+                // セッション保存後の lifetime 終了通知でログを確実に書き出す。
+                desktop.Exit += (_, _) => Program.CompleteShutdown();
+            }
             Program.SingleInstance?.SetArgumentsHandler(arguments =>
                 Dispatcher.UIThread.Post(() => mainWindow.OpenForwardedArguments(arguments)));
 
