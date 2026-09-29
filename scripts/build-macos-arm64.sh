@@ -89,7 +89,7 @@ fi
 # --deep を使わず、すべてのネイティブ実行ファイル・ライブラリを署名する。
 while IFS= read -r -d '' binary; do
   if file -b "$binary" | grep -q 'Mach-O'; then
-    lipo -verify_arch arm64 "$binary"
+    lipo "$binary" -verify_arch arm64
     codesign --force --sign "$APPLE_SIGN_APP_IDENTITY" --keychain "$keychain" \
       --options runtime --timestamp --entitlements scripts/macos/NativeAot.entitlements "$binary"
     codesign --verify --strict "$binary"
@@ -119,7 +119,7 @@ spctl --assess --type install --verbose=4 "$installer"
 xcrun stapler validate "$installer"
 while IFS= read -r -d '' binary; do
   if file -b "$binary" | grep -q 'Mach-O'; then
-    lipo -verify_arch arm64 "$binary"
+    lipo "$binary" -verify_arch arm64
     codesign --verify --strict "$binary"
   fi
 done < <(find "$bundle" -type f -print0)
