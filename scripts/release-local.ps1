@@ -151,11 +151,13 @@ $VpkVersion = (Invoke-RestMethod 'https://api.nuget.org/v3-flatcontainer/vpk/ind
 if (-not $VpkVersion) { throw 'vpk の最新安定版バージョンの取得に失敗しました (NuGet API)' }
 Write-Host "vpk 最新安定版: $VpkVersion"
 
-$vpkInstalled = (dotnet tool list --global | Select-String -SimpleMatch 'vpk') -match [regex]::Escape($VpkVersion)
-if (-not $vpkInstalled) {
-    dotnet tool uninstall --global vpk 2>$null | Out-Null
-    Invoke-Native 'vpk のインストール' { dotnet tool install --global vpk --version $VpkVersion }
+$VpkToolDir = Join-Path $RepoRoot ".release-tools\vpk-$VpkVersion"
+$VpkCommand = Join-Path $VpkToolDir 'vpk.exe'
+# グローバルツールの更新・削除に影響されない専用配置を使う。
+if (-not (Test-Path -LiteralPath $VpkCommand)) {
+    Invoke-Native 'vpk のインストール' { dotnet tool install --tool-path $VpkToolDir vpk --version $VpkVersion }
 }
+Invoke-Native 'vpk の起動確認' { & $VpkCommand --help | Out-Null }
 Write-Host "vpk: $VpkVersion"
 
 if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
@@ -236,7 +238,7 @@ foreach ($plan in $publishPlans) {
 
     Write-Host "== vpk pack + 署名: $($plan.Runtime) ==" -ForegroundColor Cyan
     Invoke-Native "vpk pack ($($plan.Runtime))" {
-        vpk pack `
+        & $VpkCommand pack `
             --packId Fumilume `
             --packVersion $version `
             --packTitle 'Fumilume' `
