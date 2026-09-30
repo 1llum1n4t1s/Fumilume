@@ -13,7 +13,10 @@ updates:
         update-types: ["minor", "patch"]
 
   - package-ecosystem: "nuget"
-    directory: "/"
+    directories:
+      - "/src/Fumilume"
+      - "/tests/Fumilume.Tests"
+      - "/tests/Fumilume.MacE2E"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -22,5 +25,17 @@ updates:
     open-pull-requests-limit: 5
     groups:
       nuget-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    groups:
+      actions:
         patterns: ["*"]
         update-types: ["minor", "patch"]
