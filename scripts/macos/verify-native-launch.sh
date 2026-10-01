@@ -67,7 +67,12 @@ sleep 2
 stage=quit
 osascript - "$bundle" <<'APPLESCRIPT'
 on run arguments
-  tell application (item 1 of arguments) to quit
+  try
+    tell application (item 1 of arguments) to quit
+  on error messageText number errorNumber
+    -- 非同期の保存中は終了要求が一旦キャンセルされる。後段で実際の終了と保存を検証する。
+    if errorNumber is not -128 then error messageText number errorNumber
+  end try
 end run
 APPLESCRIPT
 for attempt in {1..30}; do
