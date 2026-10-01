@@ -307,6 +307,7 @@ public static class SettingsService
             AppSettingsDefaults.MaximumSidePanelWidth);
 
         // 覚えたカーソル位置は古いものから捨てる（settings.json が青天井に太らないように）。
+        settings.CaretPositions ??= [];
         if (settings.CaretPositions.Count > AppSettingsDefaults.MaximumCaretPositions)
         {
             var excess = settings.CaretPositions.Count - AppSettingsDefaults.MaximumCaretPositions;

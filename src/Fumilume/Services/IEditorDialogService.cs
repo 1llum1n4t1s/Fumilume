@@ -11,6 +11,8 @@ public interface IEditorDialogService
 {
     Task<IReadOnlyList<string>> PickOpenPathsAsync();
 
+    Task<string?> PickFolderPathAsync() => Task.FromResult<string?>(null);
+
     Task<string?> PickSavePathAsync(string suggestedFileName);
 
     Task<UnsavedDocumentDecision> ConfirmUnsavedAsync(string documentName);

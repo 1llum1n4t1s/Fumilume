@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -15,6 +16,7 @@ using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
 using AvaloniaEdit.Rendering;
 using AvaloniaEdit.Search;
+using CommunityToolkit.Mvvm.Input;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 
@@ -43,11 +45,13 @@ public sealed partial class MainWindow : Window
     private readonly BracketHighlighter _bracketHighlighter;
     private readonly ColumnDefinition _sidePanelColumn;
     private DocumentViewModel? _boundDocument;
+    private SettingsView? _settingsView;
     private bool _closeConfirmed;
     private bool _closeCheckInProgress;
     private bool _syncingCaret;
     private bool _opened;
     private bool _formatDocumentChordPending;
+    private DateTime _workspaceChordStarted;
     private readonly Queue<IReadOnlyList<string>> _pendingForwardedArguments = [];
     private Task _forwardedOpen = Task.CompletedTask;
 
@@ -78,7 +82,8 @@ public sealed partial class MainWindow : Window
         var workspaceGrid = this.FindControl<Grid>("WorkspaceGrid")
             ?? throw new InvalidOperationException("ワークスペースを初期化できませんでした。");
         ConfigurePlatformWindowChrome(workspaceGrid);
-        _sidePanelColumn = workspaceGrid.ColumnDefinitions[0];
+        _sidePanelColumn = workspaceGrid.ColumnDefinitions[2];
+        InitializeFolderExplorer(workspaceGrid);
         _sidePanelColumn.Width = new GridLength(Math.Clamp(
             settings.SidePanelWidth,
             AppSettingsDefaults.MinimumSidePanelWidth,
@@ -87,6 +92,7 @@ public sealed partial class MainWindow : Window
         _editor = this.FindControl<TextEditor>("Editor")
             ?? throw new InvalidOperationException("エディタを初期化できませんでした。");
         _searchPanel = SearchPanel.Install(_editor);
+        _searchPanel.TemplateApplied += SearchPanel_TemplateApplied;
         _ = new EditorInputMethod(_editor);
         _editor.TextArea.TextView.BackgroundRenderers.Add(new BookmarkRenderer(() => _boundDocument));
         _bracketHighlighter = new BracketHighlighter(_editor);
@@ -102,6 +108,7 @@ public sealed partial class MainWindow : Window
         RestoreWindowBounds(settings);
 
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        UpdateSettingsView();
         _options.PropertyChanged += OnOptionsPropertyChanged;
         _editor.TextArea.Caret.PositionChanged += OnEditorCaretPositionChanged;
         _editor.TextArea.SelectionChanged += OnEditorSelectionChanged;
@@ -261,6 +268,7 @@ public sealed partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs args)
     {
+        _viewModel.DisposeFolderTree();
         _fileChangeMonitor.FileChanged -= OnExternalFileChanged;
         _fileChangeMonitor.Dispose();
     }
@@ -517,6 +525,15 @@ public sealed partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(MainWindowViewModel.SettingsTab))
+        {
+            UpdateSettingsView();
+        }
+        if (args.PropertyName is nameof(MainWindowViewModel.IsFolderTreeVisible)
+            or nameof(MainWindowViewModel.FolderTreeWidth))
+        {
+            ApplyFolderExplorerWidth();
+        }
         if (args.PropertyName == nameof(MainWindowViewModel.IsCommandPaletteOpen))
         {
             if (_viewModel.IsCommandPaletteOpen)
@@ -533,7 +550,7 @@ public sealed partial class MainWindow : Window
         }
 
         BindSelectedDocument();
-        if (_viewModel.IsDocumentSelected)
+        if (_viewModel.IsDocumentSelected && !_openingFolderNode)
         {
             _editor.Focus();
         }
@@ -545,6 +562,20 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnPdfScrollChanged(object? sender, ScrollChangedEventArgs args) => UpdatePdfViewport();
+
+    private void UpdateSettingsView()
+    {
+        if (_settingsView is null && _viewModel.SettingsTab is not null)
+        {
+            _settingsView = new SettingsView();
+            this.FindControl<ContentControl>("SettingsHost")!.Content = _settingsView;
+        }
+
+        if (_settingsView is not null)
+        {
+            _settingsView.DataContext = _viewModel.SettingsTab;
+        }
+    }
 
     private void UpdatePdfViewport()
     {
@@ -852,6 +883,36 @@ public sealed partial class MainWindow : Window
 
     private void OnGlobalKeyDown(object? sender, KeyEventArgs args)
     {
+        if (_formatDocumentChordPending)
+        {
+            if (DateTime.UtcNow - _workspaceChordStarted > TimeSpan.FromSeconds(3))
+                _formatDocumentChordPending = false;
+            else if (args.Key is Key.LeftCtrl or Key.RightCtrl or Key.LWin or Key.RWin
+                or Key.LeftShift or Key.RightShift or Key.LeftAlt or Key.RightAlt)
+                return;
+        }
+        var primaryOnly = args.KeyModifiers == (UsesMacPlatformConventions ? KeyModifiers.Meta : KeyModifiers.Control);
+        if (_formatDocumentChordPending && primaryOnly && args.Key == Key.O)
+        {
+            _formatDocumentChordPending = false;
+            _viewModel.OpenFolderCommand.Execute(null);
+            args.Handled = true;
+            return;
+        }
+        if (primaryOnly && args.Key == Key.B)
+        {
+            _viewModel.ToggleFolderTreeCommand.Execute(null);
+            args.Handled = true;
+            return;
+        }
+        if (UsesMacPlatformConventions && primaryOnly && args.Key == Key.K)
+        {
+            _formatDocumentChordPending = true;
+            _workspaceChordStarted = DateTime.UtcNow;
+            _viewModel.StatusMessage = "⌘K が押されました。⌘O でフォルダを開きます";
+            args.Handled = true;
+            return;
+        }
         if (TryHandleMacShortcut(args))
         {
             return;
@@ -869,12 +930,13 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        // Avalonia の KeyBinding は複数ストロークを表現できないため、Visual Studio の
-        // Edit.FormatDocument と同じ Ctrl+K, Ctrl+D だけをここで状態として受ける。
-        if (controlOnly && args.Key == Key.K && _viewModel.IsDocumentSelected)
+        // 複数ストロークは KeyBinding で表せないため、フォルダを開く Ctrl+K, Ctrl+O と
+        // 文書全体を書式整形する Ctrl+K, Ctrl+D をここで受ける。
+        if (controlOnly && args.Key == Key.K)
         {
             _formatDocumentChordPending = true;
-            _viewModel.StatusMessage = "Ctrl+K が押されました。Ctrl+D で文書全体を書式整形します";
+            _workspaceChordStarted = DateTime.UtcNow;
+            _viewModel.StatusMessage = "Ctrl+K が押されました。Ctrl+O でフォルダを開く、Ctrl+D で書式整形します";
             args.Handled = true;
             return;
         }
@@ -1110,6 +1172,16 @@ public sealed partial class MainWindow : Window
 
     private static MacroStep Motion(MacroMotion motion, bool extendSelection)
         => new() { Kind = MacroStepKind.MoveCaret, Motion = motion, ExtendSelection = extendSelection };
+
+    private void SearchPanel_TemplateApplied(object? sender, TemplateAppliedEventArgs args)
+    {
+        var close = _searchPanel.GetVisualDescendants().OfType<Button>()
+            .Single(button => ReferenceEquals(button.Command, SearchCommands.CloseSearchPanel));
+        // AvaloniaEdit の RoutedCommand はフォーカス依存の実行可否を再通知しない。
+        // テンプレート生成時の無効状態を残さず、閉じる操作は常にパネルへ直接送る。
+        Avalonia.Automation.AutomationProperties.SetAutomationId(close, "CloseSearchPanelButton");
+        close.Command = new RelayCommand(_searchPanel.Close);
+    }
 
     private void OpenSearch(bool replace)
     {

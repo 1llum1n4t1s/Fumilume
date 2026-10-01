@@ -83,6 +83,8 @@ public sealed partial class GrepResultTabViewModel : WorkspaceTabViewModel, IDis
         {
             // ファイルの読み込みと照合は UI スレッドから外す（件数が多いと目に見えて固まる）。
             var result = await Task.Run(() => _grep.SearchAsync(Query, token), token);
+            token.ThrowIfCancellationRequested();
+            if (_disposed) return;
             foreach (var match in result.Matches)
             {
                 Matches.Add(new GrepMatchItem(match));
@@ -93,19 +95,23 @@ public sealed partial class GrepResultTabViewModel : WorkspaceTabViewModel, IDis
         }
         catch (OperationCanceledException)
         {
-            Status = $"検索を中止しました（{Matches.Count:N0} 件）";
+            if (!_disposed) Status = $"検索を中止しました（{Matches.Count:N0} 件）";
         }
         catch (Exception ex)
         {
+            if (_disposed) return;
             AppLogger.For<GrepResultTabViewModel>().Error($"検索に失敗しました: {Query.Describe()}", ex);
             Status = $"検索できませんでした（{ex.Message}）";
         }
         finally
         {
-            IsSearching = false;
-            HasCompleted = true;
-            OnPropertyChanged(nameof(HasNoMatches));
-            NotifyCommandStates();
+            if (!_disposed)
+            {
+                IsSearching = false;
+                HasCompleted = true;
+                OnPropertyChanged(nameof(HasNoMatches));
+                NotifyCommandStates();
+            }
         }
     }
 

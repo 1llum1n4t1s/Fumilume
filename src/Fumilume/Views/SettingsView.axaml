@@ -100,6 +100,7 @@
                                     <StackPanel Orientation="Horizontal" Spacing="12" Margin="28,0,0,0"
                                                 HorizontalAlignment="Left">
                                         <Slider Width="280" VerticalAlignment="Center"
+                                                AutomationProperties.Name="縦線の桁位置"
                                                 Minimum="4" Maximum="200" TickFrequency="1"
                                                 IsSnapToTickEnabled="True"
                                                 IsEnabled="{Binding Options.ShowColumnRuler}"
@@ -111,6 +112,7 @@
                                     <TextBlock Classes="settingscaption" Margin="0,10,0,0" Text="行の高さ" />
                                     <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Left">
                                         <Slider Width="280" VerticalAlignment="Center"
+                                                AutomationProperties.Name="行の高さ"
                                                 Minimum="0.8" Maximum="2.5" TickFrequency="0.05"
                                                 IsSnapToTickEnabled="True"
                                                 Value="{Binding Options.LineHeightFactor, Mode=TwoWay}" />
@@ -144,6 +146,7 @@
                                         <Slider Width="300" VerticalAlignment="Center"
                                                 Minimum="8" Maximum="48" TickFrequency="1"
                                                 IsSnapToTickEnabled="True"
+                                                AutomationProperties.Name="UIフォントサイズ"
                                                 Value="{Binding Options.UiFontSize, Mode=TwoWay}" />
                                         <TextBlock VerticalAlignment="Center" FontSize="13"
                                                    Foreground="{DynamicResource TextPrimary}"
@@ -175,6 +178,7 @@
                                         <Slider Width="300" VerticalAlignment="Center"
                                                 Minimum="8" Maximum="48" TickFrequency="1"
                                                 IsSnapToTickEnabled="True"
+                                                AutomationProperties.Name="エディタフォントサイズ"
                                                 Value="{Binding Options.EditorFontSize, Mode=TwoWay}" />
                                         <TextBlock VerticalAlignment="Center" FontSize="13"
                                                    Foreground="{DynamicResource TextPrimary}"
@@ -374,6 +378,7 @@
                                                 Minimum="1" Maximum="512" TickFrequency="1"
                                                 IsSnapToTickEnabled="True"
                                                 IsEnabled="{Binding Options.WarnOnLargeFile}"
+                                                AutomationProperties.Name="大容量ファイルの警告閾値"
                                                 Value="{Binding Options.LargeFileThresholdMegabytes, Mode=TwoWay}" />
                                         <TextBlock VerticalAlignment="Center" FontSize="13"
                                                    Foreground="{DynamicResource TextPrimary}"

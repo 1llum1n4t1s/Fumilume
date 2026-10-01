@@ -283,7 +283,13 @@ public sealed partial class MainWindowViewModel
     /// <summary>今のワークスペースを控えの形にする。未保存の本文はここでだけ持ち出す。</summary>
     internal SessionState CaptureSession()
     {
-        var session = new SessionState { SettingsTabOpen = SettingsTab is not null || _pendingSettingsTabOpen };
+        var session = new SessionState
+        {
+            SettingsTabOpen = SettingsTab is not null || _pendingSettingsTabOpen,
+            FolderPath = FolderPath,
+            FolderTreeVisible = IsFolderTreeVisible,
+            FolderTreeWidth = FolderTreeWidth,
+        };
         var selectedTabCaptured = false;
         var restoredSelectionIndex = -1;
 

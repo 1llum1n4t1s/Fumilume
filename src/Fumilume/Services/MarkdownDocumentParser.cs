@@ -122,9 +122,11 @@ public static class MarkdownDocumentParser
     internal static string StripInlineMarkup(string text)
     {
         var result = new StringBuilder(text.Length);
+        var closeLabel = -1;
+        var closeUrl = -1;
         for (var index = 0; index < text.Length; index++)
         {
-            if (text[index] == '[' && TryReadLink(text, index, out var label, out var consumed))
+            if (text[index] == '[' && TryReadLink(text, index, ref closeLabel, ref closeUrl, out var label, out var consumed))
             {
                 result.Append(label);
                 index += consumed - 1;
@@ -132,7 +134,7 @@ public static class MarkdownDocumentParser
             }
 
             if (text[index] == '!' && index + 1 < text.Length && text[index + 1] == '['
-                && TryReadLink(text, index + 1, out var alt, out consumed))
+                && TryReadLink(text, index + 1, ref closeLabel, ref closeUrl, out var alt, out consumed))
             {
                 result.Append("画像: ").Append(alt);
                 index += consumed;
@@ -156,18 +158,28 @@ public static class MarkdownDocumentParser
         return result.ToString();
     }
 
-    private static bool TryReadLink(string text, int start, out string label, out int consumed)
+    private static bool TryReadLink(string text, int start, ref int closeLabel, ref int closeUrl,
+        out string label, out int consumed)
     {
-        var closeLabel = text.IndexOf(']', start + 1);
-        if (closeLabel < 0 || closeLabel + 1 >= text.Length || text[closeLabel + 1] != '(')
+        // 失敗したリンクでも同じ末尾を繰り返し探索しない。見つからない位置も末尾として記憶する。
+        if (closeLabel <= start)
+        {
+            closeLabel = text.IndexOf(']', start + 1);
+            if (closeLabel < 0) closeLabel = text.Length;
+        }
+        if (closeLabel + 1 >= text.Length || text[closeLabel + 1] != '(')
         {
             label = string.Empty;
             consumed = 0;
             return false;
         }
 
-        var closeUrl = text.IndexOf(')', closeLabel + 2);
-        if (closeUrl < 0)
+        if (closeUrl <= closeLabel + 1)
+        {
+            closeUrl = text.IndexOf(')', closeLabel + 2);
+            if (closeUrl < 0) closeUrl = text.Length;
+        }
+        if (closeUrl >= text.Length)
         {
             label = string.Empty;
             consumed = 0;

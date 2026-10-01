@@ -39,6 +39,14 @@ public abstract partial class WorkspaceTabViewModel : ObservableObject
     /// <summary>フォルダ横断検索の結果タブかどうか。</summary>
     public virtual bool IsGrepTab => false;
 
+    /// <summary>フォルダツリーから一時的に開いたタブ。編集や明示オープンで確定する。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PreviewFontStyle))]
+    private bool _isPreview;
+
+    public Avalonia.Media.FontStyle PreviewFontStyle => IsPreview
+        ? Avalonia.Media.FontStyle.Italic : Avalonia.Media.FontStyle.Normal;
+
     /// <summary>設定以外のタブを一覧の先頭へ固定できるか。</summary>
     public bool CanPin => !IsSettingsTab;
 

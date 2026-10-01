@@ -45,6 +45,16 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
             .ToArray();
     }
 
+    public async Task<string?> PickFolderPathAsync()
+    {
+        var folders = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "フォルダを開く",
+            AllowMultiple = false,
+        });
+        return folders.FirstOrDefault()?.TryGetLocalPath();
+    }
+
     public async Task<string?> PickSavePathAsync(string suggestedFileName)
     {
         var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions

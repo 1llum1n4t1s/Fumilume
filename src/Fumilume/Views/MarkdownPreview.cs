@@ -1,5 +1,7 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -10,6 +12,7 @@ namespace Fumilume.Views;
 /// <summary>安全なローカル描画だけを行う Markdown プレビュー。</summary>
 public sealed class MarkdownPreview : UserControl
 {
+    private const int MaximumWrappedFragmentLength = 4096;
     public static readonly StyledProperty<string?> MarkdownProperty =
         AvaloniaProperty.Register<MarkdownPreview, string?>(nameof(Markdown));
 
@@ -141,6 +144,58 @@ public sealed class MarkdownPreview : UserControl
         double fontSize,
         FontWeight? weight = null,
         Thickness? margin = null)
+    {
+        var paragraph = CreateTextFragment(text, fontSize, weight, margin);
+        if (text.Length <= MaximumWrappedFragmentLength)
+            return paragraph;
+
+        // 長い段落を1つの TextLayout に渡すと、折返しの計算が UI を長時間占有する。
+        // 同じ段落内の Run に分け、連続した折返しと選択・コピーを維持する。
+        paragraph.Text = null;
+        var boundaries = StringInfo.ParseCombiningCharacters(text);
+        for (var start = 0; start < text.Length;)
+        {
+            var end = Math.Min(start + MaximumWrappedFragmentLength, text.Length);
+            if (end < text.Length)
+            {
+                var boundaryIndex = Array.BinarySearch(boundaries, end);
+                if (boundaryIndex < 0) boundaryIndex = ~boundaryIndex - 1;
+                var preferredIndex = boundaryIndex;
+                while (boundaryIndex >= 0 && boundaries[boundaryIndex] > start
+                    && !IsShapingBoundary(text, boundaries[boundaryIndex]))
+                    boundaryIndex--;
+                if (boundaryIndex >= 0 && boundaries[boundaryIndex] > start)
+                    end = boundaries[boundaryIndex];
+                else
+                {
+                    // 空白のない単語や接続形を持つ文字列は、上限より長くても同じ Run に保つ。
+                    boundaryIndex = preferredIndex + 1;
+                    while (boundaryIndex < boundaries.Length
+                        && !IsShapingBoundary(text, boundaries[boundaryIndex]))
+                        boundaryIndex++;
+                    end = boundaryIndex < boundaries.Length ? boundaries[boundaryIndex] : text.Length;
+                }
+            }
+            paragraph.Inlines!.Add(new Run(text[start..end]));
+            start = end;
+        }
+        return paragraph;
+    }
+
+    private static bool IsShapingBoundary(string text, int index)
+    {
+        var previous = text[index - 1];
+        var next = text[index];
+        return char.IsWhiteSpace(previous) || char.IsWhiteSpace(next)
+            || IsBoundaryPunctuation(previous) || IsBoundaryPunctuation(next);
+    }
+
+    private static bool IsBoundaryPunctuation(char character)
+        => char.GetUnicodeCategory(character) is UnicodeCategory.OpenPunctuation
+            or UnicodeCategory.ClosePunctuation or UnicodeCategory.OtherPunctuation;
+
+    private static SelectableTextBlock CreateTextFragment(
+        string text, double fontSize, FontWeight? weight, Thickness? margin = null)
         => new()
         {
             Text = text,

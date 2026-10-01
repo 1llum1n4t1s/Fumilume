@@ -95,6 +95,30 @@ public sealed partial class MainWindowViewModel
     {
         yield return Entry(FileCategory, "新しい文書", PrimaryShortcut("N"), NewDocument);
         yield return Entry(FileCategory, "ファイルを開く", PrimaryShortcut("O"), () => OpenAsync());
+        foreach (var definition in EditorCommandCatalog.WorkspaceCommands)
+        {
+            if (!HasFolder && definition.Id is not ("OpenFolder" or "ToggleFolderTree"))
+            {
+                continue;
+            }
+            var command = definition.Id switch
+            {
+                "OpenFolder" => (System.Windows.Input.ICommand)OpenFolderCommand,
+                "CloseFolder" => CloseFolderCommand,
+                "ToggleFolderTree" => ToggleFolderTreeCommand,
+                "RefreshFolder" => RefreshFolderCommand,
+                "CollapseFolders" => CollapseFoldersCommand,
+                _ => RevealFileInFolderCommand,
+            };
+            var gesture = OperatingSystem.IsMacOS()
+                ? definition.Gesture?.Replace("Ctrl+", "⌘", StringComparison.Ordinal)
+                : definition.Gesture;
+            yield return Entry(definition.Category, definition.Title, gesture, async () =>
+            {
+                if (command is IAsyncRelayCommand asyncCommand) await asyncCommand.ExecuteAsync(null);
+                else command.Execute(null);
+            });
+        }
 
         if (IsDocumentSelected)
         {

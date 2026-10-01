@@ -15,6 +15,12 @@ public sealed class SessionState
 
     /// <summary>設定タブを開いた状態で終了したか。</summary>
     public bool SettingsTabOpen { get; set; }
+
+    public string? FolderPath { get; set; }
+
+    public bool FolderTreeVisible { get; set; } = true;
+
+    public double FolderTreeWidth { get; set; } = 240;
 }
 
 /// <summary><see cref="SessionTabState.Kind"/> に入る値。未知の値は文書として扱う。</summary>
@@ -347,6 +353,9 @@ public static class SessionStateService
             Tabs = [.. primary.Tabs],
             SelectedTabIndex = primary.SelectedTabIndex,
             SettingsTabOpen = primary.SettingsTabOpen,
+            FolderPath = primary.FolderPath,
+            FolderTreeVisible = primary.FolderTreeVisible,
+            FolderTreeWidth = primary.FolderTreeWidth,
         };
         foreach (var recovery in recoveries)
         {

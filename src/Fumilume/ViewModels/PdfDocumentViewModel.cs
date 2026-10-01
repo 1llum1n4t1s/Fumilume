@@ -197,7 +197,10 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         }
         catch (Exception ex)
         {
-            ErrorMessage = ex.Message;
+            if (!token.IsCancellationRequested)
+            {
+                ErrorMessage = ex.Message;
+            }
             AppLogger.For<PdfDocumentViewModel>().Error($"PDF ページを描画できませんでした: {FilePath}", ex);
         }
         finally

@@ -23,15 +23,17 @@ public sealed class MacPdfRenderer : IPdfRenderer
     private const uint BitmapByteOrder32Little = 2U << 12;
     private const uint ImageAlphaPremultipliedFirst = 2;
     private readonly object _sync = new();
+    private readonly Size[] _pageSizes;
     private nint _document;
+    private int _disposed;
 
-    private MacPdfRenderer(nint document, int pageCount)
+    private MacPdfRenderer(nint document, Size[] pageSizes)
     {
         _document = document;
-        PageCount = pageCount;
+        _pageSizes = pageSizes;
     }
 
-    public int PageCount { get; }
+    public int PageCount => _pageSizes.Length;
 
     public static Task<MacPdfRenderer> OpenAsync(string path)
     {
@@ -41,6 +43,12 @@ public sealed class MacPdfRenderer : IPdfRenderer
             throw new FileNotFoundException("PDF ファイルが見つかりません。", fullPath);
         }
 
+        // ページ数・サイズの読込も UI スレッドを占有しないようにする。
+        return Task.Run(() => OpenCore(fullPath));
+    }
+
+    private static MacPdfRenderer OpenCore(string fullPath)
+    {
         var provider = CGDataProviderCreateWithFilename(fullPath);
         if (provider == 0)
         {
@@ -70,7 +78,13 @@ public sealed class MacPdfRenderer : IPdfRenderer
                 throw new InvalidDataException("PDF にページがありません。");
             }
 
-            return Task.FromResult(new MacPdfRenderer(document, pageCount));
+            var pageSizes = new Size[pageCount];
+            for (var pageIndex = 0; pageIndex < pageCount; pageIndex++)
+            {
+                pageSizes[pageIndex] = GetPageSizeCore(GetPage(document, pageIndex));
+            }
+
+            return new MacPdfRenderer(document, pageSizes);
         }
         catch
         {
@@ -82,18 +96,9 @@ public sealed class MacPdfRenderer : IPdfRenderer
     public Size GetPageSize(int pageIndex)
     {
         ValidatePageIndex(pageIndex);
-        lock (_sync)
-        {
-            ObjectDisposedException.ThrowIf(_document == 0, this);
-            var page = GetPage(pageIndex);
-            var box = GetPageBox(page);
-            var width = Math.Abs(box.Size.Width);
-            var height = Math.Abs(box.Size.Height);
-            var rotation = NormalizeRotation(CGPDFPageGetRotationAngle(page));
-            return rotation is 90 or 270
-                ? new Size(height, width)
-                : new Size(width, height);
-        }
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        // 不変のメタデータなので、ネイティブ描画の終了を待たずに取得できる。
+        return _pageSizes[pageIndex];
     }
 
     public Task<Bitmap> RenderAsync(
@@ -107,6 +112,7 @@ public sealed class MacPdfRenderer : IPdfRenderer
             throw new ArgumentOutOfRangeException(nameof(zoom));
         }
 
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         cancellationToken.ThrowIfCancellationRequested();
         return Task.Run(() => RenderCore(pageIndex, zoom, cancellationToken), cancellationToken);
     }
@@ -115,11 +121,11 @@ public sealed class MacPdfRenderer : IPdfRenderer
     {
         lock (_sync)
         {
-            ObjectDisposedException.ThrowIf(_document == 0, this);
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             cancellationToken.ThrowIfCancellationRequested();
 
-            var page = GetPage(pageIndex);
-            var pageSize = GetPageSizeCore(page);
+            var page = GetPage(_document, pageIndex);
+            var pageSize = _pageSizes[pageIndex];
             var safeZoom = Math.Clamp(zoom, 0.001, 4.0);
             var width = checked((int)Math.Clamp(
                 Math.Round(pageSize.Width * safeZoom),
@@ -197,7 +203,7 @@ public sealed class MacPdfRenderer : IPdfRenderer
         }
     }
 
-    private Size GetPageSizeCore(nint page)
+    private static Size GetPageSizeCore(nint page)
     {
         var box = GetPageBox(page);
         var width = Math.Abs(box.Size.Width);
@@ -225,9 +231,9 @@ public sealed class MacPdfRenderer : IPdfRenderer
         return box;
     }
 
-    private nint GetPage(int pageIndex)
+    private static nint GetPage(nint document, int pageIndex)
     {
-        var page = CGPDFDocumentGetPage(_document, checked((nuint)(pageIndex + 1)));
+        var page = CGPDFDocumentGetPage(document, checked((nuint)(pageIndex + 1)));
         return page != 0
             ? page
             : throw new InvalidDataException("PDF ページを読み込めませんでした。");
@@ -247,16 +253,21 @@ public sealed class MacPdfRenderer : IPdfRenderer
 
     public void Dispose()
     {
-        lock (_sync)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
-            if (_document == 0)
-            {
-                return;
-            }
-
-            CGPDFDocumentRelease(_document);
-            _document = 0;
+            return;
         }
+
+        // 描画中の document/page はその終了まで保持する。UI 上のタブ破棄は
+        // 待たせず、以後の描画を拒否したうえで同じロック内で一度だけ解放する。
+        _ = Task.Run(() =>
+        {
+            lock (_sync)
+            {
+                CGPDFDocumentRelease(_document);
+                _document = 0;
+            }
+        });
     }
 
     private enum CGPDFBox

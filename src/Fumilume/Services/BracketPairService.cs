@@ -104,10 +104,18 @@ internal static class BracketPairService
                     continue;
 
                 case ScanMode.RawString:
-                    if (current == '"' && CountRun(text, offset, '"') >= rawQuoteCount)
+                    if (current == '"')
                     {
-                        offset += rawQuoteCount - 1;
-                        mode = ScanMode.Code;
+                        var runLength = CountRun(text, offset, '"');
+                        if (runLength >= rawQuoteCount)
+                        {
+                            offset += rawQuoteCount - 1;
+                            mode = ScanMode.Code;
+                        }
+                        else
+                        {
+                            offset += runLength - 1;
+                        }
                     }
 
                     continue;
@@ -221,7 +229,10 @@ internal static class BracketPairService
             quoteOffset = start + 2;
             verbatim = true;
         }
-        else if (text[start] == '$')
+        // 同じ $ 列の途中は再走査しない。入力途中の $$@" は最後の $@" の判定を残す。
+        else if (text[start] == '$'
+            && (start == 0 || text[start - 1] != '$'
+                || (start + 1 < text.Length && text[start + 1] == '@')))
         {
             var dollarCount = CountRun(text, start, '$');
             var afterDollars = start + dollarCount;
@@ -397,9 +408,15 @@ internal static class BracketPairService
     {
         for (var offset = openingQuoteOffset + quoteCount; offset < text.Length; offset++)
         {
-            if (text[offset] == '"' && CountRun(text, offset, '"') >= quoteCount)
+            if (text[offset] == '"')
             {
-                return offset + quoteCount - 1;
+                var runLength = CountRun(text, offset, '"');
+                if (runLength >= quoteCount)
+                {
+                    return offset + quoteCount - 1;
+                }
+
+                offset += runLength - 1;
             }
         }
 

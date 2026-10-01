@@ -1,4 +1,5 @@
 using System.Text;
+using Fumilume.Models;
 
 namespace Fumilume.Services;
 
@@ -353,10 +354,7 @@ public static class TextTransforms
     }
 
     private static string TransformLines(string text, Func<string, string> transform)
-    {
-        var (lines, newLine, trailing) = SplitLines(text);
-        return string.Join(newLine, lines.Select(transform)) + trailing;
-    }
+        => DocumentNewLines.TransformLines(text, transform);
 
     /// <summary>
     /// 改行で割る。末尾の改行は <c>trailing</c> として取り分けておき、
@@ -366,13 +364,14 @@ public static class TextTransforms
     {
         var newLine = DetectNewLine(text);
         var trailing = string.Empty;
-        if (text.EndsWith(newLine, StringComparison.Ordinal))
+        var lines = DocumentNewLines.SplitLines(text).ToList();
+        if (text.Length > 0 && text[^1] is '\r' or '\n')
         {
             trailing = newLine;
-            text = text[..^newLine.Length];
+            lines.RemoveAt(lines.Count - 1);
         }
 
-        return ([.. text.Split(newLine)], newLine, trailing);
+        return (lines, newLine, trailing);
     }
 
     private static string DetectNewLine(string text)

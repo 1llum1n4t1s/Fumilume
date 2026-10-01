@@ -59,6 +59,7 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
 
     public async Task<GrepResult> SearchAsync(GrepQuery query, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrEmpty(query.Pattern) || !Directory.Exists(query.Folder))
         {
             return GrepResult.Empty;
@@ -95,13 +96,14 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
             }
 
             searched++;
-            if (CollectMatches(path, text, matcher, matches))
+            if (CollectMatches(path, text, matcher, matches, cancellationToken))
             {
                 reachedLimit = true;
                 break;
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new GrepResult(matches, searched, skipped, reachedLimit);
     }
 
@@ -145,11 +147,14 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
         string path,
         string text,
         Func<string, int?> matcher,
-        List<GrepMatch> matches)
+        List<GrepMatch> matches,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var lineNumber = 0;
         foreach (var line in DocumentNewLines.SplitLines(text))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             lineNumber++;
             if (matcher(line) is not { } column)
             {

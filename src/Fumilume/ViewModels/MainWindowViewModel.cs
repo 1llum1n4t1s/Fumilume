@@ -21,6 +21,17 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private readonly SemaphoreSlim _openPathsGate = new(1, 1);
     private int _untitledSequence;
 
+    private readonly record struct DocumentEditState(object Version, DocumentEncoding Encoding, string NewLine)
+    {
+        public static DocumentEditState Capture(DocumentViewModel document)
+            => new(document.EditorDocument.Version, document.Encoding, document.NewLine);
+
+        public bool Matches(DocumentViewModel document)
+            => ReferenceEquals(Version, document.EditorDocument.Version)
+                && Encoding == document.Encoding
+                && string.Equals(NewLine, document.NewLine, StringComparison.Ordinal);
+    }
+
     /// <summary>起動時の復元処理。終了時はこれの完了を待ってからセッションを書き直す。</summary>
     private Task? _initialization;
 
@@ -120,6 +131,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _sessionRecoveryDeferred = sessionLoad.RecoveryDeferred;
         _pendingSettingsTabOpen = session.SettingsTabOpen;
         await RestoreSessionAsync(session);
+        FolderTreeWidth = double.IsFinite(session.FolderTreeWidth)
+            ? Math.Clamp(session.FolderTreeWidth, 140, 400) : 240;
+        if (!string.IsNullOrWhiteSpace(session.FolderPath))
+        {
+            await OpenFolderPathCoreAsync(session.FolderPath);
+            IsFolderTreeVisible = session.FolderTreeVisible && HasFolder;
+        }
 
         var paths = startupArgs.Where(File.Exists).ToArray();
         if (paths.Length > 0)
@@ -153,15 +171,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return true;
         }
 
-        foreach (var document in Documents.Where(item => item.IsModified).ToArray())
+        var closingStates = Documents.ToDictionary(document => document, DocumentEditState.Capture);
+        foreach (var document in closingStates.Keys.Where(item => item.IsModified).ToArray())
         {
             if (!await ResolveUnsavedAsync(document))
             {
                 return false;
             }
+            closingStates[document] = DocumentEditState.Capture(document);
         }
 
-        return true;
+        // 別の文書への確認中に入力された内容にも、終了の許可を流用しない。
+        return Documents.All(document => closingStates.TryGetValue(document, out var state)
+            && state.Matches(document));
     }
 
     /// <summary>
@@ -307,9 +329,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var pattern = SelectedDocument?.SelectedText is { Length: > 0 } selected && !selected.Contains('\n')
             ? selected
             : settings.GrepPattern;
-        var folder = SelectedDocument?.FilePath is { } path
+        var folder = FolderPath ?? (SelectedDocument?.FilePath is { } path
             ? Path.GetDirectoryName(path) ?? settings.GrepFolder
-            : settings.GrepFolder;
+            : settings.GrepFolder);
         if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
         {
             folder = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -367,6 +389,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var existing = FindOpenFileTab(fullPath);
             if (existing is not null)
             {
+                existing.IsPreview = false;
                 SelectedTab = existing;
                 StatusMessage = $"{Path.GetFileName(fullPath)} は既に開かれています";
                 continue;
@@ -460,6 +483,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
+            var reloadState = DocumentEditState.Capture(document);
             if (document.IsModified && !await _dialogs.ConfirmAsync(
                     "ファイルを開き直す",
                     $"{document.DisplayName} の未保存の変更を破棄して、ディスクから開き直しますか？"))
@@ -471,6 +495,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
             try
             {
                 var content = await _files.ReadAsync(path);
+                if (!Tabs.Contains(document) || document.FilePath != path
+                    || !reloadState.Matches(document))
+                {
+                    StatusMessage = $"{document.DisplayName} の開き直しを中止しました（処理中の編集を保持しています）";
+                    return;
+                }
                 document.Load(path, content);
                 document.CaretIndex = Math.Clamp(caret, 0, document.EditorDocument.TextLength);
                 StatusMessage = $"{document.DisplayName} を開き直しました";
@@ -629,12 +659,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 return CompleteExternalFileChange(fullPath);
             }
 
+            var reloadState = DocumentEditState.Capture(document);
             if (document.IsModified && !await _dialogs.ConfirmAsync(
                     "ファイルが外部で変更されました",
                     $"{document.DisplayName} は別のプログラムで変更されました。\n\n"
                     + "未保存の編集を破棄して、ディスクの内容を読み込みますか？"))
             {
                 StatusMessage = $"{document.DisplayName} の外部変更は保留しました（編集中の内容を保持しています）";
+                return CompleteExternalFileChange(fullPath);
+            }
+
+            if (!Tabs.Contains(document) || document.FilePath != fullPath
+                || !reloadState.Matches(document))
+            {
+                StatusMessage = $"{document.DisplayName} の外部変更は保留しました（確認中の編集を保持しています）";
                 return CompleteExternalFileChange(fullPath);
             }
 
@@ -683,6 +721,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (sender is not WorkspaceTabViewModel tab || tab.IsSettingsTab)
         {
             return;
+        }
+
+        if (tab.IsPinned)
+        {
+            tab.IsPreview = false;
         }
 
         var oldIndex = Tabs.IndexOf(tab);
@@ -783,17 +826,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private async Task<bool> ResolveUnsavedAsync(DocumentViewModel document)
     {
+        var confirmedState = DocumentEditState.Capture(document);
         var decision = await _dialogs.ConfirmUnsavedAsync(document.DisplayName);
         return decision switch
         {
-            UnsavedDocumentDecision.Save => await SaveDocumentAsync(document, saveAs: false),
-            UnsavedDocumentDecision.Discard => true,
+            UnsavedDocumentDecision.Save => await SaveDocumentAsync(document, saveAs: false) && !document.IsModified,
+            UnsavedDocumentDecision.Discard => confirmedState.Matches(document),
             _ => false,
         };
     }
 
     private async Task<bool> SaveDocumentAsync(DocumentViewModel document, bool saveAs)
     {
+        // 保存開始時に確定し、別ファイルの読込待ちでプレビューが置換されるのを防ぐ。
+        document.IsPreview = false;
         var path = saveAs ? null : document.FilePath;
         if (path is null)
         {
@@ -936,6 +982,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanRedo));
         NotifyDocumentCommandsChanged();
         OnSelectedTabChangedForSidePanel();
+        OnFolderSelectedTabChanged();
     }
 
     private void OnDocumentPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -947,6 +994,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         if (args.PropertyName == nameof(DocumentViewModel.IsModified))
         {
+            if (sender is DocumentViewModel { IsModified: true } modified)
+            {
+                modified.IsPreview = false;
+            }
             SaveAllCommand.NotifyCanExecuteChanged();
         }
 

@@ -79,9 +79,23 @@ public sealed record EditorCommandDefinition(
     string Title,
     string? Gesture = null);
 
+/// <summary>本文編集と独立したワークスペース操作の表示定義。</summary>
+public sealed record WorkspaceCommandDefinition(string Id, string Category, string Title, string? Gesture = null);
+
 /// <summary>コマンドの一覧。並び順がそのままメニューの並びになる。</summary>
 public static class EditorCommandCatalog
 {
+    /// <summary>本文編集と独立したワークスペース操作。メニューとパレットの表示名を共有する。</summary>
+    public static IReadOnlyList<WorkspaceCommandDefinition> WorkspaceCommands { get; } =
+    [
+        new("OpenFolder", "ファイル", "フォルダを開く", "Ctrl+K, Ctrl+O"),
+        new("CloseFolder", "ファイル", "フォルダを閉じる"),
+        new("ToggleFolderTree", "表示", "フォルダツリーを表示 / 非表示", "Ctrl+B"),
+        new("RefreshFolder", "表示", "フォルダツリーを更新"),
+        new("CollapseFolders", "表示", "フォルダツリーをすべて折りたたむ"),
+        new("RevealFileInFolder", "表示", "現在のファイルをフォルダツリーに表示"),
+    ];
+
     public const string EditCategory = "編集";
     public const string ConvertCategory = "変換";
     public const string InsertCategory = "挿入";

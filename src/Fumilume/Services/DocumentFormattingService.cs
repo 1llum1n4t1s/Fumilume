@@ -482,12 +482,9 @@ public static class DocumentFormattingService
 
     private static string PreserveFinalNewLine(string formatted, string original, string newLine)
     {
-        var normalized = NormalizeLineEndings(formatted, newLine).TrimEnd('\r', '\n');
+        var normalized = DocumentFileService.NormalizeNewLines(formatted, newLine).TrimEnd('\r', '\n');
         return EndsWithNewLine(original) ? normalized + newLine : normalized;
     }
-
-    private static string NormalizeLineEndings(string text, string newLine)
-        => string.Join(newLine, DocumentNewLines.SplitLines(text));
 
     private static bool EndsWithNewLine(string text)
         => text.EndsWith('\r') || text.EndsWith('\n');
