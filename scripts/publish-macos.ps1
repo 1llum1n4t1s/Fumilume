@@ -28,7 +28,8 @@ try {
     $env:CLOUDFLARE_API_TOKEN = (Get-Content 'C:\Users\IMT\dev\Secret\secrets.json' -Raw | ConvertFrom-Json).cloudflare.api_token
     $env:CLOUDFLARE_ACCOUNT_ID = '10901bfadbf1005164774a7350082985'
     $headers = @{Authorization="Bearer $env:CLOUDFLARE_API_TOKEN"}
-    $wrangler = Join-Path $repoRoot '.release-tools\wrangler-4.135.0\node_modules\.bin\wrangler.cmd'
+    $wranglerVersion = (Import-PowerShellDataFile (Join-Path $PSScriptRoot 'release-tools.psd1')).WranglerVersion
+    $wrangler = Join-Path $repoRoot ".release-tools\wrangler-$wranglerVersion\node_modules\.bin\wrangler.cmd"
     if (-not (Test-Path -LiteralPath $wrangler)) { throw 'Windowsリリースの事前確認を先に実行してください。' }
     $zone = Invoke-RestMethod 'https://api.cloudflare.com/client/v4/zones?name=kagayoi.com' -Headers $headers -TimeoutSec 30
     if (-not $zone.success -or @($zone.result).Count -ne 1) { throw '公開先のゾーンを一意に確認できません。' }
