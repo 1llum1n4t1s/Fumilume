@@ -307,6 +307,8 @@ internal static class Program
                 // 同じ製品 renderer の入力境界で拒否を確認する。
             });
 
+            await VerifyConcurrentPdfAsync(window, vm);
+
             await VerifyUpdateShutdownAsync(window, vm, desktop);
 
             await CaseAsync("settings-unsaved-session-restoration-native-window", async () =>
@@ -498,6 +500,114 @@ internal static class Program
             throw new InvalidDataException("Update exit was accepted without successful persistence");
         }
         catch (InvalidOperationException) { }
+    }
+
+    private static async Task VerifyConcurrentPdfAsync(MainWindow window, MainWindowViewModel vm)
+    {
+        var path = Path.Combine(_output, "並行描画と破棄.pdf");
+        PdfFixture.Write(path, additionalRectangles: 50_000);
+        await CaseAsync("coregraphics-concurrent-render-metadata", async () =>
+        {
+            using var renderer = await MacPdfRenderer.OpenAsync(path);
+            var renders = Enumerable.Range(0, 4)
+                .Select(index => CompletePdfRenderAsync(renderer.RenderAsync(index % 2, 3), index % 2, 3))
+                .ToArray();
+            var samples = new List<object>();
+            var renderTaskOverlapObserved = false;
+            // 完了待ちの間も UI スレッドで不変のサイズを取得する。所要時間に
+            // 機種依存の合否閾値は設けず、未完了タスクとの重なりを成果物へ残す。
+            do
+            {
+                var pendingBefore = renders.Count(render => !render.IsCompleted);
+                renderTaskOverlapObserved |= pendingBefore > 0;
+                var watch = Stopwatch.StartNew();
+                Require(renderer.GetPageSize(0) == new Size(240, 320), "Concurrent normal PDF dimensions");
+                Require(renderer.GetPageSize(1) == new Size(320, 240), "Concurrent rotated PDF dimensions");
+                samples.Add(new { pendingBefore, metadataMilliseconds = watch.Elapsed.TotalMilliseconds,
+                    pendingAfter = renders.Count(render => !render.IsCompleted) });
+                if (renders.All(render => render.IsCompleted)) break;
+                await Task.Delay(1);
+            } while (samples.Count < 64);
+            var outcomes = await Task.WhenAll(renders).WaitAsync(TimeSpan.FromSeconds(15));
+            Require(outcomes.All(outcome => outcome == "completed"), "Concurrent live PDF render was rejected");
+            Results.Add(new { name = "coregraphics-concurrent-render-observations", passed = true,
+                fixture = Path.GetFileName(path), renderTaskOverlapObserved, samples, outcomes });
+        });
+
+        await CaseAsync("coregraphics-dispose-during-render-rejects-new-work", async () =>
+        {
+            using var renderer = await MacPdfRenderer.OpenAsync(path);
+            var renders = Enumerable.Range(0, 4)
+                .Select(index => CompletePdfRenderAsync(renderer.RenderAsync(index % 2, 3), index % 2, 3))
+                .ToArray();
+            // 実際の描画へ実行機会を与える。重なりの有無は固定遅延では判定しない。
+            await Task.Delay(20);
+            var pendingBefore = renders.Count(render => !render.IsCompleted);
+            var watch = Stopwatch.StartNew();
+            renderer.Dispose();
+            renderer.Dispose();
+            var disposeMilliseconds = watch.Elapsed.TotalMilliseconds;
+            var pendingAfter = renders.Count(render => !render.IsCompleted);
+            try
+            {
+                renderer.GetPageSize(0);
+                throw new InvalidDataException("Disposed PDF accepted metadata access");
+            }
+            catch (ObjectDisposedException) { }
+            try
+            {
+                using var unexpected = await renderer.RenderAsync(0, 1);
+                throw new InvalidDataException("Disposed PDF accepted new rendering");
+            }
+            catch (ObjectDisposedException) { }
+            var outcomes = await Task.WhenAll(renders).WaitAsync(TimeSpan.FromSeconds(15));
+            Results.Add(new { name = "coregraphics-dispose-observations", passed = true,
+                pendingBefore, pendingAfter, renderTaskOverlapObserved = pendingBefore > 0,
+                disposeMilliseconds, outcomes });
+            // 破棄要求後も同じ PDF を別の renderer で開いて描画できることを確認する。
+            using var reopened = await MacPdfRenderer.OpenAsync(path);
+            Require(await CompletePdfRenderAsync(reopened.RenderAsync(1, 1), 1, 1) == "completed",
+                "PDF rendering failed after concurrent renderer disposal");
+        });
+
+        await CaseAsync("native-pdf-fit-resize-and-close-during-render", async () =>
+        {
+            await vm.OpenPathsAsync([path]);
+            var pdf = vm.SelectedPdf ?? throw new InvalidOperationException("Concurrent PDF tab not selected");
+            await pdf.FitWidthCommand.ExecuteAsync(null);
+            var watch = Stopwatch.StartNew();
+            var firstResize = pdf.UpdateViewportAsync(new Size(960, 720));
+            var secondResize = pdf.UpdateViewportAsync(new Size(800, 600));
+            var resizeRequestMilliseconds = watch.Elapsed.TotalMilliseconds;
+            var pendingBeforeClose = new[] { firstResize, secondResize }.Count(render => !render.IsCompleted);
+            watch.Restart();
+            await pdf.CloseTabCommand.ExecuteAsync(null);
+            var closeMilliseconds = watch.Elapsed.TotalMilliseconds;
+            Require(!vm.Tabs.Contains(pdf) && !ReferenceEquals(vm.SelectedTab, pdf), "PDF close retained its tab");
+            await Task.WhenAll(firstResize, secondResize).WaitAsync(TimeSpan.FromSeconds(15));
+            Require(pdf.PageImage is null && !vm.Tabs.Contains(pdf), "Closed PDF was revived by an old render");
+            Results.Add(new { name = "native-pdf-resize-close-observations", passed = true,
+                resizeRequestMilliseconds, closeMilliseconds, pendingBeforeClose,
+                renderTaskOverlapObserved = pendingBeforeClose > 0 });
+            await CaptureAsync(window, "pdf-concurrent-resize-closed.png");
+        });
+    }
+
+    private static async Task<string> CompletePdfRenderAsync(Task<Bitmap> rendering, int page, int zoom)
+    {
+        try
+        {
+            using var bitmap = await rendering;
+            var size = page == 0 ? new Size(240, 320) : new Size(320, 240);
+            Require(bitmap.PixelSize == new PixelSize((int)size.Width * zoom, (int)size.Height * zoom),
+                "Concurrent native PDF render dimensions");
+            return "completed";
+        }
+        catch (ObjectDisposedException)
+        {
+            // ロック取得前に破棄要求を受けた描画はネイティブ資源に触れず拒否する。
+            return "disposed-before-render";
+        }
     }
 
     private static async Task CaseAsync(string name, Func<Task> run)

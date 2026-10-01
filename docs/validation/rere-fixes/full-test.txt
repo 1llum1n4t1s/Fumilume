@@ -1,0 +1,12 @@
+次からテストを実行しています: C:\Users\IMT\dev\Fumilume\tests\Fumilume.Tests\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\Fumilume.Tests.dll (net10.0|x64)
+スキップされました Fumilume.Tests.MainWindowIntegrationTests.SearchPanelCloseButtonClosesSearchAndReplacement
+  実描画E2E: FUMILUME_E2E_RENDER=1 で個別実行
+  参照元: C:\Users\IMT\dev\Fumilume\tests\Fumilume.Tests\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\Fumilume.Tests.dll (net10.0|x64)
+C:\Users\IMT\dev\Fumilume\tests\Fumilume.Tests\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\Fumilume.Tests.dll (net10.0|x64) 合格しました (23s 738ms)
+
+テストの実行の概要: 成功!
+  合計: 608
+  失敗: 0
+  成功: 607
+  スキップ済み: 1
+  期間: 23s 954ms

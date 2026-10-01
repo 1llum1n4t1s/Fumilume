@@ -1,0 +1,11 @@
+{
+  "PathPreserved": true,
+  "ParsedScripts": [
+    "scripts/release-local.ps1",
+    "scripts/publish-macos.ps1",
+    "scripts/release-tools.psd1"
+  ],
+  "WranglerVersion": "4.135.0",
+  "ResolvedCommand": "C:\\Users\\IMT\\dev\\Fumilume\\.release-tools\\wrangler-4.135.0\\node_modules\\.bin\\wrangler.cmd",
+  "ExternalOperations": "none"
+}

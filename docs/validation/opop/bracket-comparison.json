@@ -1,0 +1,80 @@
+{
+  "Environment": "PowerShell Add-Type / same service sources / pure scanner",
+  "Seed": 42001,
+  "OutputsIdentical": true,
+  "DifferentialCases": 10102,
+  "Timings": [
+    {
+      "Kind": "Dollars",
+      "Length": 2000,
+      "BeforeMilliseconds": 8.2776,
+      "AfterMilliseconds": 0.0645
+    },
+    {
+      "Kind": "Dollars",
+      "Length": 4000,
+      "BeforeMilliseconds": 29.7821,
+      "AfterMilliseconds": 0.1269
+    },
+    {
+      "Kind": "Dollars",
+      "Length": 8000,
+      "BeforeMilliseconds": 195.8186,
+      "AfterMilliseconds": 0.4727
+    },
+    {
+      "Kind": "Dollars",
+      "Length": 16000,
+      "BeforeMilliseconds": 475.981,
+      "AfterMilliseconds": 0.5014
+    },
+    {
+      "Kind": "RawQuotes",
+      "Length": 2000,
+      "BeforeMilliseconds": 7.4911,
+      "AfterMilliseconds": 0.0253
+    },
+    {
+      "Kind": "RawQuotes",
+      "Length": 4000,
+      "BeforeMilliseconds": 35.7845,
+      "AfterMilliseconds": 0.0422
+    },
+    {
+      "Kind": "RawQuotes",
+      "Length": 8000,
+      "BeforeMilliseconds": 118.9405,
+      "AfterMilliseconds": 0.0633
+    },
+    {
+      "Kind": "RawQuotes",
+      "Length": 16000,
+      "BeforeMilliseconds": 478.5379,
+      "AfterMilliseconds": 0.1182
+    },
+    {
+      "Kind": "InterpolatedRawQuotes",
+      "Length": 2000,
+      "BeforeMilliseconds": 7.4029,
+      "AfterMilliseconds": 0.0156
+    },
+    {
+      "Kind": "InterpolatedRawQuotes",
+      "Length": 4000,
+      "BeforeMilliseconds": 29.8422,
+      "AfterMilliseconds": 0.0304
+    },
+    {
+      "Kind": "InterpolatedRawQuotes",
+      "Length": 8000,
+      "BeforeMilliseconds": 127.7929,
+      "AfterMilliseconds": 0.0646
+    },
+    {
+      "Kind": "InterpolatedRawQuotes",
+      "Length": 16000,
+      "BeforeMilliseconds": 477.4444,
+      "AfterMilliseconds": 0.119
+    }
+  ]
+}

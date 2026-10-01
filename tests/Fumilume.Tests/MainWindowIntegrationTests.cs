@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.Indentation.CSharp;
+using AvaloniaEdit.Search;
 using Fumilume.Models;
 using Fumilume.Services;
 using Fumilume.ViewModels;
@@ -26,6 +27,64 @@ namespace Fumilume.Tests;
 [Collection(HeadlessAppCollection.Name)]
 public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 {
+    [Fact(Skip = "実描画E2E: FUMILUME_E2E_RENDER=1 で個別実行",
+        SkipType = typeof(HeadlessAppFixture), SkipUnless = nameof(HeadlessAppFixture.UsesSkia))]
+    public void SearchPanelCloseButtonClosesSearchAndReplacement() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        editor.Text = "検索対象の本文";
+        foreach (var replace in new[] { false, true })
+        foreach (var (pattern, regex, focusEditor) in new[] { ("検索", false, false), ("", false, false),
+            ("見つからない", false, false), ("[", true, false), ("検索", false, true) })
+        {
+            scope.Window.RequestedThemeVariant = focusEditor ? ThemeVariant.Dark : ThemeVariant.Light;
+            scope.ViewModel.Options.SearchUseRegex = regex;
+            scope.Window.KeyPress(replace ? Key.H : Key.F, RawInputModifiers.Control, default, null);
+            Dispatcher.UIThread.RunJobs();
+            scope.Window.UpdateLayout();
+            if (focusEditor) editor.TextArea.Focus();
+            var panel = Assert.Single(editor.GetVisualDescendants().OfType<SearchPanel>());
+            Assert.True(panel.IsOpened);
+            Assert.Equal(replace, panel.IsReplaceMode);
+            panel.SearchPattern = pattern;
+            Dispatcher.UIThread.RunJobs();
+            scope.Window.UpdateLayout();
+            var close = Assert.Single(panel.GetVisualDescendants().OfType<Button>(),
+                button => Avalonia.Automation.AutomationProperties.GetAutomationId(button) == "CloseSearchPanelButton");
+            Assert.True(close.IsEffectivelyEnabled, "閉じるボタンが無効になっています");
+            var point = close.TranslatePoint(new Point(close.Bounds.Width / 2, close.Bounds.Height / 2), scope.Window)!.Value;
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+            var artifact = $"search-{replace}-{regex}-{pattern.Length}{(focusEditor ? "-dark-editor-focus" : "")}";
+            CaptureSearchPanel(scope.Window, $"{artifact}-open.png");
+            scope.Window.MouseDown(point, MouseButton.Left);
+            scope.Window.MouseUp(point, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            CaptureSearchPanel(scope.Window, $"{artifact}-closed.png");
+            Assert.True(panel.IsClosed, $"閉じるボタンで閉じません: replace={replace}, pattern={pattern}");
+            Assert.DoesNotContain(panel, editor.GetVisualDescendants());
+            Assert.True(editor.TextArea.IsKeyboardFocusWithin);
+            Assert.Equal("検索対象の本文", editor.Text);
+            scope.Window.KeyPress(Key.F, RawInputModifiers.Control, default, null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Contains(panel, editor.GetVisualDescendants());
+            Assert.True(panel.IsOpened);
+            scope.Window.KeyPress(Key.Escape, RawInputModifiers.None, default, null);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(panel.IsClosed);
+        }
+
+        static void CaptureSearchPanel(Window window, string filename)
+        {
+            var directory = Environment.GetEnvironmentVariable("FUMILUME_E2E_ARTIFACTS");
+            if (string.IsNullOrEmpty(directory)) return;
+            Directory.CreateDirectory(directory);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+            using var frame = window.CaptureRenderedFrame();
+            Assert.NotNull(frame);
+            frame.Save(Path.Combine(directory, filename), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+    });
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -791,9 +850,10 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     public void SidePanelCanResizeOnlyInsideItsSafeRange() => fixture.Run(() =>
     {
         using var scope = new WindowScope(width: 720, height: 460);
+        scope.ViewModel.IsFolderTreeVisible = false;
         var grid = scope.Window.FindControl<Grid>("WorkspaceGrid");
         Assert.NotNull(grid);
-        var sidePanel = grid.ColumnDefinitions[0];
+        var sidePanel = grid.ColumnDefinitions[2];
 
         sidePanel.Width = new GridLength(1);
         scope.Window.UpdateLayout();
@@ -806,7 +866,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.Equal(720, scope.Window.Bounds.Width);
         Assert.Equal(460, scope.Window.Bounds.Height);
         Assert.True(sidePanel.ActualWidth >= AppSettingsDefaults.MinimumSidePanelWidth);
-        Assert.True(grid.ColumnDefinitions[2].ActualWidth >= 480);
+        Assert.True(grid.ColumnDefinitions[4].ActualWidth >= 480);
     });
 
     [Fact]

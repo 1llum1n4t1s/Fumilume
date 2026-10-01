@@ -6,9 +6,13 @@ namespace Fumilume.MacE2E;
 internal static class PdfFixture
 {
     // 非対称な図形と回転ページを含む、外部 PDF ツール不要の決定的な fixture。
-    public static void Write(string path)
+    public static void Write(string path, int additionalRectangles = 0)
     {
-        const string content = "1 0 0 rg 10 20 80 140 re f\n0 0 1 rg 120 220 100 60 re f\n";
+        var contentBuilder = new StringBuilder("1 0 0 rg 10 20 80 140 re f\n0 0 1 rg 120 220 100 60 re f\n");
+        // 並行描画ケースでは外部ツールを使わず、再生成できる描画負荷を加える。
+        for (var index = 0; index < additionalRectangles; index++)
+            contentBuilder.Append(CultureInfo.InvariantCulture, $"{index % 240} {index % 320} 2 2 re f\n");
+        var content = contentBuilder.ToString();
         string[] objects =
         [
             "<< /Type /Catalog /Pages 2 0 R >>",

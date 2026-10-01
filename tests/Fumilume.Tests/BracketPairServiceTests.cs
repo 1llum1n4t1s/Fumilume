@@ -1,7 +1,6 @@
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Indentation;
-using AvaloniaEdit.Indentation.CSharp;
 using Fumilume.Services;
 
 namespace Fumilume.Tests;
@@ -98,14 +97,6 @@ public sealed class BracketPairServiceTests
     [Fact]
     public void PlainTextProducesNoBracketTokens()
         => Assert.Empty(BracketPairService.Analyze("{text}", BracketLanguage.None).Tokens);
-
-    [Fact]
-    public void CSharpFilesUseTheLanguageAwareIndentationStrategy()
-    {
-        var strategy = EditorIndentationService.Resolve("Program.cs", new TextEditorOptions());
-
-        Assert.IsType<CSharpIndentationStrategy>(strategy);
-    }
 
     [Fact]
     public void PlainTextKeepsTheDefaultIndentationStrategy()

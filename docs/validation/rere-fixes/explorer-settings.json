@@ -1,0 +1,15 @@
+{
+  "Environment": "Avalonia headless control tree / actual MainWindow",
+  "FileCount": 512,
+  "UnchangedRefreshMilliseconds": 29.8801,
+  "UnchangedCollectionNotifications": 0,
+  "SelectionPreservedAfterInsertAndDelete": true,
+  "AutomationNames": [
+    "UI\u30D5\u30A9\u30F3\u30C8\u30B5\u30A4\u30BA",
+    "\u30A8\u30C7\u30A3\u30BF\u30D5\u30A9\u30F3\u30C8\u30B5\u30A4\u30BA",
+    "\u5927\u5BB9\u91CF\u30D5\u30A1\u30A4\u30EB\u306E\u8B66\u544A\u95BE\u5024",
+    "\u7E26\u7DDA\u306E\u6841\u4F4D\u7F6E",
+    "\u884C\u306E\u9AD8\u3055"
+  ],
+  "Passed": true
+}

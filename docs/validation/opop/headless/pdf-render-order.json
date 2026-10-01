@@ -1,0 +1,6 @@
+{
+  "OldFailureBeforeCurrentSuccess": true,
+  "OldFailureAfterCurrentSuccess": true,
+  "CurrentFailureVisible": true,
+  "FailureAfterDisposeIgnored": true
+}

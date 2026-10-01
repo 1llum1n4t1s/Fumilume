@@ -1,0 +1,20 @@
+{
+  "UsesSkia": false,
+  "Timings": [
+    {
+      "Name": "dollars",
+      "InputLength": 16003,
+      "UpdateAndRenderMilliseconds": 91.7539
+    },
+    {
+      "Name": "raw-quotes",
+      "InputLength": 32004,
+      "UpdateAndRenderMilliseconds": 135.1453
+    },
+    {
+      "Name": "interpolated-raw-quotes",
+      "InputLength": 32006,
+      "UpdateAndRenderMilliseconds": 152.7901
+    }
+  ]
+}

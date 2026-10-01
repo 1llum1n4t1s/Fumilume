@@ -27,10 +27,14 @@ public sealed class HeadlessAppFixture : IDisposable
         {
             try
             {
-                AppBuilder.Configure<App>()
-                    .UseHeadless(new AvaloniaHeadlessPlatformOptions())
-                    .ConfigureFonts(fontManager =>
-                        fontManager.AddFontCollection(new FumilumeFontCollection()))
+                var builder = AppBuilder.Configure<App>()
+                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = !UsesSkia });
+                if (UsesSkia)
+                {
+                    builder.UseSkia();
+                }
+                builder.ConfigureFonts(fontManager =>
+                    fontManager.AddFontCollection(new FumilumeFontCollection()))
                     .SetupWithoutStarting();
             }
             catch (Exception ex)
@@ -66,6 +70,9 @@ public sealed class HeadlessAppFixture : IDisposable
         }
     }
 
+    // 実描画での入力検証とスクリーンショットは専用プロセスで実行する。
+    public static bool UsesSkia { get; } = Environment.GetEnvironmentVariable("FUMILUME_E2E_RENDER") == "1";
+
     /// <summary>UI スレッドで処理を実行し、終わるまで待つ。例外は呼び出し側へそのまま投げ直す。</summary>
     public void Run(Action action)
     {
@@ -91,7 +98,7 @@ public sealed class HeadlessAppFixture : IDisposable
         done.Wait();
         if (failure is not null)
         {
-            throw failure;
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         }
     }
 

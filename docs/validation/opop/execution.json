@@ -1,0 +1,20 @@
+{
+  "ElapsedSeconds": 24.5907063,
+  "ExitCode": 0,
+  "Command": "dotnet test Fumilume.slnx -c Release --no-restore",
+  "BaselineElapsedSeconds": 22.39,
+  "MacReleaseBuild": "success, 0 warnings",
+  "BaselineFailed": 0,
+  "BaselineSkipped": 1,
+  "BaselinePassed": 607,
+  "WindowsLockedRestore": "success",
+  "MacLockedRestore": "success",
+  "Passed": 610,
+  "Failed": 0,
+  "Skipped": 1,
+  "AddedWindowE2EFacts": 4,
+  "RemovedRedundantTypeTest": 1,
+  "FinalDiffCheck": "success",
+  "TemporaryDirectoryMarkerUtc": "2026-09-30T18:53:19.1860284Z",
+  "RemainingE2ETemporaryDirectories": 0
+}
