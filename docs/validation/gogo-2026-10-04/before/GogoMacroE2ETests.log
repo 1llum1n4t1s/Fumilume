@@ -1,0 +1,107 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: Fumilume.Tests
+  Discovered:  Fumilume.Tests
+  Starting:    Fumilume.Tests
+    Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(scenario: "collection-null", json: "{\"Macros\":null}") [FAIL]
+      System.ArgumentNullException : Value cannot be null. (Parameter 'source')
+      Stack Trace:
+           at System.Linq.ThrowHelper.ThrowArgumentNullException(ExceptionArgument argument)
+           at System.Linq.Enumerable.Where[TSource](IEnumerable`1 source, Func`2 predicate)
+        src\Fumilume\Services\KeyboardMacro.cs(166,0): at Fumilume.Services.MacroStore.Load()
+        src\Fumilume\ViewModels\MainWindowViewModel.Macro.cs(50,0): at Fumilume.ViewModels.MainWindowViewModel.get_SavedMacros()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(170,0): at Fumilume.ViewModels.MainWindowViewModel.EnumeratePaletteEntries()+MoveNext()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(79,0): at Fumilume.ViewModels.MainWindowViewModel.RefreshCommandPaletteResults()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(54,0): at Fumilume.ViewModels.MainWindowViewModel.OpenCommandPalette()
+        /_/src/CommunityToolkit.Mvvm/Input/RelayCommand.cs(77,0): at CommunityToolkit.Mvvm.Input.RelayCommand.Execute(Object parameter)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(114,0): at Fumilume.Tests.GogoMacroE2ETests.OpenPalette(MainWindow window, MainWindowViewModel vm)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(39,0): at Fumilume.Tests.GogoMacroE2ETests.<>c__DisplayClass2_0.<InvalidLibraryLeavesPaletteAndEditingUsable>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(25,0): at Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(String scenario, String json)
+           at InvokeStub_GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(scenario: "element-null", json: "{\"Macros\":[null]}") [FAIL]
+      System.NullReferenceException : Object reference not set to an instance of an object.
+      Stack Trace:
+        src\Fumilume\Services\KeyboardMacro.cs(167,0): at Fumilume.Services.MacroStore.<>c.<Load>b__4_0(KeyboardMacro macro)
+           at System.Linq.Enumerable.ListWhereIterator`1.MoveNext()
+           at System.Linq.Enumerable.IEnumerableSkipTakeIterator`1.ToList()
+        src\Fumilume\Services\KeyboardMacro.cs(166,0): at Fumilume.Services.MacroStore.Load()
+        src\Fumilume\ViewModels\MainWindowViewModel.Macro.cs(50,0): at Fumilume.ViewModels.MainWindowViewModel.get_SavedMacros()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(170,0): at Fumilume.ViewModels.MainWindowViewModel.EnumeratePaletteEntries()+MoveNext()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(79,0): at Fumilume.ViewModels.MainWindowViewModel.RefreshCommandPaletteResults()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(54,0): at Fumilume.ViewModels.MainWindowViewModel.OpenCommandPalette()
+        /_/src/CommunityToolkit.Mvvm/Input/RelayCommand.cs(77,0): at CommunityToolkit.Mvvm.Input.RelayCommand.Execute(Object parameter)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(114,0): at Fumilume.Tests.GogoMacroE2ETests.OpenPalette(MainWindow window, MainWindowViewModel vm)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(39,0): at Fumilume.Tests.GogoMacroE2ETests.<>c__DisplayClass2_0.<InvalidLibraryLeavesPaletteAndEditingUsable>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(25,0): at Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(String scenario, String json)
+           at InvokeStub_GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(scenario: "steps-null", json: "{\"Macros\":[{\"Name\":\"破損\",\"Steps\":null}]}") [FAIL]
+      System.NullReferenceException : Object reference not set to an instance of an object.
+      Stack Trace:
+        src\Fumilume\Services\KeyboardMacro.cs(116,0): at Fumilume.Services.KeyboardMacro.get_Summary()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(173,0): at Fumilume.ViewModels.MainWindowViewModel.EnumeratePaletteEntries()+MoveNext()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(79,0): at Fumilume.ViewModels.MainWindowViewModel.RefreshCommandPaletteResults()
+        src\Fumilume\ViewModels\MainWindowViewModel.EditorCommands.cs(54,0): at Fumilume.ViewModels.MainWindowViewModel.OpenCommandPalette()
+        /_/src/CommunityToolkit.Mvvm/Input/RelayCommand.cs(77,0): at CommunityToolkit.Mvvm.Input.RelayCommand.Execute(Object parameter)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(114,0): at Fumilume.Tests.GogoMacroE2ETests.OpenPalette(MainWindow window, MainWindowViewModel vm)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(39,0): at Fumilume.Tests.GogoMacroE2ETests.<>c__DisplayClass2_0.<InvalidLibraryLeavesPaletteAndEditingUsable>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(25,0): at Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(String scenario, String json)
+           at InvokeStub_GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(scenario: "step-null", json: "{\"Macros\":[{\"Name\":\"破損\",\"Steps\":[null]}]}") [FAIL]
+      System.NullReferenceException : Object reference not set to an instance of an object.
+      Stack Trace:
+        src\Fumilume\ViewModels\MainWindowViewModel.Macro.cs(287,0): at Fumilume.ViewModels.MainWindowViewModel.Copy(MacroStep step)
+           at System.Linq.Enumerable.ListSelectIterator`2.Fill(ReadOnlySpan`1 source, Span`1 destination, Func`2 func)
+           at System.Linq.Enumerable.ListSelectIterator`2.ToArray()
+        src\Fumilume\ViewModels\MainWindowViewModel.Macro.cs(200,0): at Fumilume.ViewModels.MainWindowViewModel.PlayAsync(IReadOnlyList`1 steps, Int32 repeat)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(131,0): at Fumilume.Tests.GogoMacroE2ETests.Complete(Task task)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(44,0): at Fumilume.Tests.GogoMacroE2ETests.<>c__DisplayClass2_0.<InvalidLibraryLeavesPaletteAndEditingUsable>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(25,0): at Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(String scenario, String json)
+           at InvokeStub_GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(scenario: "insert-text-null", json: "{\"Macros\":[{\"Name\":\"破損\",\"Steps\":[{\"Kind\":\"InsertTe"···) [FAIL]
+      System.NullReferenceException : Object reference not set to an instance of an object.
+      Stack Trace:
+        src\Fumilume\ViewModels\DocumentViewModel.Editing.cs(193,0): at Fumilume.ViewModels.DocumentViewModel.InsertText(String text)
+        src\Fumilume\ViewModels\MainWindowViewModel.Macro.cs(253,0): at Fumilume.ViewModels.MainWindowViewModel.ApplyAsync(DocumentViewModel document, MacroStep step)
+        src\Fumilume\ViewModels\MainWindowViewModel.Macro.cs(226,0): at Fumilume.ViewModels.MainWindowViewModel.PlayAsync(IReadOnlyList`1 steps, Int32 repeat)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(131,0): at Fumilume.Tests.GogoMacroE2ETests.Complete(Task task)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(44,0): at Fumilume.Tests.GogoMacroE2ETests.<>c__DisplayClass2_0.<InvalidLibraryLeavesPaletteAndEditingUsable>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(25,0): at Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(String scenario, String json)
+           at InvokeStub_GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(scenario: "mixed-invalid", json: "{\"Macros\":[{\"Name\":\"途中まで有効\",\"Steps\":[{\"Kind\":\"Inse"···) [FAIL]
+      System.NullReferenceException : Object reference not set to an instance of an object.
+      Stack Trace:
+        src\Fumilume\ViewModels\MainWindowViewModel.Macro.cs(287,0): at Fumilume.ViewModels.MainWindowViewModel.Copy(MacroStep step)
+           at System.Linq.Enumerable.ListSelectIterator`2.Fill(ReadOnlySpan`1 source, Span`1 destination, Func`2 func)
+           at System.Linq.Enumerable.ListSelectIterator`2.ToArray()
+        src\Fumilume\ViewModels\MainWindowViewModel.Macro.cs(200,0): at Fumilume.ViewModels.MainWindowViewModel.PlayAsync(IReadOnlyList`1 steps, Int32 repeat)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(131,0): at Fumilume.Tests.GogoMacroE2ETests.Complete(Task task)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(44,0): at Fumilume.Tests.GogoMacroE2ETests.<>c__DisplayClass2_0.<InvalidLibraryLeavesPaletteAndEditingUsable>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoMacroE2ETests.cs(25,0): at Fumilume.Tests.GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(String scenario, String json)
+           at InvokeStub_GogoMacroE2ETests.InvalidLibraryLeavesPaletteAndEditingUsable(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+[SuperLightLogger] WARNING: LogManager.Configure() が呼び出されていません。NullLoggerFactory を使用します。ログは出力されません。
+  Finished:    Fumilume.Tests (ID = '1290835ced9af48ea46cffe1164a1294c8707eb656a66ec77fd954eef6b02d4f')
+=== TEST EXECUTION SUMMARY ===
+   Fumilume.Tests  Total: 10, Errors: 0, Failed: 6, Skipped: 0, Not Run: 0, Time: 2.488s

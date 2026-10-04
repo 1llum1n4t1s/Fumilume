@@ -1,0 +1,6 @@
+{
+  "Scenario": "steps-null",
+  "Input": "{\u0022Macros\u0022:[{\u0022Name\u0022:\u0022\u7834\u640D\u0022,\u0022Steps\u0022:null}]}",
+  "Passed": true,
+  "Failure": null
+}

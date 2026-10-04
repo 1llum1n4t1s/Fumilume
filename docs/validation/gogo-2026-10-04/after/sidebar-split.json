@@ -1,0 +1,106 @@
+{
+  "UsesSkia": false,
+  "SavedRatio": 0.5990853658536586,
+  "SavedWidth": 200,
+  "Observations": [
+    {
+      "Stage": "initial",
+      "WindowWidth": 1000,
+      "WindowHeight": 700,
+      "TopWidth": 240,
+      "TopHeight": 328,
+      "BottomWidth": 240,
+      "BottomHeight": 328,
+      "TreeVisible": true,
+      "Ratio": 0.5
+    },
+    {
+      "Stage": "vertical-drag",
+      "WindowWidth": 1000,
+      "WindowHeight": 700,
+      "TopWidth": 240,
+      "TopHeight": 393,
+      "BottomWidth": 240,
+      "BottomHeight": 263,
+      "TreeVisible": true,
+      "Ratio": 0.5990853658536586
+    },
+    {
+      "Stage": "width-drag",
+      "WindowWidth": 1000,
+      "WindowHeight": 700,
+      "TopWidth": 200,
+      "TopHeight": 393,
+      "BottomWidth": 200,
+      "BottomHeight": 263,
+      "TreeVisible": true,
+      "Ratio": 0.5990853658536586
+    },
+    {
+      "Stage": "minimum-window",
+      "WindowWidth": 720,
+      "WindowHeight": 460,
+      "TopWidth": 200,
+      "TopHeight": 249,
+      "BottomWidth": 200,
+      "BottomHeight": 167,
+      "TreeVisible": true,
+      "Ratio": 0.5990853658536586
+    },
+    {
+      "Stage": "hidden-Tabs",
+      "WindowWidth": 720,
+      "WindowHeight": 460,
+      "TopWidth": 200,
+      "TopHeight": 422,
+      "BottomWidth": 200,
+      "BottomHeight": 167,
+      "TreeVisible": false,
+      "Ratio": 0.5990853658536586
+    },
+    {
+      "Stage": "hidden-Outline",
+      "WindowWidth": 720,
+      "WindowHeight": 460,
+      "TopWidth": 200,
+      "TopHeight": 422,
+      "BottomWidth": 200,
+      "BottomHeight": 167,
+      "TreeVisible": false,
+      "Ratio": 0.5990853658536586
+    },
+    {
+      "Stage": "hidden-Bookmarks",
+      "WindowWidth": 720,
+      "WindowHeight": 460,
+      "TopWidth": 200,
+      "TopHeight": 422,
+      "BottomWidth": 200,
+      "BottomHeight": 167,
+      "TreeVisible": false,
+      "Ratio": 0.5990853658536586
+    },
+    {
+      "Stage": "reshown",
+      "WindowWidth": 720,
+      "WindowHeight": 460,
+      "TopWidth": 200,
+      "TopHeight": 249,
+      "BottomWidth": 200,
+      "BottomHeight": 167,
+      "TreeVisible": true,
+      "Ratio": 0.5990853658536586
+    },
+    {
+      "Stage": "restored",
+      "WindowWidth": 720,
+      "WindowHeight": 460,
+      "TopWidth": 200,
+      "TopHeight": 249,
+      "BottomWidth": 200,
+      "BottomHeight": 167,
+      "TreeVisible": true,
+      "Ratio": 0.5990853658536586
+    }
+  ]
+}

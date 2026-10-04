@@ -289,6 +289,7 @@ public sealed partial class MainWindowViewModel
             FolderPath = FolderPath,
             FolderTreeVisible = IsFolderTreeVisible,
             FolderTreeWidth = FolderTreeWidth,
+            SidebarSplitRatio = SidebarSplitRatio,
         };
         var selectedTabCaptured = false;
         var restoredSelectionIndex = -1;

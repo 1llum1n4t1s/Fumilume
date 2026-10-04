@@ -1,0 +1,46 @@
+[
+  {
+    "Case": "gogo-processing-grep-short-lines",
+    "Renderer": "Skia",
+    "Runs": 3,
+    "Statistic": "median",
+    "BeforeMilliseconds": 101.0842,
+    "AfterMilliseconds": 79.6213,
+    "BeforeAllocatedBytes": 21818520,
+    "AfterAllocatedBytes": 8182800,
+    "AllocationReductionPercent": 62.5
+  },
+  {
+    "Case": "gogo-processing-outline-braces",
+    "Renderer": "Skia",
+    "Runs": 3,
+    "Statistic": "median",
+    "BeforeMilliseconds": 100.5767,
+    "AfterMilliseconds": 20.692,
+    "BeforeAllocatedBytes": 52522856,
+    "AfterAllocatedBytes": 13747208,
+    "AllocationReductionPercent": 73.8
+  },
+  {
+    "Case": "gogo-processing-outline-markdown",
+    "Renderer": "Skia",
+    "Runs": 3,
+    "Statistic": "median",
+    "BeforeMilliseconds": 91.7202,
+    "AfterMilliseconds": 7.2463,
+    "BeforeAllocatedBytes": 36244704,
+    "AfterAllocatedBytes": 2629368,
+    "AllocationReductionPercent": 92.7
+  },
+  {
+    "Case": "gogo-processing-outline-unclosed-frontmatter",
+    "Renderer": "Skia",
+    "Runs": 3,
+    "Statistic": "median",
+    "BeforeMilliseconds": 64.4849,
+    "AfterMilliseconds": 8.1333,
+    "BeforeAllocatedBytes": 36243920,
+    "AfterAllocatedBytes": 5020696,
+    "AllocationReductionPercent": 86.1
+  }
+]

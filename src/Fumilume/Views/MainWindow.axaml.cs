@@ -82,12 +82,12 @@ public sealed partial class MainWindow : Window
         var workspaceGrid = this.FindControl<Grid>("WorkspaceGrid")
             ?? throw new InvalidOperationException("ワークスペースを初期化できませんでした。");
         ConfigurePlatformWindowChrome(workspaceGrid);
-        _sidePanelColumn = workspaceGrid.ColumnDefinitions[2];
-        InitializeFolderExplorer(workspaceGrid);
+        _sidePanelColumn = workspaceGrid.ColumnDefinitions[0];
         _sidePanelColumn.Width = new GridLength(Math.Clamp(
             settings.SidePanelWidth,
             AppSettingsDefaults.MinimumSidePanelWidth,
             AppSettingsDefaults.MaximumSidePanelWidth));
+        InitializeFolderExplorer();
 
         _editor = this.FindControl<TextEditor>("Editor")
             ?? throw new InvalidOperationException("エディタを初期化できませんでした。");
@@ -476,6 +476,7 @@ public sealed partial class MainWindow : Window
 
     private void SaveWindowBounds()
     {
+        CaptureSidebarSplitRatio();
         var settings = _options.Settings;
         settings.SidePanelWidth = Math.Clamp(
             _sidePanelColumn.ActualWidth,
@@ -530,9 +531,9 @@ public sealed partial class MainWindow : Window
             UpdateSettingsView();
         }
         if (args.PropertyName is nameof(MainWindowViewModel.IsFolderTreeVisible)
-            or nameof(MainWindowViewModel.FolderTreeWidth))
+            or nameof(MainWindowViewModel.SidebarSplitRatio))
         {
-            ApplyFolderExplorerWidth();
+            ApplySidebarLayout();
         }
         if (args.PropertyName == nameof(MainWindowViewModel.IsCommandPaletteOpen))
         {
@@ -969,6 +970,7 @@ public sealed partial class MainWindow : Window
         }
         else if (args.Key == Key.F3)
         {
+            ShowEditorForSearch();
             if (!_searchPanel.IsOpened)
             {
                 OpenSearch(replace: false);
@@ -1185,6 +1187,7 @@ public sealed partial class MainWindow : Window
 
     private void OpenSearch(bool replace)
     {
+        ShowEditorForSearch();
         // 検索条件の初期値は設定に従う（sakura の共通設定『検索』相当）。
         _searchPanel.MatchCase = _options.SearchMatchCase;
         _searchPanel.UseRegex = _options.SearchUseRegex;
@@ -1197,6 +1200,15 @@ public sealed partial class MainWindow : Window
         _searchPanel.IsReplaceMode = replace;
         _searchPanel.Open();
         Dispatcher.UIThread.Post(_searchPanel.Reactivate, DispatcherPriority.Loaded);
+    }
+
+    private void ShowEditorForSearch()
+    {
+        if (_viewModel.SelectedDocument is { } document)
+        {
+            document.IsMarkdownPreview = false;
+            document.IsCsvPreview = false;
+        }
     }
 
     // ===== フォルダ横断検索の結果 =====

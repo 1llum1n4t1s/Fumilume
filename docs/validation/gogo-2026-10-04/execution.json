@@ -1,0 +1,60 @@
+{
+  "Date": "2026-10-04T12:04:33.4869754+09:00",
+  "SourceHead": "f366ef9eabca555893820d0682dfbb51f9707ee8",
+  "SDK": "10.0.401",
+  "Version": "1.0.20",
+  "Avalonia": "12.1.3",
+  "FullSuitePassed": 641,
+  "FullSuiteFailed": 0,
+  "FullSuiteSkipped": 1,
+  "SkiaPassed": 30,
+  "SkiaFailed": 0,
+  "MacCrossBuildSucceeded": true,
+  "MacHardwareVerified": false,
+  "SourceHashes": [
+    {
+      "Path": "src/Fumilume/ViewModels/MainWindowViewModel.cs",
+      "SHA256": "B9570B8695B18C4B1F6587A91F879ACED960631291E32E2E1CFA6FC1A1219A58"
+    },
+    {
+      "Path": "src/Fumilume/Services/KeyboardMacro.cs",
+      "SHA256": "8750AB99555ABD4E14B19B09FBF8DFC54D227195EA2423DCDE6EA493295E1026"
+    },
+    {
+      "Path": "src/Fumilume/Views/MainWindow.axaml.cs",
+      "SHA256": "96C9003D31DE07352E84CBD4B5E61455CF31C9CCD52DD757D02A48B200F2D864"
+    },
+    {
+      "Path": "src/Fumilume/Views/SettingsView.axaml",
+      "SHA256": "D5D0168EE9A5C5B4CA6D52E999B4C0B24711D1CB1569497CAE7A3B7BF6EF00A9"
+    },
+    {
+      "Path": "src/Fumilume/Services/OutlineService.cs",
+      "SHA256": "EDA3CB45BA56D8B458B3570B0658814379B631133CAE3ABF3BA4BF1D16BC13B2"
+    },
+    {
+      "Path": "src/Fumilume/Services/GrepService.cs",
+      "SHA256": "0417ABD80BD2BDC65CA9378ADB6D3D1145F90E702D50DB7AEC72243F966EFB3E"
+    },
+    {
+      "Path": "src/Fumilume/Models/TextDocumentContent.cs",
+      "SHA256": "4D34EFAD1E54A0097E2727E96EE0A284FE57E48EE168FF824E4004A4201EEFC8"
+    },
+    {
+      "Path": "tests/Fumilume.Tests/GogoMacroE2ETests.cs",
+      "SHA256": "E31342C9302E83845D9021FDB43D40596CB3D930D5D33B0AC944628985FD96D5"
+    },
+    {
+      "Path": "tests/Fumilume.Tests/GogoUiE2ETests.cs",
+      "SHA256": "C0159A8A9926FCED66F0E662C6D6F3F6B968EF6DB7646110881F3FE3D4E9D048"
+    },
+    {
+      "Path": "tests/Fumilume.Tests/GogoProcessingE2ETests.cs",
+      "SHA256": "142115A0B77BE62636BA910EDD3DDF7CD76AD40612F036C5202835DEC4C538C9"
+    },
+    {
+      "Path": "tests/Fumilume.Tests/ReviewStateE2ETests.cs",
+      "SHA256": "D45F8E1BEE89800517389FE2F94C8A7ACF3B1619F9030AA69B5B774E4FFEAC73"
+    }
+  ]
+}

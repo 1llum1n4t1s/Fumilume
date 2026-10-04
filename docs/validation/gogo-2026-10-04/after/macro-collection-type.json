@@ -1,0 +1,6 @@
+{
+  "Scenario": "collection-type",
+  "Input": "{\u0022Macros\u0022:{}}",
+  "Passed": true,
+  "Failure": null
+}

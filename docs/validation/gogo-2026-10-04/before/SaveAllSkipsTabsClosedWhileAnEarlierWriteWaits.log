@@ -1,0 +1,21 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: Fumilume.Tests
+  Discovered:  Fumilume.Tests
+  Starting:    Fumilume.Tests
+    Fumilume.Tests.ReviewStateE2ETests.SaveAllSkipsTabsClosedWhileAnEarlierWriteWaits [FAIL]
+      Assert.Equal() Failure: Strings differ
+                 ↓ (pos 0)
+      Expected: "second-disk"
+      Actual:   "discarded-edit"
+                 ↑ (pos 0)
+      Stack Trace:
+        tests\Fumilume.Tests\ReviewStateE2ETests.cs(80,0): at Fumilume.Tests.ReviewStateE2ETests.<>c.<SaveAllSkipsTabsClosedWhileAnEarlierWriteWaits>b__3_0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\ReviewStateE2ETests.cs(61,0): at Fumilume.Tests.ReviewStateE2ETests.SaveAllSkipsTabsClosedWhileAnEarlierWriteWaits()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Finished:    Fumilume.Tests (ID = '1290835ced9af48ea46cffe1164a1294c8707eb656a66ec77fd954eef6b02d4f')
+=== TEST EXECUTION SUMMARY ===
+   Fumilume.Tests  Total: 1, Errors: 0, Failed: 1, Skipped: 0, Not Run: 0, Time: 1.434s

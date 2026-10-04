@@ -853,7 +853,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         scope.ViewModel.IsFolderTreeVisible = false;
         var grid = scope.Window.FindControl<Grid>("WorkspaceGrid");
         Assert.NotNull(grid);
-        var sidePanel = grid.ColumnDefinitions[2];
+        var sidePanel = grid.ColumnDefinitions[0];
 
         sidePanel.Width = new GridLength(1);
         scope.Window.UpdateLayout();
@@ -866,7 +866,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.Equal(720, scope.Window.Bounds.Width);
         Assert.Equal(460, scope.Window.Bounds.Height);
         Assert.True(sidePanel.ActualWidth >= AppSettingsDefaults.MinimumSidePanelWidth);
-        Assert.True(grid.ColumnDefinitions[4].ActualWidth >= 480);
+        Assert.True(grid.ColumnDefinitions[2].ActualWidth >= 480);
     });
 
     [Fact]

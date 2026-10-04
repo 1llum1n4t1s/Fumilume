@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Fumilume.ViewModels;
 
@@ -9,60 +10,70 @@ namespace Fumilume.Views;
 
 public sealed partial class MainWindow
 {
-    private ColumnDefinition? _folderColumn;
-    private ColumnDefinition? _folderSplitterColumn;
-    private ColumnDefinition? _contentColumn;
+    private RowDefinition? _tabsRow;
+    private RowDefinition? _folderSplitterRow;
+    private RowDefinition? _folderRow;
     private bool _openingFolderNode;
     private bool _applyingExplorerLayout;
+    private bool _sidebarSplitCapturePending;
 
-    private void InitializeFolderExplorer(Grid workspaceGrid)
+    private void InitializeFolderExplorer()
     {
-        _folderColumn = workspaceGrid.ColumnDefinitions[0];
-        _folderSplitterColumn = workspaceGrid.ColumnDefinitions[1];
-        _contentColumn = workspaceGrid.ColumnDefinitions[4];
-        ApplyFolderExplorerWidth();
+        var sidebar = this.FindControl<Grid>("SidebarRoot")
+            ?? throw new InvalidOperationException("サイドバーを初期化できませんでした。");
+        _tabsRow = sidebar.RowDefinitions[0];
+        _folderSplitterRow = sidebar.RowDefinitions[1];
+        _folderRow = sidebar.RowDefinitions[2];
+        ApplySidebarLayout();
         PropertyChanged += (_, args) =>
         {
-            if (args.Property == BoundsProperty) ApplyFolderExplorerWidth();
+            if (args.Property == BoundsProperty) ApplySidebarLayout();
         };
-        _sidePanelColumn.PropertyChanged += (_, args) =>
-        {
-            if (args.Property == ColumnDefinition.WidthProperty) ApplyFolderExplorerWidth();
-        };
+        _tabsRow.PropertyChanged += OnSidebarRowChanged;
+        _folderRow.PropertyChanged += OnSidebarRowChanged;
         this.FindControl<TreeView>("FolderTree")?.AddHandler(KeyDownEvent,
             FolderTree_KeyDown, RoutingStrategies.Tunnel);
-        if (this.FindControl<Grid>("FolderExplorerRoot") is { } panel)
-        {
-            panel.PropertyChanged += (_, args) =>
-            {
-                if (args.Property == BoundsProperty && _viewModel.IsFolderTreeVisible
-                    && panel.Bounds.Width >= 140)
-                {
-                    _viewModel.FolderTreeWidth = Math.Clamp(panel.Bounds.Width + 6, 140, 400);
-                }
-            };
-        }
     }
 
-    private void ApplyFolderExplorerWidth()
+    private void OnSidebarRowChanged(object? sender, AvaloniaPropertyChangedEventArgs args)
     {
-        if (_folderColumn is null || _folderSplitterColumn is null || _applyingExplorerLayout) return;
+        if (args.Property != RowDefinition.HeightProperty || _applyingExplorerLayout
+            || !_viewModel.IsFolderTreeVisible || _sidebarSplitCapturePending) return;
+        _sidebarSplitCapturePending = true;
+        // Splitter が上下両方の行を更新し終えてから比率を控える。
+        Dispatcher.UIThread.Post(() =>
+        {
+            _sidebarSplitCapturePending = false;
+            CaptureSidebarSplitRatio();
+        }, DispatcherPriority.Background);
+    }
+
+    private void CaptureSidebarSplitRatio()
+    {
+        if (!_viewModel.IsFolderTreeVisible || _tabsRow is null || _folderRow is null) return;
+        var upper = _tabsRow.Height;
+        var lower = _folderRow.Height;
+        if (!upper.IsStar || !lower.IsStar || upper.Value + lower.Value <= 0) return;
+        _viewModel.SidebarSplitRatio = Math.Clamp(upper.Value / (upper.Value + lower.Value), 0.1, 0.9);
+    }
+
+    private void ApplySidebarLayout()
+    {
+        if (_tabsRow is null || _folderSplitterRow is null || _folderRow is null
+            || _applyingExplorerLayout) return;
         _applyingExplorerLayout = true;
         try
         {
             var visible = _viewModel.IsFolderTreeVisible;
             var windowWidth = Bounds.Width > 0 ? Bounds.Width : Width;
-            var editorMinimum = visible ? 320 : 480;
-            var reserved = editorMinimum + (visible ? 148 : 4);
-            _sidePanelColumn.MaxWidth = Math.Clamp(windowWidth - reserved, 120, 480);
-            var tabWidth = Math.Clamp(_sidePanelColumn.Width.Value, 120, _sidePanelColumn.MaxWidth);
-            var folderMaximum = Math.Clamp(windowWidth - tabWidth - editorMinimum - 8, 140, 400);
-            _folderColumn.MinWidth = visible ? 140 : 0;
-            _folderColumn.MaxWidth = visible ? folderMaximum : 0;
-            _folderColumn.Width = new GridLength(visible
-                ? Math.Clamp(_viewModel.FolderTreeWidth, 140, folderMaximum) : 0);
-            _folderSplitterColumn.Width = new GridLength(visible ? 4 : 0);
-            if (_contentColumn is not null) _contentColumn.MinWidth = editorMinimum;
+            // 本文列480px、幅分割線4px、右端余白6pxを残す。
+            _sidePanelColumn.MaxWidth = Math.Clamp(windowWidth - 490, 120, 480);
+            var ratio = double.IsFinite(_viewModel.SidebarSplitRatio)
+                ? Math.Clamp(_viewModel.SidebarSplitRatio, 0.1, 0.9) : 0.5;
+            _tabsRow.Height = new GridLength(visible ? ratio : 1, GridUnitType.Star);
+            _folderSplitterRow.Height = new GridLength(visible ? 6 : 0);
+            _folderRow.MinHeight = visible ? 140 : 0;
+            _folderRow.Height = visible ? new GridLength(1 - ratio, GridUnitType.Star) : new GridLength(0);
         }
         finally { _applyingExplorerLayout = false; }
     }

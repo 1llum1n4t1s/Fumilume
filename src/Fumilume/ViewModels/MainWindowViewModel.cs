@@ -133,6 +133,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await RestoreSessionAsync(session);
         FolderTreeWidth = double.IsFinite(session.FolderTreeWidth)
             ? Math.Clamp(session.FolderTreeWidth, 140, 400) : 240;
+        SidebarSplitRatio = double.IsFinite(session.SidebarSplitRatio)
+            ? Math.Clamp(session.SidebarSplitRatio, 0.1, 0.9) : 0.5;
         if (!string.IsNullOrWhiteSpace(session.FolderPath))
         {
             await OpenFolderPathCoreAsync(session.FolderPath);
@@ -451,6 +453,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
         var saved = 0;
         foreach (var document in targets)
         {
+            if (!Tabs.Contains(document))
+            {
+                continue;
+            }
             if (!await SaveDocumentAsync(document, saveAs: false))
             {
                 StatusMessage = $"{saved:N0} 件を保存し、残りを中止しました";
@@ -838,6 +844,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private async Task<bool> SaveDocumentAsync(DocumentViewModel document, bool saveAs)
     {
+        if (!Tabs.Contains(document))
+        {
+            return false;
+        }
         // 保存開始時に確定し、別ファイルの読込待ちでプレビューが置換されるのを防ぐ。
         document.IsPreview = false;
         var path = saveAs ? null : document.FilePath;
@@ -854,6 +864,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         await _openPathsGate.WaitAsync();
         try
         {
+            // 保存先の選択・先行保存の待機中に閉じられた文書は書き戻さない。
+            if (!Tabs.Contains(document))
+            {
+                return false;
+            }
             path = Path.GetFullPath(path);
             if (FindOpenFileTab(path, document) is { } existing)
             {
@@ -869,7 +884,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
             await _files.WriteAsync(path, savedContent, Options.CreateBackupOnSave);
             document.MarkSaved(path, savedContent, savedVersion);
             RememberCaretPosition(document);
-            SelectedTab = document;
+            if (Tabs.Contains(document))
+            {
+                SelectedTab = document;
+            }
             StatusMessage = document.IsModified
                 ? $"{document.DisplayName} を保存しました（保存中の変更は未保存です）"
                 : $"{document.DisplayName} を保存しました";

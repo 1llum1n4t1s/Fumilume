@@ -162,10 +162,24 @@ public static class MacroStore
                 return new MacroLibrary();
             }
 
+            // JSONとして有効でも、nullの一覧や要素は名前のフィルタで例外になる。
+            if (parsed.Macros is null || parsed.Macros.Any(macro => macro is null))
+            {
+                throw new JsonException("マクロに不正な一覧があります。");
+            }
+
             // 名前が空のものと上限超過は、読んだ時点で落としておく（保存し直しで正される）。
             parsed.Macros = [.. parsed.Macros
                 .Where(macro => !string.IsNullOrWhiteSpace(macro.Name))
                 .Take(MaximumMacros)];
+
+            // 空名や上限外を除いた保持対象だけ検証し、従来読めたマクロを残す。
+            // 壊れた手を読み飛ばして一部だけ再生せず、ライブラリ全体を既存のフォールバックへ戻す。
+            if (parsed.Macros.Any(macro => macro.Steps is null || macro.Steps.Any(step =>
+                step is null || (step.Kind is MacroStepKind.InsertText && step.Text is null))))
+            {
+                throw new JsonException("マクロに不正な手順があります。");
+            }
             return parsed;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)

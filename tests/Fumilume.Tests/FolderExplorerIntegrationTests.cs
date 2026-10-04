@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -221,8 +222,11 @@ public sealed class FolderExplorerIntegrationTests(HeadlessAppFixture fixture)
         Assert.True(folderPanel.Bounds.Width >= 140);
         Assert.True(tabsPanel.Bounds.Width > 0);
         Assert.True(editor.Bounds.Width > 100);
-        Assert.True(folderPanel.TranslatePoint(new Point(folderPanel.Bounds.Width, 0), scope.Window)!.Value.X
-            <= tabsPanel.TranslatePoint(default, scope.Window)!.Value.X);
+        Assert.Equal(tabsPanel.Bounds.Width, folderPanel.Bounds.Width, precision: 1);
+        Assert.Equal(tabsPanel.TranslatePoint(default, scope.Window)!.Value.X,
+            folderPanel.TranslatePoint(default, scope.Window)!.Value.X, precision: 1);
+        Assert.True(tabsPanel.TranslatePoint(new Point(0, tabsPanel.Bounds.Height), scope.Window)!.Value.Y
+            <= folderPanel.TranslatePoint(default, scope.Window)!.Value.Y);
         Assert.True(tabsPanel.TranslatePoint(new Point(tabsPanel.Bounds.Width, 0), scope.Window)!.Value.X
             <= editor.TranslatePoint(default, scope.Window)!.Value.X);
         var label = tree.GetVisualDescendants().OfType<TextBlock>().Single(item => item.Text == "click.txt");
@@ -238,6 +242,165 @@ public sealed class FolderExplorerIntegrationTests(HeadlessAppFixture fixture)
         Assert.Same(document, scope.ViewModel.SelectedDocument);
         Assert.Single(scope.ViewModel.Documents, item => item.FilePath == file);
     });
+    [Fact]
+    public void SidebarPointerSplitResizeHideAndRestartPreserveLayout() => fixture.Run(() =>
+    {
+        using var storage = new TemporaryStorage();
+        var folder = Directory.CreateDirectory(Path.Combine(storage.Path, "workspace")).FullName;
+        var file = Path.Combine(folder, "sidebar.txt");
+        const string text = "上下分割の実ファイル\r\n本文は維持する";
+        File.WriteAllText(file, text);
+        var observations = new List<object>();
+        double splitRatio;
+        double sharedWidth;
+        using (var scope = new WindowScope())
+        {
+            scope.Window.Width = 1000;
+            scope.Window.Height = 700;
+            Complete(scope.ViewModel.OpenFolderPathAsync(folder));
+            Complete(scope.ViewModel.OpenFolderFileAsync(file, true));
+            scope.Window.UpdateLayout();
+            var sidebar = scope.Window.FindControl<Grid>("SidebarRoot")!;
+            var top = scope.Window.FindControl<Grid>("SidePanelRoot")!;
+            var bottom = scope.Window.FindControl<Grid>("FolderExplorerRoot")!;
+            var split = scope.Window.FindControl<GridSplitter>("FolderTreeSplitter")!;
+            Assert.Equal(GridResizeDirection.Rows, split.ResizeDirection);
+            AssertLayout(scope.Window);
+            Observe(scope, "initial");
+
+            var initialHeight = top.Bounds.Height;
+            Drag(scope.Window, split, new Vector(0, 65));
+            Assert.True(top.Bounds.Height > initialHeight + 35, "上下分割線のドラッグで上パネルが広がりません。");
+            splitRatio = top.Bounds.Height / (top.Bounds.Height + bottom.Bounds.Height);
+            Assert.Equal(splitRatio, scope.ViewModel.SidebarSplitRatio, precision: 2);
+            AssertLayout(scope.Window);
+            Observe(scope, "vertical-drag");
+
+            var workspace = scope.Window.FindControl<Grid>("WorkspaceGrid")!;
+            var widthSplitter = Assert.Single(workspace.Children.OfType<GridSplitter>(),
+                item => item.ResizeDirection == GridResizeDirection.Columns);
+            var initialWidth = top.Bounds.Width;
+            Drag(scope.Window, widthSplitter, new Vector(-40, 0));
+            sharedWidth = top.Bounds.Width;
+            Assert.True(sharedWidth < initialWidth - 20, "横幅の分割線のドラッグが反映されません。");
+            AssertLayout(scope.Window);
+            Assert.Equal(splitRatio, scope.ViewModel.SidebarSplitRatio, precision: 2);
+            Observe(scope, "width-drag");
+
+            scope.Window.Width = 720;
+            scope.Window.Height = 460;
+            Dispatcher.UIThread.RunJobs();
+            scope.Window.UpdateLayout();
+            AssertLayout(scope.Window);
+            Assert.True(top.Bounds.Height >= 80);
+            Assert.True(bottom.Bounds.Height >= 80);
+            Assert.Equal(splitRatio, top.Bounds.Height / (top.Bounds.Height + bottom.Bounds.Height), precision: 2);
+            Observe(scope, "minimum-window");
+
+            foreach (var kind in new[] { SidePanelKind.Tabs, SidePanelKind.Outline, SidePanelKind.Bookmarks })
+            {
+                scope.ViewModel.SidePanel = kind;
+                scope.Window.KeyPress(Key.B, RawInputModifiers.Control, default, null);
+                Dispatcher.UIThread.RunJobs();
+                scope.Window.UpdateLayout();
+                Assert.False(bottom.IsEffectivelyVisible);
+                Assert.False(split.IsEffectivelyVisible);
+                Assert.Equal(sidebar.Bounds.Height, top.Bounds.Height, precision: 1);
+                Assert.Equal(splitRatio, scope.ViewModel.SidebarSplitRatio, precision: 2);
+                Observe(scope, $"hidden-{kind}");
+                scope.Window.KeyPress(Key.B, RawInputModifiers.Control, default, null);
+                Dispatcher.UIThread.RunJobs();
+                scope.Window.UpdateLayout();
+                Assert.True(bottom.IsEffectivelyVisible);
+                Assert.True(split.IsEffectivelyVisible);
+                AssertLayout(scope.Window);
+                Assert.Equal(splitRatio, top.Bounds.Height / (top.Bounds.Height + bottom.Bounds.Height), precision: 2);
+            }
+            scope.ViewModel.SidePanel = SidePanelKind.Tabs;
+            Assert.Equal(text, scope.ViewModel.SelectedDocument!.Text);
+            Complete(scope.ViewModel.PersistSessionStateAsync());
+            Assert.Equal(splitRatio, SessionStateService.Load().SidebarSplitRatio, precision: 2);
+            Observe(scope, "reshown");
+        }
+
+        Assert.Equal(sharedWidth, SettingsService.Load().SidePanelWidth, precision: 1);
+        using (var restored = new WindowScope(SettingsService.Load()))
+        {
+            Until(() => restored.ViewModel.HasFolder && restored.ViewModel.SelectedDocument?.FilePath == file);
+            restored.Window.Width = 720;
+            restored.Window.Height = 460;
+            restored.Window.UpdateLayout();
+            var top = restored.Window.FindControl<Grid>("SidePanelRoot")!;
+            var bottom = restored.Window.FindControl<Grid>("FolderExplorerRoot")!;
+            AssertLayout(restored.Window);
+            Assert.Equal(sharedWidth, top.Bounds.Width, precision: 1);
+            Assert.Equal(splitRatio, restored.ViewModel.SidebarSplitRatio, precision: 2);
+            Assert.Equal(splitRatio, top.Bounds.Height / (top.Bounds.Height + bottom.Bounds.Height), precision: 2);
+            Assert.Equal(text, restored.ViewModel.SelectedDocument!.Text);
+            Assert.Equal(text, File.ReadAllText(file));
+            Observe(restored, "restored");
+        }
+        if (Environment.GetEnvironmentVariable("FUMILUME_E2E_ARTIFACTS") is { Length: > 0 } directory)
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "sidebar-split.json"),
+                JsonSerializer.Serialize(new { HeadlessAppFixture.UsesSkia, SavedRatio = splitRatio,
+                    SavedWidth = sharedWidth, Observations = observations }, new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        void Observe(WindowScope scope, string stage)
+        {
+            scope.Window.UpdateLayout();
+            var top = scope.Window.FindControl<Grid>("SidePanelRoot")!;
+            var bottom = scope.Window.FindControl<Grid>("FolderExplorerRoot")!;
+            observations.Add(new { Stage = stage, WindowWidth = scope.Window.Bounds.Width,
+                WindowHeight = scope.Window.Bounds.Height, TopWidth = top.Bounds.Width, TopHeight = top.Bounds.Height,
+                BottomWidth = bottom.Bounds.Width, BottomHeight = bottom.Bounds.Height,
+                TreeVisible = bottom.IsEffectivelyVisible, Ratio = scope.ViewModel.SidebarSplitRatio });
+            if (!HeadlessAppFixture.UsesSkia || Environment.GetEnvironmentVariable("FUMILUME_E2E_ARTIFACTS") is not { Length: > 0 } directory) return;
+            Directory.CreateDirectory(directory);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+            using var frame = scope.Window.CaptureRenderedFrame();
+            Assert.NotNull(frame);
+            frame.Save(Path.Combine(directory, $"sidebar-{stage}.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+    });
+
+    private static void AssertLayout(MainWindow window)
+    {
+        window.UpdateLayout();
+        var top = window.FindControl<Grid>("SidePanelRoot")!;
+        var bottom = window.FindControl<Grid>("FolderExplorerRoot")!;
+        var content = window.FindControl<Border>("ContentIsland")!;
+        var editor = window.FindControl<TextEditor>("Editor")!;
+        Assert.True(top.IsEffectivelyVisible);
+        Assert.True(bottom.IsEffectivelyVisible);
+        Assert.Equal(top.Bounds.Width, bottom.Bounds.Width, precision: 1);
+        Assert.Equal(top.TranslatePoint(default, window)!.Value.X, bottom.TranslatePoint(default, window)!.Value.X, precision: 1);
+        Assert.True(top.TranslatePoint(new Point(0, top.Bounds.Height), window)!.Value.Y
+            <= bottom.TranslatePoint(default, window)!.Value.Y);
+        Assert.True(top.TranslatePoint(new Point(top.Bounds.Width, 0), window)!.Value.X
+            <= content.TranslatePoint(default, window)!.Value.X);
+        Assert.True(content.TranslatePoint(new Point(content.Bounds.Width, content.Bounds.Height), window)!.Value.X <= window.Bounds.Width + 1);
+        Assert.True(content.TranslatePoint(new Point(content.Bounds.Width, content.Bounds.Height), window)!.Value.Y <= window.Bounds.Height + 1);
+        Assert.True(editor.Bounds.Width > 100);
+        Assert.True(editor.Bounds.Height > 100);
+    }
+
+    private static void Drag(MainWindow window, GridSplitter splitter, Vector distance)
+    {
+        window.UpdateLayout();
+        if (HeadlessAppFixture.UsesSkia) AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+        var start = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(start, MouseButton.Left);
+        window.MouseMove(start + distance / 2, RawInputModifiers.LeftMouseButton);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        window.MouseMove(start + distance, RawInputModifiers.LeftMouseButton);
+        window.MouseUp(start + distance, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+    }
     [Fact]
     public void EnterPromotesPreviewAndTreeShortcutPreservesTheDocument() => fixture.Run(() =>
     {
@@ -299,6 +462,41 @@ public sealed class FolderExplorerIntegrationTests(HeadlessAppFixture fixture)
         Dispatcher.UIThread.RunJobs();
         Assert.True(nested.IsExpanded);
 
+        scope.Window.UpdateLayout();
+        var rows = tree.GetVisualDescendants().OfType<Border>()
+            .Where(item => item.Name == "PART_LayoutRoot" && item.IsEffectivelyVisible).ToArray();
+        Assert.True(rows.Length >= 5, "展開した子階層を含む行が表示されません。");
+        foreach (var row in rows)
+        {
+            Assert.InRange(row.Bounds.Height, 23.5, 24.5);
+            foreach (var label in row.GetVisualDescendants().OfType<TextBlock>().Where(item => item.IsEffectivelyVisible))
+            {
+                var origin = label.TranslatePoint(default, row)!.Value;
+                Assert.True(origin.Y >= 0 && origin.Y + label.Bounds.Height <= row.Bounds.Height,
+                    "コンパクトな行から文字またはアイコンがはみ出しています。");
+            }
+        }
+        ClickName("child.txt");
+        Until(() => scope.ViewModel.SelectedDocument?.DisplayName == "child.txt");
+        Assert.Equal("child", scope.ViewModel.SelectedDocument!.Text);
+
+        if (Environment.GetEnvironmentVariable("FUMILUME_E2E_ARTIFACTS") is { Length: > 0 } directory)
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "folder-tree-density.json"),
+                JsonSerializer.Serialize(new { HeadlessAppFixture.UsesSkia,
+                    RowHeights = rows.Select(row => row.Bounds.Height).ToArray(),
+                    OpenedFile = scope.ViewModel.SelectedDocument!.DisplayName,
+                    Text = scope.ViewModel.SelectedDocument.Text }, new JsonSerializerOptions { WriteIndented = true }));
+            if (HeadlessAppFixture.UsesSkia)
+            {
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+                using var frame = scope.Window.CaptureRenderedFrame();
+                Assert.NotNull(frame);
+                frame.Save(Path.Combine(directory, "folder-tree-density.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+            }
+        }
+
         void ClickName(string name)
         {
             Until(() => tree.GetVisualDescendants().OfType<TextBlock>().Any(item => item.Text == name));
@@ -330,9 +528,12 @@ public sealed class FolderExplorerIntegrationTests(HeadlessAppFixture fixture)
 
     private sealed class WindowScope : IDisposable
     {
-        public WindowScope()
+        public WindowScope(AppSettings? settings = null)
         {
-            Window = new MainWindow(new AppSettings { CheckUpdatesOnStartup = false, RestoreSession = true });
+            settings ??= new AppSettings();
+            settings.CheckUpdatesOnStartup = false;
+            settings.RestoreSession = true;
+            Window = new MainWindow(settings);
             ViewModel = (MainWindowViewModel)Window.DataContext!;
             Window.Show();
             Complete(ViewModel.PersistSessionStateAsync());

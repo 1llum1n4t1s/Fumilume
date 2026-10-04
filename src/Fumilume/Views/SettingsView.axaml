@@ -430,6 +430,7 @@
                                                                    Text="{Binding Description}" />
                                                         <ToggleSwitch Grid.Column="1" Margin="0" Padding="0"
                                                                       VerticalAlignment="Center"
+                                                                      AutomationProperties.Name="{Binding Description}"
                                                                       IsChecked="{Binding IsAssociated, Mode=TwoWay}"
                                                                       OffContent="" OnContent="" />
                                                     </Grid>

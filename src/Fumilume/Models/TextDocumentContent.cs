@@ -51,6 +51,24 @@ public static class DocumentNewLines
         return [.. lines];
     }
 
+    /// <summary>全行を確保せず順に列挙する。CRLF・LF・CRと末尾の空行を保持する。</summary>
+    public static IEnumerable<string> EnumerateLines(string text, CancellationToken cancellationToken = default)
+    {
+        var start = 0;
+        for (var index = 0; index < text.Length; index++)
+        {
+            // 長い1行の途中でも検索の中止を受け付ける。
+            if ((index & 4095) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (text[index] is not ('\r' or '\n')) continue;
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return text[start..index];
+            if (text[index] == '\r' && index + 1 < text.Length && text[index + 1] == '\n') index++;
+            start = index + 1;
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        yield return text[start..];
+    }
+
     /// <summary>行区切りを元の形のまま保ち、各行の本文だけを変換する。</summary>
     public static string TransformLines(string text, Func<string, string> transform)
     {

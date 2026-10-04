@@ -1,0 +1,31 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: Fumilume.Tests
+  Discovered:  Fumilume.Tests
+  Starting:    Fumilume.Tests
+    Fumilume.Tests.ReviewStateE2ETests.SavingAndClosingCleanTabDoesNotReselectDetachedDocument(lastTab: False) [FAIL]
+      Assert.Contains() Failure: Item not found in collection
+      Collection: [DocumentViewModel { Bookmarks = DocumentBookmarks { Lines = [···] }, CanPin = True, CanRedo = False, CanShowPreview = False, CanUndo = False, ··· }]
+      Not found:  null
+      Stack Trace:
+        tests\Fumilume.Tests\ReviewStateE2ETests.cs(44,0): at Fumilume.Tests.ReviewStateE2ETests.<>c__DisplayClass2_0.<SavingAndClosingCleanTabDoesNotReselectDetachedDocument>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\ReviewStateE2ETests.cs(20,0): at Fumilume.Tests.ReviewStateE2ETests.SavingAndClosingCleanTabDoesNotReselectDetachedDocument(Boolean lastTab)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeDirectByRefWithFewArgs(Object obj, Span`1 copyOfArgs, BindingFlags invokeAttr)
+    Fumilume.Tests.ReviewStateE2ETests.SavingAndClosingCleanTabDoesNotReselectDetachedDocument(lastTab: True) [FAIL]
+      Assert.Contains() Failure: Item not found in collection
+      Collection: [DocumentViewModel { Bookmarks = DocumentBookmarks { Lines = [···] }, CanPin = True, CanRedo = False, CanShowPreview = False, CanUndo = False, ··· }]
+      Not found:  null
+      Stack Trace:
+        tests\Fumilume.Tests\ReviewStateE2ETests.cs(44,0): at Fumilume.Tests.ReviewStateE2ETests.<>c__DisplayClass2_0.<SavingAndClosingCleanTabDoesNotReselectDetachedDocument>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\ReviewStateE2ETests.cs(20,0): at Fumilume.Tests.ReviewStateE2ETests.SavingAndClosingCleanTabDoesNotReselectDetachedDocument(Boolean lastTab)
+           at InvokeStub_ReviewStateE2ETests.SavingAndClosingCleanTabDoesNotReselectDetachedDocument(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithOneArg(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+  Finished:    Fumilume.Tests (ID = '1290835ced9af48ea46cffe1164a1294c8707eb656a66ec77fd954eef6b02d4f')
+=== TEST EXECUTION SUMMARY ===
+   Fumilume.Tests  Total: 2, Errors: 0, Failed: 2, Skipped: 0, Not Run: 0, Time: 1.534s

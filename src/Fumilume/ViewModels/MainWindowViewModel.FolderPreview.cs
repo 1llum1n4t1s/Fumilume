@@ -5,6 +5,7 @@ namespace Fumilume.ViewModels;
 public sealed partial class MainWindowViewModel
 {
     [ObservableProperty]
+    // 旧セッションの値を往復させるだけで、現行のレイアウトには使わない。
     private double _folderTreeWidth = 240;
 
     /// <summary>既存の直列オープン経路へ接続し、読込成功後にのみ以前の一時タブを置換する。</summary>

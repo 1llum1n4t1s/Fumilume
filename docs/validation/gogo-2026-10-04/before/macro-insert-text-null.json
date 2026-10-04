@@ -1,0 +1,6 @@
+{
+  "Scenario": "insert-text-null",
+  "Input": "{\u0022Macros\u0022:[{\u0022Name\u0022:\u0022\u7834\u640D\u0022,\u0022Steps\u0022:[{\u0022Kind\u0022:\u0022InsertText\u0022,\u0022Text\u0022:null}]}]}",
+  "Passed": false,
+  "Failure": "System.NullReferenceException: Object reference not set to an instance of an object.\r\n   at Fumilume.ViewModels.DocumentViewModel.InsertText(String text) in C:\\Users\\IMT\\dev\\Fumilume\\src\\Fumilume\\ViewModels\\DocumentViewModel.Editing.cs:line 193\r\n   at Fumilume.ViewModels.MainWindowViewModel.ApplyAsync(DocumentViewModel document, MacroStep step) in C:\\Users\\IMT\\dev\\Fumilume\\src\\Fumilume\\ViewModels\\MainWindowViewModel.Macro.cs:line 253\r\n   at Fumilume.ViewModels.MainWindowViewModel.PlayAsync(IReadOnlyList\u00601 steps, Int32 repeat) in C:\\Users\\IMT\\dev\\Fumilume\\src\\Fumilume\\ViewModels\\MainWindowViewModel.Macro.cs:line 226\r\n   at Fumilume.Tests.GogoMacroE2ETests.Complete(Task task) in C:\\Users\\IMT\\dev\\Fumilume\\tests\\Fumilume.Tests\\GogoMacroE2ETests.cs:line 131\r\n   at Fumilume.Tests.GogoMacroE2ETests.\u003C\u003Ec__DisplayClass2_0.\u003CInvalidLibraryLeavesPaletteAndEditingUsable\u003Eb__0() in C:\\Users\\IMT\\dev\\Fumilume\\tests\\Fumilume.Tests\\GogoMacroE2ETests.cs:line 44"
+}

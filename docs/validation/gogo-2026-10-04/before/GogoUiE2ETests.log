@@ -1,0 +1,140 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: Fumilume.Tests
+  Discovered:  Fumilume.Tests
+  Starting:    Fumilume.Tests
+    Fumilume.Tests.GogoUiE2ETests.FileAssociationControlsExposeEveryExtensionName [FAIL]
+      Assert.Equal() Failure: Strings differ
+                 ↓ (pos 0)
+      Expected: "テキスト文書 (.txt)"
+      Actual:   ""
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(135,0): at Fumilume.Tests.GogoUiE2ETests.<>c.<FileAssociationControlsExposeEveryExtensionName>b__3_0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(111,0): at Fumilume.Tests.GogoUiE2ETests.FileAssociationControlsExposeEveryExtensionName()
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "md", action: "find") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+           at System.Reflection.MethodBaseInvoker.InvokeDirectByRefWithFewArgs(Object obj, Span`1 copyOfArgs, BindingFlags invokeAttr)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "md", action: "replace") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "md", action: "f3") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "md", action: "toolbar") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "md", action: "open-panel-f3") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "csv", action: "find") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "csv", action: "replace") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "csv", action: "f3") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "csv", action: "toolbar") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+    Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(extension: "csv", action: "open-panel-f3") [FAIL]
+      Assert.True() Failure
+      Expected: True
+      Actual:   False
+      Stack Trace:
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(76,0): at Fumilume.Tests.GogoUiE2ETests.<>c__DisplayClass2_0.<PreviewSearchAllowsTypingAndClosing>b__0()
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(86,0): at Fumilume.Tests.HeadlessAppFixture.<>c__DisplayClass6_0.<Run>b__0()
+        --- End of stack trace from previous location ---
+        tests\Fumilume.Tests\HeadlessAppFixture.cs(101,0): at Fumilume.Tests.HeadlessAppFixture.Run(Action action)
+        tests\Fumilume.Tests\GogoUiE2ETests.cs(35,0): at Fumilume.Tests.GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(String extension, String action)
+           at InvokeStub_GogoUiE2ETests.PreviewSearchAllowsTypingAndClosing(Object, Span`1)
+           at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+  Finished:    Fumilume.Tests (ID = '1290835ced9af48ea46cffe1164a1294c8707eb656a66ec77fd954eef6b02d4f')
+=== TEST EXECUTION SUMMARY ===
+   Fumilume.Tests  Total: 11, Errors: 0, Failed: 11, Skipped: 0, Not Run: 0, Time: 4.501s

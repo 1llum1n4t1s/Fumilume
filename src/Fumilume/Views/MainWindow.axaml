@@ -74,8 +74,6 @@
 
         <Grid x:Name="WorkspaceGrid" RowDefinitions="32,*">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="0" />
-                <ColumnDefinition Width="0" />
                 <ColumnDefinition Width="240" MinWidth="120" MaxWidth="480" />
                 <ColumnDefinition Width="4" />
                 <ColumnDefinition Width="*" MinWidth="480" />
@@ -85,7 +83,7 @@
                  Background="Transparent" は必須。Avalonia は Background が未設定（null）の Panel を
                  ヒットテストの対象にしないため、これが無いと PointerPressed が発火せず
                  ウィンドウを掴んで動かせなくなる。 -->
-            <Grid x:Name="TitleBar" Grid.Row="0" Grid.ColumnSpan="5" ColumnDefinitions="Auto,*,Auto"
+            <Grid x:Name="TitleBar" Grid.Row="0" Grid.ColumnSpan="3" ColumnDefinitions="Auto,*,Auto"
                   Background="Transparent"
                   PointerPressed="TitleBar_PointerPressed"
                   DoubleTapped="TitleBar_DoubleTapped">
@@ -126,184 +124,195 @@
                  用途しか持たせないので、機能が増えても幅と優先度が崩れない。
                  フォルダ横断検索の結果だけは 1 行 1 一致で横幅が要るため、ここではなく
                  中央のタブに出す（最小幅では場所と本文が同時に読めない）。 -->
-            <Grid x:Name="FolderExplorerRoot" Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*,Auto"
-                  IsVisible="{Binding IsFolderTreeVisible}" Margin="6,0,0,6">
-                <Grid ColumnDefinitions="*,Auto" Margin="8,2,6,6">
-                    <TextBlock Text="エクスプローラー" FontSize="12" FontWeight="SemiBold"
-                               VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
-                    <Button Grid.Column="1" Classes="command" Content="…" Width="28" Height="28" Padding="0"
-                            AutomationProperties.Name="フォルダ操作" ToolTip.Tip="フォルダ操作">
-                        <Button.Flyout>
-                            <MenuFlyout>
-                                <MenuItem Header="フォルダを開く" Command="{Binding OpenFolderCommand}" />
-                                <MenuItem Header="更新" Command="{Binding RefreshFolderCommand}" />
-                                <MenuItem Header="すべて折りたたむ" Command="{Binding CollapseFoldersCommand}" />
-                                <MenuItem Header="現在のファイルを表示" Command="{Binding RevealFileInFolderCommand}" />
-                                <Separator />
-                                <MenuItem Header="フォルダを閉じる" Command="{Binding CloseFolderCommand}" />
-                                <MenuItem Header="ツリーを非表示" Command="{Binding ToggleFolderTreeCommand}" />
-                            </MenuFlyout>
-                        </Button.Flyout>
-                    </Button>
-                </Grid>
-                <StackPanel Grid.Row="1" IsVisible="{Binding !HasFolder}" Margin="14,12" Spacing="12">
-                    <TextBlock Text="フォルダが開かれていません" TextWrapping="Wrap" FontSize="12"
-                               Foreground="{DynamicResource TextSecondary}" />
-                    <Button x:Name="OpenFolderButton" Content="フォルダを開く"
-                            Command="{Binding OpenFolderCommand}" HorizontalAlignment="Stretch"
-                            AutomationProperties.Name="フォルダを開く" />
-                </StackPanel>
-                <TreeView x:Name="FolderTree" Grid.Row="1" ItemsSource="{Binding FolderRoots}"
-                          IsVisible="{Binding HasFolder}"
-                          SelectedItem="{Binding SelectedFolderNode}" Focusable="True"
-                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                          AutomationProperties.Name="フォルダツリー">
-                    <TreeView.Styles>
-                        <Style Selector="TreeViewItem" x:DataType="vm:FolderTreeNode">
-                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                        </Style>
-                    </TreeView.Styles>
-                    <TreeView.ItemTemplate>
-                        <TreeDataTemplate x:DataType="vm:FolderTreeNode" ItemsSource="{Binding Children}">
-                            <StackPanel>
-                                <Grid ColumnDefinitions="22,*" Background="Transparent" MinHeight="28"
-                                      PointerPressed="FolderNode_PointerPressed" ToolTip.Tip="{Binding Tooltip}">
-                                    <TextBlock Classes="icon" Text="{Binding Glyph}" Foreground="{DynamicResource TextSecondary}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5"
-                                               VerticalAlignment="Center" Foreground="{DynamicResource TextPrimary}" />
-                                </Grid>
-                                <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}"
-                                           FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" />
-                            </StackPanel>
-                        </TreeDataTemplate>
-                    </TreeView.ItemTemplate>
-                </TreeView>
-                <TextBlock Grid.Row="2" Text="{Binding FolderPath}" FontSize="10.5" Margin="8,4"
-                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FolderPath}"
-                           Foreground="{DynamicResource TextSecondary}" />
-            </Grid>
-            <GridSplitter x:Name="FolderTreeSplitter" Grid.Row="1" Grid.Column="1"
-                          IsVisible="{Binding IsFolderTreeVisible}" ResizeDirection="Columns"
-                          ResizeBehavior="PreviousAndNext" Background="Transparent" />
+            <Grid x:Name="SidebarRoot" Grid.Row="1" Grid.Column="0" Margin="0,0,0,6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="96" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition Height="*" MinHeight="140" />
+                </Grid.RowDefinitions>
+                <Grid x:Name="SidePanelRoot" Grid.Row="0" RowDefinitions="Auto,*">
+                    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="10,0,10,4">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                            <Button Classes="panelswitch" Classes.active="{Binding IsTabsPanel}"
+                                    Content="&#xF378;"
+                                    Command="{Binding SelectSidePanelCommand}"
+                                    CommandParameter="{x:Static vm:SidePanelKind.Tabs}"
+                                    AutomationProperties.Name="開いているもの" ToolTip.Tip="開いているもの" />
+                            <Button Classes="panelswitch" Classes.active="{Binding IsOutlinePanel}"
+                                    Content="&#xF7AE;"
+                                    Command="{Binding SelectSidePanelCommand}"
+                                    CommandParameter="{x:Static vm:SidePanelKind.Outline}"
+                                    AutomationProperties.Name="アウトライン" ToolTip.Tip="アウトライン（見出し）" />
+                            <Button Classes="panelswitch" Classes.active="{Binding IsBookmarksPanel}"
+                                    Content="&#xF1F5;"
+                                    Command="{Binding SelectSidePanelCommand}"
+                                    CommandParameter="{x:Static vm:SidePanelKind.Bookmarks}"
+                                    AutomationProperties.Name="ブックマーク" ToolTip.Tip="ブックマーク (Ctrl+F2)" />
+                        </StackPanel>
+                    </Grid>
 
-            <Grid x:Name="SidePanelRoot" Grid.Row="1" Grid.Column="2" RowDefinitions="Auto,*">
-                <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="10,0,10,4">
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
-                        <Button Classes="panelswitch" Classes.active="{Binding IsTabsPanel}"
-                                Content="&#xF378;"
-                                Command="{Binding SelectSidePanelCommand}"
-                                CommandParameter="{x:Static vm:SidePanelKind.Tabs}"
-                                AutomationProperties.Name="開いているもの" ToolTip.Tip="開いているもの" />
-                        <Button Classes="panelswitch" Classes.active="{Binding IsOutlinePanel}"
-                                Content="&#xF7AE;"
-                                Command="{Binding SelectSidePanelCommand}"
-                                CommandParameter="{x:Static vm:SidePanelKind.Outline}"
-                                AutomationProperties.Name="アウトライン" ToolTip.Tip="アウトライン（見出し）" />
-                        <Button Classes="panelswitch" Classes.active="{Binding IsBookmarksPanel}"
-                                Content="&#xF1F5;"
-                                Command="{Binding SelectSidePanelCommand}"
-                                CommandParameter="{x:Static vm:SidePanelKind.Bookmarks}"
-                                AutomationProperties.Name="ブックマーク" ToolTip.Tip="ブックマーク (Ctrl+F2)" />
+                    <Panel Grid.Row="1">
+                        <!-- 開いているもの。文書タブと設定タブが同じ一覧に並ぶ。項目の型は
+                             WorkspaceTabViewModel で、表示に要る 3 つ（表題・アイコン・ツールチップ）
+                             だけを基底が公開している。 -->
+                        <ListBox Classes="verticaltabs" IsVisible="{Binding IsTabsPanel}"
+                                 ItemContainerTheme="{StaticResource VerticalTabItemTheme}"
+                                 ItemsSource="{Binding Tabs}"
+                                 SelectedItem="{Binding SelectedTab}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 AutomationProperties.Name="タブ一覧">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
+                                    <Grid Height="{DynamicResource TabItemHeight}"
+                                          ColumnDefinitions="26,*,26,26" Background="Transparent">
+                                        <TextBlock Grid.Column="0" Classes="icon" Text="{Binding TabGlyph}"
+                                                   HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding TabTitle}" FontSize="12.5"
+                                                   FontStyle="{Binding PreviewFontStyle}"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   ToolTip.Tip="{Binding TabTooltip}" />
+                                        <Button Grid.Column="2" Classes="tabpin" Classes.pinned="{Binding IsPinned}"
+                                                Command="{Binding TogglePinCommand}" IsVisible="{Binding CanPin}"
+                                                Content="{Binding PinGlyph}"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                AutomationProperties.Name="{Binding PinTooltip}"
+                                                ToolTip.Tip="{Binding PinTooltip}" />
+                                        <Button Grid.Column="3" Classes="tabclose" Command="{Binding CloseTabCommand}"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                AutomationProperties.Name="タブを閉じる">
+                                            <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- アウトライン。選ぶだけでその行へ飛ぶので、矢印キーで見出しを辿れる。 -->
+                        <Panel IsVisible="{Binding IsOutlinePanel}">
+                            <ListBox x:Name="OutlineList" Classes="sidelist"
+                                     ItemsSource="{Binding Outline}"
+                                     SelectedItem="{Binding SelectedOutlineItem}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     AutomationProperties.Name="アウトライン">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="s:OutlineItem">
+                                        <Grid ColumnDefinitions="Auto,*" ToolTip.Tip="{Binding Title}">
+                                            <Border Grid.Column="0" Width="{Binding Indent}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12.5"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextPrimary}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock Classes="sideempty" IsVisible="{Binding !HasOutline}"
+                                       Text="{Binding OutlineEmptyMessage}" />
+                        </Panel>
+
+                        <!-- ブックマーク。行番号と本文を並べ、選ぶとその行へ飛ぶ。 -->
+                        <Panel IsVisible="{Binding IsBookmarksPanel}">
+                            <ListBox x:Name="BookmarkList" Classes="sidelist"
+                                     ItemsSource="{Binding Bookmarks}"
+                                     SelectedItem="{Binding SelectedBookmark}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     AutomationProperties.Name="ブックマーク">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:BookmarkEntry">
+                                        <Grid ColumnDefinitions="36,*" ToolTip.Tip="{Binding Display}">
+                                            <TextBlock Grid.Column="0" Text="{Binding Location}" FontSize="12"
+                                                       TextAlignment="Right" Margin="0,0,8,0"
+                                                       Foreground="{DynamicResource TextSecondary}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Display}" FontSize="12.5"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource TextPrimary}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock Classes="sideempty" IsVisible="{Binding !HasBookmarks}"
+                                       Text="{Binding BookmarkEmptyMessage}" />
+                        </Panel>
+                    </Panel>
+
+                </Grid>
+
+                <GridSplitter x:Name="FolderTreeSplitter" Grid.Row="1"
+                              IsVisible="{Binding IsFolderTreeVisible}" ResizeDirection="Rows"
+                              ResizeBehavior="PreviousAndNext" Background="{DynamicResource Divider}"
+                              AutomationProperties.Name="タブとフォルダツリーの高さを変更"
+                              ToolTip.Tip="ドラッグしてタブとフォルダツリーの高さを変更" />
+
+                <Grid x:Name="FolderExplorerRoot" Grid.Row="2" RowDefinitions="Auto,*,Auto"
+                      IsVisible="{Binding IsFolderTreeVisible}">
+                    <Grid ColumnDefinitions="*,Auto" Margin="8,2,6,6">
+                        <TextBlock Text="エクスプローラー" FontSize="12" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
+                        <Button Grid.Column="1" Classes="command" Content="…" Width="28" Height="28" Padding="0"
+                                AutomationProperties.Name="フォルダ操作" ToolTip.Tip="フォルダ操作">
+                            <Button.Flyout>
+                                <MenuFlyout>
+                                    <MenuItem Header="フォルダを開く" Command="{Binding OpenFolderCommand}" />
+                                    <MenuItem Header="更新" Command="{Binding RefreshFolderCommand}" />
+                                    <MenuItem Header="すべて折りたたむ" Command="{Binding CollapseFoldersCommand}" />
+                                    <MenuItem Header="現在のファイルを表示" Command="{Binding RevealFileInFolderCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="フォルダを閉じる" Command="{Binding CloseFolderCommand}" />
+                                    <MenuItem Header="ツリーを非表示" Command="{Binding ToggleFolderTreeCommand}" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </Grid>
+                    <StackPanel Grid.Row="1" IsVisible="{Binding !HasFolder}" Margin="14,12" Spacing="12">
+                        <TextBlock Text="フォルダが開かれていません" TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{DynamicResource TextSecondary}" />
+                        <Button x:Name="OpenFolderButton" Content="フォルダを開く"
+                                Command="{Binding OpenFolderCommand}" HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="フォルダを開く" />
                     </StackPanel>
+                    <TreeView x:Name="FolderTree" Grid.Row="1" ItemsSource="{Binding FolderRoots}"
+                              IsVisible="{Binding HasFolder}"
+                              SelectedItem="{Binding SelectedFolderNode}" Focusable="True"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              AutomationProperties.Name="フォルダツリー">
+                        <TreeView.Styles>
+                            <Style Selector="TreeViewItem" x:DataType="vm:FolderTreeNode">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                            <Setter Property="MinHeight" Value="24" />
+                            </Style>
+                        </TreeView.Styles>
+                        <TreeView.ItemTemplate>
+                            <TreeDataTemplate x:DataType="vm:FolderTreeNode" ItemsSource="{Binding Children}">
+                                <StackPanel>
+                                            <Grid ColumnDefinitions="22,*" Background="Transparent" MinHeight="22"
+                                          PointerPressed="FolderNode_PointerPressed" ToolTip.Tip="{Binding Tooltip}">
+                                        <TextBlock Classes="icon" Text="{Binding Glyph}" Foreground="{DynamicResource TextSecondary}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5"
+                                                   VerticalAlignment="Center" Foreground="{DynamicResource TextPrimary}" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding ErrorMessage}" IsVisible="{Binding HasError}"
+                                               FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" />
+                                </StackPanel>
+                            </TreeDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                    <TextBlock Grid.Row="2" Text="{Binding FolderPath}" FontSize="10.5" Margin="8,4"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FolderPath}"
+                               Foreground="{DynamicResource TextSecondary}" />
                 </Grid>
-
-                <Panel Grid.Row="1">
-                    <!-- 開いているもの。文書タブと設定タブが同じ一覧に並ぶ。項目の型は
-                         WorkspaceTabViewModel で、表示に要る 3 つ（表題・アイコン・ツールチップ）
-                         だけを基底が公開している。 -->
-                    <ListBox Classes="verticaltabs" IsVisible="{Binding IsTabsPanel}"
-                             ItemContainerTheme="{StaticResource VerticalTabItemTheme}"
-                             ItemsSource="{Binding Tabs}"
-                             SelectedItem="{Binding SelectedTab}"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             AutomationProperties.Name="タブ一覧">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
-                                <Grid Height="{DynamicResource TabItemHeight}"
-                                      ColumnDefinitions="26,*,26,26" Background="Transparent">
-                                    <TextBlock Grid.Column="0" Classes="icon" Text="{Binding TabGlyph}"
-                                               HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
-                                    <TextBlock Grid.Column="1" Text="{Binding TabTitle}" FontSize="12.5"
-                                               FontStyle="{Binding PreviewFontStyle}"
-                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               ToolTip.Tip="{Binding TabTooltip}" />
-                                    <Button Grid.Column="2" Classes="tabpin" Classes.pinned="{Binding IsPinned}"
-                                            Command="{Binding TogglePinCommand}" IsVisible="{Binding CanPin}"
-                                            Content="{Binding PinGlyph}"
-                                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                                            AutomationProperties.Name="{Binding PinTooltip}"
-                                            ToolTip.Tip="{Binding PinTooltip}" />
-                                    <Button Grid.Column="3" Classes="tabclose" Command="{Binding CloseTabCommand}"
-                                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                                            AutomationProperties.Name="タブを閉じる">
-                                        <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />
-                                    </Button>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-
-                    <!-- アウトライン。選ぶだけでその行へ飛ぶので、矢印キーで見出しを辿れる。 -->
-                    <Panel IsVisible="{Binding IsOutlinePanel}">
-                        <ListBox x:Name="OutlineList" Classes="sidelist"
-                                 ItemsSource="{Binding Outline}"
-                                 SelectedItem="{Binding SelectedOutlineItem}"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 AutomationProperties.Name="アウトライン">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="s:OutlineItem">
-                                    <Grid ColumnDefinitions="Auto,*" ToolTip.Tip="{Binding Title}">
-                                        <Border Grid.Column="0" Width="{Binding Indent}" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12.5"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{DynamicResource TextPrimary}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                        <TextBlock Classes="sideempty" IsVisible="{Binding !HasOutline}"
-                                   Text="{Binding OutlineEmptyMessage}" />
-                    </Panel>
-
-                    <!-- ブックマーク。行番号と本文を並べ、選ぶとその行へ飛ぶ。 -->
-                    <Panel IsVisible="{Binding IsBookmarksPanel}">
-                        <ListBox x:Name="BookmarkList" Classes="sidelist"
-                                 ItemsSource="{Binding Bookmarks}"
-                                 SelectedItem="{Binding SelectedBookmark}"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 AutomationProperties.Name="ブックマーク">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:BookmarkEntry">
-                                    <Grid ColumnDefinitions="36,*" ToolTip.Tip="{Binding Display}">
-                                        <TextBlock Grid.Column="0" Text="{Binding Location}" FontSize="12"
-                                                   TextAlignment="Right" Margin="0,0,8,0"
-                                                   Foreground="{DynamicResource TextSecondary}" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Display}" FontSize="12.5"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{DynamicResource TextPrimary}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                        <TextBlock Classes="sideempty" IsVisible="{Binding !HasBookmarks}"
-                                   Text="{Binding BookmarkEmptyMessage}" />
-                    </Panel>
-                </Panel>
-
             </Grid>
 
-            <GridSplitter Grid.Row="1" Grid.Column="3"
+            <GridSplitter x:Name="SidebarWidthSplitter" Grid.Row="1" Grid.Column="1"
                           ResizeDirection="Columns" Background="Transparent"
-                          AutomationProperties.Name="タブ領域の幅を変更"
-                          ToolTip.Tip="ドラッグしてタブ領域の幅を変更" />
+                          AutomationProperties.Name="サイドバーの幅を変更"
+                          ToolTip.Tip="ドラッグしてサイドバーの幅を変更" />
 
             <!-- ===== コンテンツ島 ===== -->
             <!-- 角丸の切り抜きは ClipToBounds ではなくコードビハインドの Clip で行う
                  （RoundedClip の説明を参照）。ClipToBounds は矩形なので、下端のステータスバーが
                  島の角丸の枠線を塗りつぶして角が欠けて見える。 -->
-            <Border x:Name="ContentIsland" Grid.Row="1" Grid.Column="4" Margin="0,0,6,6"
+            <Border x:Name="ContentIsland" Grid.Row="1" Grid.Column="2" Margin="0,0,6,6"
                     Background="{DynamicResource ContentBg}"
                     BorderBrush="{DynamicResource Divider}" BorderThickness="1"
                     CornerRadius="14">

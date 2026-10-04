@@ -1,0 +1,8 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+  Discovering: Fumilume.Tests
+  Discovered:  Fumilume.Tests
+  Starting:    Fumilume.Tests
+[SuperLightLogger] WARNING: LogManager.Configure() が呼び出されていません。NullLoggerFactory を使用します。ログは出力されません。
+  Finished:    Fumilume.Tests (ID = '720a838b3680fcfb95a9ee048791c806c7669a97ea7e43bb41088609d076f7a0')
+=== TEST EXECUTION SUMMARY ===
+   Fumilume.Tests  Total: 10, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 2.200s

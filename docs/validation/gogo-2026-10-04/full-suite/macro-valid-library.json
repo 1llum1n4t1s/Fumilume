@@ -1,0 +1,9 @@
+{
+  "Passed": true,
+  "MacroCount": 20,
+  "PlaybackText": "\u5FA9\u5143",
+  "UndoText": "",
+  "EmptyNameWithNullStepsIgnored": true,
+  "OverflowWithNullStepsIgnored": true,
+  "NullSearchTextRemainsNoOp": true
+}

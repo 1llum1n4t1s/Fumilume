@@ -27,6 +27,7 @@ public sealed partial class MainWindowViewModel
     public bool HasFolder => FolderPath is not null;
     [ObservableProperty] private FolderTreeNode? _selectedFolderNode;
     [ObservableProperty] private bool _isFolderTreeVisible = true;
+    [ObservableProperty] private double _sidebarSplitRatio = 0.5;
 
     [RelayCommand]
     private async Task OpenFolderAsync()

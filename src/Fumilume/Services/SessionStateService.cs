@@ -20,7 +20,10 @@ public sealed class SessionState
 
     public bool FolderTreeVisible { get; set; } = true;
 
+    // 横並びだった旧版との保存形式の互換性だけを保つ。現行の幅は SidePanelWidth を使う。
     public double FolderTreeWidth { get; set; } = 240;
+
+    public double SidebarSplitRatio { get; set; } = 0.5;
 }
 
 /// <summary><see cref="SessionTabState.Kind"/> に入る値。未知の値は文書として扱う。</summary>
@@ -356,6 +359,7 @@ public static class SessionStateService
             FolderPath = primary.FolderPath,
             FolderTreeVisible = primary.FolderTreeVisible,
             FolderTreeWidth = primary.FolderTreeWidth,
+            SidebarSplitRatio = primary.SidebarSplitRatio,
         };
         foreach (var recovery in recoveries)
         {

@@ -152,7 +152,7 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
     {
         cancellationToken.ThrowIfCancellationRequested();
         var lineNumber = 0;
-        foreach (var line in DocumentNewLines.SplitLines(text))
+        foreach (var line in DocumentNewLines.EnumerateLines(text, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             lineNumber++;

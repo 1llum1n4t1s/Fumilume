@@ -14,6 +14,95 @@ namespace Fumilume.Tests;
 [Collection(HeadlessAppCollection.Name)]
 public sealed class ReviewStateE2ETests(HeadlessAppFixture fixture)
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SavingAndClosingCleanTabDoesNotReselectDetachedDocument(bool lastTab) => fixture.Run(() =>
+    {
+        using var scope = new Scope();
+        var document = scope.Open("closing-save.txt", "保存済み本文");
+        DocumentViewModel? remaining = null;
+        if (!lastTab)
+        {
+            remaining = scope.Open("remaining.txt", "残す本文");
+            scope.ViewModel.SelectedTab = document;
+        }
+        var gate = new TaskCompletionSource();
+        scope.Files.WriteGate = gate;
+        var saving = scope.ViewModel.SaveCommand.ExecuteAsync(null);
+        PumpUntil(() => scope.Files.WriteStarted);
+        Pump(document.CloseTabCommand.ExecuteAsync(null));
+        Assert.DoesNotContain(document, scope.ViewModel.Tabs);
+        gate.SetResult();
+        Pump(saving);
+        Artifact($"closed-save-{lastTab}", new
+        {
+            SelectedBelongsToWorkspace = scope.ViewModel.Tabs.Contains(scope.ViewModel.SelectedTab!),
+            EditorStillShowsClosedDocument = ReferenceEquals(scope.Editor.Document, document.EditorDocument),
+            Disk = File.ReadAllText(document.FilePath!),
+        });
+        Assert.Contains(scope.ViewModel.SelectedTab!, scope.ViewModel.Tabs);
+        Assert.NotSame(document.EditorDocument, scope.Editor.Document);
+        if (remaining is not null)
+        {
+            Assert.Same(remaining, scope.ViewModel.SelectedTab);
+            Assert.Equal("残す本文", scope.Editor.Text);
+        }
+        else Assert.Equal(string.Empty, scope.Editor.Text);
+        scope.Editor.Document.Insert(scope.Editor.Document.TextLength, "+保持");
+        Assert.Same(scope.ViewModel.SelectedDocument!.EditorDocument, scope.Editor.Document);
+        Assert.True(scope.ViewModel.SelectedDocument.IsModified);
+        scope.ViewModel.Options.RestoreSession = true;
+        Pump(scope.ViewModel.PersistSessionStateAsync());
+        Assert.Contains(SessionStateService.Load().Tabs, tab => tab.Text?.EndsWith("+保持", StringComparison.Ordinal) == true);
+    });
+
+    [Fact]
+    public void SaveAsDoesNotWriteATabClosedDuringTheFilePicker() => fixture.Run(() =>
+    {
+        using var scope = new Scope();
+        var document = scope.Open("save-as-source.txt", "元の本文");
+        var destination = Path.Combine(scope.StoragePath, "closed-save-as.txt");
+        var picker = new TaskCompletionSource<string?>();
+        scope.Dialogs.SavePath = _ => picker.Task;
+        var saving = scope.ViewModel.SaveAsCommand.ExecuteAsync(null);
+        Assert.False(saving.IsCompleted);
+        Pump(document.CloseTabCommand.ExecuteAsync(null));
+        picker.SetResult(destination);
+        Pump(saving);
+        Assert.False(File.Exists(destination));
+        Assert.Equal("元の本文", File.ReadAllText(document.FilePath!));
+        Assert.Contains(scope.ViewModel.SelectedTab!, scope.ViewModel.Tabs);
+        Assert.NotSame(document.EditorDocument, scope.Editor.Document);
+        Artifact("save-as-closed", new { DestinationWritten = File.Exists(destination),
+            SelectedBelongsToWorkspace = scope.ViewModel.Tabs.Contains(scope.ViewModel.SelectedTab!) });
+    });
+
+    [Fact]
+    public void SaveAllSkipsTabsClosedWhileAnEarlierWriteWaits() => fixture.Run(() =>
+    {
+        using var scope = new Scope();
+        var first = scope.Open("first-save.txt", "first-disk");
+        first.Text = "first-edited";
+        var second = scope.Open("second-save.txt", "second-disk");
+        second.Text = "discarded-edit";
+        scope.Dialogs.Unsaved = _ => Task.FromResult(UnsavedDocumentDecision.Discard);
+        var gate = new TaskCompletionSource();
+        scope.Files.WriteGate = gate;
+        var saving = scope.ViewModel.SaveAllCommand.ExecuteAsync(null);
+        PumpUntil(() => scope.Files.WriteStarted);
+        Pump(second.CloseTabCommand.ExecuteAsync(null));
+        gate.SetResult();
+        Pump(saving);
+        Artifact("save-all-closed", new { First = File.ReadAllText(first.FilePath!),
+            Second = File.ReadAllText(second.FilePath!),
+            SelectedBelongsToWorkspace = scope.ViewModel.Tabs.Contains(scope.ViewModel.SelectedTab!) });
+        Assert.Equal("first-edited", File.ReadAllText(first.FilePath!));
+        Assert.Equal("second-disk", File.ReadAllText(second.FilePath!));
+        Assert.Contains(scope.ViewModel.SelectedTab!, scope.ViewModel.Tabs);
+        Assert.Same(first.EditorDocument, scope.Editor.Document);
+    });
+
     [Fact]
     public void SavingPreviewWhileAnotherFileLoadsKeepsSavedTabInWorkspace() => fixture.Run(() =>
     {
@@ -420,8 +509,9 @@ public sealed class ReviewStateE2ETests(HeadlessAppFixture fixture)
         public bool ConfirmationStarted { get; private set; }
         public Func<string, Task<UnsavedDocumentDecision>> Unsaved { get; set; }
             = _ => Task.FromResult(UnsavedDocumentDecision.Save);
+        public Func<string, Task<string?>> SavePath { get; set; } = _ => Task.FromResult<string?>(null);
         public Task<IReadOnlyList<string>> PickOpenPathsAsync() => Task.FromResult<IReadOnlyList<string>>([]);
-        public Task<string?> PickSavePathAsync(string suggestedFileName) => Task.FromResult<string?>(null);
+        public Task<string?> PickSavePathAsync(string suggestedFileName) => SavePath(suggestedFileName);
         public Task<UnsavedDocumentDecision> ConfirmUnsavedAsync(string documentName) => Unsaved(documentName);
         public Task ShowErrorAsync(string title, string message) => throw new InvalidOperationException($"{title}: {message}");
         public Task<int?> PickLineNumberAsync(int currentLine, int maximumLine) => Task.FromResult<int?>(null);

@@ -1,0 +1,71 @@
+{
+  "Date": "2026-10-04",
+  "SourceRoot": "C:\\Users\\IMT\\dev\\Fumilume",
+  "SourceHead": "f366ef9eabca555893820d0682dfbb51f9707ee8",
+  "SDK": "10.0.401",
+  "Runtime": "10.0.12",
+  "Avalonia": "12.1.3",
+  "Restore": "locked-mode success",
+  "FullTests": {
+    "Skipped": 1,
+    "Total": 613,
+    "DurationSeconds": 26.75,
+    "Failed": 0,
+    "Passed": 612
+  },
+  "SkiaSidebarE2E": {
+    "Frames": 9,
+    "ObservedImages": [
+      "sidebar-initial.png",
+      "sidebar-restored.png"
+    ],
+    "Result": "skia-results.json",
+    "Passed": 1,
+    "Failed": 0,
+    "Skipped": 0
+  },
+  "MacCrossBuild": {
+    "ActualMacExecution": false,
+    "Warnings": 0,
+    "Errors": 0,
+    "Passed": true
+  },
+  "SourceHashes": [
+    {
+      "File": "src/Fumilume/Views/MainWindow.axaml",
+      "SHA256": "8B3FD9F67887EA3D42EFD5B377596C271709402620DC5460DC3DDEDECB5D067B"
+    },
+    {
+      "File": "src/Fumilume/Views/MainWindow.axaml.cs",
+      "SHA256": "03A14FD01F4A03F2419F4EF850D86A7F22FEEBB25AFAC6209E47E43B873CBEE6"
+    },
+    {
+      "File": "src/Fumilume/Views/MainWindow.FolderExplorer.cs",
+      "SHA256": "4A9EE2887D367F9674C0196592809CB88CEAE3CD857CD828A29186C5F525D773"
+    },
+    {
+      "File": "src/Fumilume/Services/SessionStateService.cs",
+      "SHA256": "25D47745CE19AA9C0BE4C033BB8EAC5CF5F58AFD1831479EA3260F99FF5B699C"
+    },
+    {
+      "File": "src/Fumilume/ViewModels/MainWindowViewModel.Folder.cs",
+      "SHA256": "6182978474E06C5F3CFB36814AF7F4803F346003883EDEF2E470CB2569791D56"
+    },
+    {
+      "File": "src/Fumilume/ViewModels/MainWindowViewModel.FolderPreview.cs",
+      "SHA256": "5C441EDDC3E42DC64616F98A071C1C9EFC1398B7521C8EF897D33503425C3D75"
+    },
+    {
+      "File": "src/Fumilume/ViewModels/MainWindowViewModel.cs",
+      "SHA256": "08A1D9DDBB9F3BF02D5D74A640521B44E674F31447CC1DDC9A06EC99B4ACD11B"
+    },
+    {
+      "File": "src/Fumilume/ViewModels/MainWindowViewModel.Session.cs",
+      "SHA256": "F073BE61C9C651AB8FCDDA9302CA904DB50742DCA5142E1689ECA3D894C6EFBE"
+    },
+    {
+      "File": "tests/Fumilume.Tests/FolderExplorerIntegrationTests.cs",
+      "SHA256": "678BA4BDF687B1B6E172FA07607A20E456EE39242455C5531595A41877BF2498"
+    }
+  ]
+}

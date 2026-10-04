@@ -63,12 +63,9 @@ public static partial class OutlineService
         }
 
         var extension = filePath is null ? string.Empty : Path.GetExtension(filePath);
-        var lines = DocumentNewLines.SplitLines(text);
-        List<OutlineItem> items = MarkdownExtensions.Contains(extension) ? ParseMarkdown(lines)
-            : BraceExtensions.Contains(extension) ? ParseBraces(lines)
+        return MarkdownExtensions.Contains(extension) ? ParseMarkdown(text)
+            : BraceExtensions.Contains(extension) ? ParseBraces(DocumentNewLines.EnumerateLines(text))
             : [];
-
-        return items.Count > MaximumItems ? items.GetRange(0, MaximumItems) : items;
     }
 
     /// <summary>この拡張子のアウトラインを出せるか。パネルの案内文の出し分けに使う。</summary>
@@ -80,17 +77,23 @@ public static partial class OutlineService
 
     // ===== Markdown =====
 
-    private static List<OutlineItem> ParseMarkdown(string[] lines)
+    private static List<OutlineItem> ParseMarkdown(string text)
     {
         var items = new List<OutlineItem>();
         string? fence = null;
 
         // YAML の前書きは本文ではないので、閉じるまで丸ごと飛ばす（--- を見出し扱いしない）。
-        var start = lines.Length > 0 && lines[0].Trim() is "---" ? ClosingFrontMatter(lines) : 0;
+        var start = ClosingFrontMatter(text);
+        using var lines = DocumentNewLines.EnumerateLines(text).GetEnumerator();
+        string? next = null;
+        var lineNumber = 0;
 
-        for (var index = start; index < lines.Length; index++)
+        while (next is not null || lines.MoveNext())
         {
-            var trimmed = lines[index].Trim();
+            var trimmed = (next ?? lines.Current).Trim();
+            next = null;
+            lineNumber++;
+            if (lineNumber <= start) continue;
 
             if (FencePattern().Match(trimmed) is { Success: true } fenceMatch)
             {
@@ -110,34 +113,42 @@ public static partial class OutlineService
                 items.Add(new OutlineItem(
                     atx.Groups["hashes"].Value.Length,
                     atx.Groups["title"].Value.Trim(),
-                    index + 1));
+                    lineNumber));
+                if (items.Count >= MaximumItems) break;
                 continue;
             }
 
             // Setext は次の行の下線で決まる。箇条書きや引用の記号で始まる行は本文なので除く。
-            if (trimmed[0] is '#' or '-' or '*' or '+' or '>' or '|' or '=' || index + 1 >= lines.Length)
+            if (trimmed[0] is '#' or '-' or '*' or '+' or '>' or '|' or '=' || !lines.MoveNext())
             {
                 continue;
             }
 
-            var underline = lines[index + 1].Trim();
+            next = lines.Current;
+            var underline = next.Trim();
             if (underline.Length >= 2 && (underline.All(c => c == '=') || underline.All(c => c == '-')))
             {
-                items.Add(new OutlineItem(underline[0] == '=' ? 1 : 2, trimmed, index + 1));
-                index++;
+                items.Add(new OutlineItem(underline[0] == '=' ? 1 : 2, trimmed, lineNumber));
+                if (items.Count >= MaximumItems) break;
+                lineNumber++;
+                next = null;
             }
         }
 
         return items;
     }
 
-    private static int ClosingFrontMatter(string[] lines)
+    private static int ClosingFrontMatter(string text)
     {
-        for (var index = 1; index < lines.Length; index++)
+        using var lines = DocumentNewLines.EnumerateLines(text).GetEnumerator();
+        if (!lines.MoveNext() || lines.Current.Trim() is not "---") return 0;
+        var lineNumber = 1;
+        while (lines.MoveNext())
         {
-            if (lines[index].Trim() is "---" or "...")
+            lineNumber++;
+            if (lines.Current.Trim() is "---" or "...")
             {
-                return index + 1;
+                return lineNumber;
             }
         }
 
@@ -146,18 +157,21 @@ public static partial class OutlineService
 
     // ===== 波括弧で入れ子を作る言語 =====
 
-    private static List<OutlineItem> ParseBraces(string[] lines)
+    private static List<OutlineItem> ParseBraces(IEnumerable<string> lines)
     {
         var items = new List<OutlineItem>();
         var depth = 0;
         var inBlockComment = false;
 
-        for (var index = 0; index < lines.Length; index++)
+        var lineNumber = 0;
+        foreach (var line in lines)
         {
-            var code = StripCommentsAndStrings(lines[index], ref inBlockComment);
+            lineNumber++;
+            var code = StripCommentsAndStrings(line, ref inBlockComment);
             if (Declaration(code.Trim()) is { } title)
             {
-                items.Add(new OutlineItem(Math.Clamp(depth + 1, 1, MaximumLevel), title, index + 1));
+                items.Add(new OutlineItem(Math.Clamp(depth + 1, 1, MaximumLevel), title, lineNumber));
+                if (items.Count >= MaximumItems) break;
             }
 
             depth = Math.Max(0, depth + code.Count(c => c == '{') - code.Count(c => c == '}'));

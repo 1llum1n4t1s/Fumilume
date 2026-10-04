@@ -1,0 +1,6 @@
+{
+  "Scenario": "element-null",
+  "Input": "{\u0022Macros\u0022:[null]}",
+  "Passed": true,
+  "Failure": null
+}
