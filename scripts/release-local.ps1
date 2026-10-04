@@ -113,7 +113,15 @@ function Remove-WorkDirectory {
     foreach ($name in @('artifacts', 'remote-verification', 'publish-win-x64', 'publish-win-arm64')) {
         $outputPath = Join-Path $resolved $name
         if (Test-Path -LiteralPath $outputPath) {
-            Remove-Item -LiteralPath $outputPath -Recurse -Force
+            $cleanupHelper = Join-Path $env:USERPROFILE '.codex\scripts\Remove-CodexItem.ps1'
+            if (-not (Test-Path -LiteralPath $cleanupHelper)) {
+                throw "ごみ箱経由の清掃ヘルパーがありません: $cleanupHelper"
+            }
+            $ledgerRoot = Join-Path $RepoRoot 'local-macos-build'
+            New-Item -ItemType Directory -Path $ledgerRoot -Force | Out-Null
+            $ledgerPath = Join-Path $ledgerRoot "cleanup-$version-before-$name-$([Guid]::NewGuid().ToString('N')).json"
+            & pwsh -NoProfile -STA -File $cleanupHelper -LiteralPath $outputPath -AllowedRoot $resolved -LedgerPath $ledgerPath
+            if ($LASTEXITCODE -ne 0) { throw "ごみ箱経由の清掃に失敗しました: $outputPath (台帳: $ledgerPath)" }
         }
     }
 }
@@ -208,9 +216,26 @@ foreach ($runtime in $Runtimes) {
 $publishStageTimer = [System.Diagnostics.Stopwatch]::StartNew()
 foreach ($plan in $publishPlans) {
     Write-Host "== publish: $($plan.Runtime) ==" -ForegroundColor Cyan
+    # VSの版別コンポーネントIDに依存せず、導入済みの標準開発環境を使う。
+    $vsWhere = Join-Path $vsInstallerDir 'vswhere.exe'
+    $vsPath = (& $vsWhere -latest -products '*' -property installationPath).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $vsPath) { throw 'Visual Studioの導入先を取得できません。' }
+    $vcVars = Join-Path $vsPath 'VC\Auxiliary\Build\vcvarsall.bat'
+    if (-not (Test-Path -LiteralPath $vcVars)) { throw "C++開発環境がありません: $vcVars" }
+    $vcArchitecture = if ($plan.Runtime -eq 'win-arm64') { 'amd64_arm64' } else { 'amd64' }
+    $nativeEnvironment = & $env:ComSpec /d /c ('call "' + $vcVars + '" ' + $vcArchitecture + ' >nul && set')
+    if ($LASTEXITCODE -ne 0) { throw "C++開発環境の初期化に失敗しました: $vcArchitecture" }
+    foreach ($nativeVariable in $nativeEnvironment) {
+        if ($nativeVariable -match '^(PATH|LIB|LIBPATH|INCLUDE|VCToolsInstallDir|WindowsSdkDir|WindowsSDKVersion|UCRTVersion|UniversalCRTSdkDir|VSINSTALLDIR|VCINSTALLDIR)=(.*)$') {
+            [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
+        }
+    }
+    if (-not (Get-Command link.exe -ErrorAction SilentlyContinue) -or -not $env:LIB) {
+        throw "リンカーまたはライブラリの検索先がありません: $vcArchitecture"
+    }
     Invoke-Native "dotnet publish ($($plan.Runtime))" {
         dotnet publish src/Fumilume/Fumilume.csproj -c Release -r $plan.Runtime `
-            -p:PlatformTarget=$($plan.PlatformTarget) -o $plan.PublishDir `
+            -p:PlatformTarget=$($plan.PlatformTarget) -p:IlcUseEnvironmentalTools=true -o $plan.PublishDir `
             --artifacts-path $plan.BuildArtifactsDir
     }
 }
