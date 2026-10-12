@@ -14,9 +14,9 @@ jobs:
   package:
     runs-on: macos-15
     timeout-minutes: 90
-    env:
-      FUMILUME_WORK_ROOT: ${{ runner.temp }}/Codex/Fumilume/release-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
+      - name: 外部作業先を設定
+        run: echo "FUMILUME_WORK_ROOT=$RUNNER_TEMP/Codex/Fumilume/release-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
