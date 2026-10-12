@@ -100,7 +100,7 @@ public static class SyntaxHighlightingService
         Removed: Color.Parse("#E45649"));
 
     /// <summary>
-    /// 拡張子から定義を引くときの上書き。AvaloniaEdit の既定解決では合わないものだけを持つ。
+    /// 拡張子から定義を引くときの上書き。独自定義と、AvaloniaEdit の既定解決では合わないものを持つ。
     /// </summary>
     private static readonly Dictionary<string, string> DefinitionOverrides = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -108,6 +108,20 @@ public static class SyntaxHighlightingService
         // Fumilume は別途プレビューを持つので、編集画面は色だけ変える MarkDown を使う。
         [".md"] = "MarkDown",
         [".markdown"] = "MarkDown",
+        [".mdown"] = "MarkDown",
+        [".mkd"] = "MarkDown",
+
+        // 同梱されていない設定ファイルは、各形式に合う定義を使う。
+        [".toml"] = "TOML",
+        [".yaml"] = "YAML",
+        [".yml"] = "YAML",
+        [".ini"] = "INI",
+        [".jsonc"] = "JSONC",
+
+        [".csx"] = "C#",
+        [".cxx"] = "C++",
+        [".hh"] = "C++",
+        [".hxx"] = "C++",
 
         // AvaloniaEdit に TypeScript と XAML の定義は無い。文法が近いもので代用する。
         [".ts"] = "JavaScript",
@@ -242,7 +256,7 @@ public static class SyntaxHighlightingService
         try
         {
             return DefinitionOverrides.TryGetValue(extension, out var name)
-                ? HighlightingManager.Instance.GetDefinition(name)
+                ? AdditionalSyntaxHighlighting.GetDefinition(name) ?? HighlightingManager.Instance.GetDefinition(name)
                 : HighlightingManager.Instance.GetDefinitionByExtension(extension);
         }
         catch (HighlightingDefinitionInvalidException ex)
