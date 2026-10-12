@@ -24,8 +24,27 @@ if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
   echo "Info.plist に使える数値版を取得できませんでした。" >&2
   exit 1
 fi
-build_dir="$repo_dir/local-macos-build"
-artifacts="$build_dir/artifacts"
+# CI とローカル実行で同じ外部作業先を使う。作成前にリンクと禁止先を検証する。
+build_dir="$(python3 - "$repo_dir" "${FUMILUME_WORK_ROOT:-}" "${RUNNER_TEMP:-${TMPDIR:-/tmp}}" <<'PY'
+import os, pathlib, sys, uuid
+repo, supplied, temp = sys.argv[1:]
+temp = pathlib.Path(temp).resolve()
+candidate = pathlib.Path(supplied) if supplied else temp / "Codex" / "Fumilume" / ("release-" + uuid.uuid4().hex)
+if not candidate.is_absolute():
+    raise SystemExit("FUMILUME_WORK_ROOT は絶対パスで指定してください。")
+resolved = candidate.resolve()
+for forbidden in (pathlib.Path(repo).resolve(), pathlib.Path.home() / ".codex", pathlib.Path(os.environ.get("CODEX_HOME", str(pathlib.Path.home() / ".codex"))).resolve()):
+    if resolved == forbidden or forbidden in resolved.parents:
+        raise SystemExit("禁止された保存先です: " + str(resolved))
+if temp not in resolved.parents or any(part.lower() == "artifacts" for part in candidate.parts):
+    raise SystemExit("外部一時ディレクトリ配下を指定してください: " + str(candidate))
+for target in (candidate, candidate / "packages", candidate / "verification", candidate / "build-osx-arm64"):
+    if target.resolve() != target:
+        raise SystemExit("リンクを含む保存先は使用できません: " + str(target))
+print(resolved)
+PY
+)"
+artifacts="$build_dir/packages"
 verification="$build_dir/verification"
 mkdir -p "$artifacts" "$verification"
 if [[ -n "$(find "$artifacts" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
@@ -33,7 +52,7 @@ if [[ -n "$(find "$artifacts" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
   exit 1
 fi
 # 今回生成する秘密素材だけを専用一時ディレクトリで管理する。
-work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/fumilume-release.XXXXXX")"
+work_dir="$(mktemp -d "$build_dir/signing.XXXXXX")"
 keychain="$work_dir/signing.keychain-db"
 keychain_password="$(openssl rand -base64 32)"
 pack_pid=""
@@ -70,9 +89,9 @@ security list-keychains -d user -s "$keychain" "${original_keychains[@]}"
 xcrun notarytool store-credentials fumilume-notary --apple-id "$APPLE_ID" \
   --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --keychain "$keychain" >/dev/null
 publish="$work_dir/publish"
-dotnet restore src/Fumilume/Fumilume.csproj -p:FumilumeTargetMac=true -r osx-arm64 --locked-mode
+dotnet restore src/Fumilume/Fumilume.csproj -p:FumilumeTargetMac=true -r osx-arm64 --locked-mode --artifacts-path "$build_dir/build-osx-arm64"
 dotnet publish src/Fumilume/Fumilume.csproj -p:FumilumeTargetMac=true \
-  -r osx-arm64 -c Release --no-restore -o "$publish"
+  -r osx-arm64 -c Release --no-restore --artifacts-path "$build_dir/build-osx-arm64" -o "$publish"
 sed "s/@VERSION@/$version/g" scripts/macos/Info.plist > "$work_dir/Info.plist"
 plutil -lint "$work_dir/Info.plist" scripts/macos/NativeAot.entitlements
 iconset="$work_dir/Fumilume.iconset"

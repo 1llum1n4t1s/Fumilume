@@ -18,7 +18,9 @@
 param(
     [switch]$SkipUpload,
     [switch]$PreflightOnly,
-    [string[]]$Runtimes = @('win-x64', 'win-arm64')
+    [string[]]$Runtimes = @('win-x64', 'win-arm64'),
+    [string]$WorkRoot,
+    [string]$RecordRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,9 +42,46 @@ $RuntimeMatrix = @{
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
-$WorkDir = Join-Path $RepoRoot 'local-release'
-$ArtifactsDir = Join-Path $WorkDir 'artifacts'
-$WranglerToolDir = Join-Path $RepoRoot ".release-tools\wrangler-$WranglerVersion"
+# 出力先は作成前に検証し、リンク経由のリポジトリ内保存も拒否する。
+function Assert-ReleasePath {
+    param([string]$Path, [string]$AllowedRoot)
+    if (-not [IO.Path]::IsPathFullyQualified($Path)) { throw "絶対パスを指定してください: $Path" }
+    $full = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
+    }
+    $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+    foreach ($forbidden in @($repoRoot, (Join-Path $env:USERPROFILE '.codex'), $codexRoot)) {
+        $boundary = [IO.Path]::GetFullPath($forbidden).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        if ($full.Equals($boundary, [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "禁止された保存先です: $full"
+        }
+    }
+    if (@($full -split '[\\/]' | Where-Object { $_ -ieq 'artifacts' }).Count -gt 0) { throw "artifacts フォルダーは使用できません: $full" }
+    $cursor = $full
+    while ($cursor) {
+        if ((Test-Path -LiteralPath $cursor) -and ((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "リンクを含む保存先は使用できません: $cursor"
+        }
+        $cursor = Split-Path -Parent $cursor
+    }
+    return $full
+}
+$releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
+$tempReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'Codex\Fumilume'
+$recordReleaseRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Codex\TaskArtifacts\Fumilume'
+if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
+if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
+$WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
+$RecordRoot = Assert-ReleasePath $RecordRoot $recordReleaseRoot
+Write-Host "作業先: $WorkRoot"
+Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -RecordRoot を指定)"
+$WorkDir = $WorkRoot
+$ArtifactsDir = Join-Path $WorkDir 'packages\windows'
+$WranglerToolDir = Join-Path $WorkRoot "tools\wrangler-$WranglerVersion"
+$ArtifactsDir = Assert-ReleasePath $ArtifactsDir $WorkRoot
+$WranglerToolDir = Assert-ReleasePath $WranglerToolDir $WorkRoot
 $WranglerCommand = Join-Path $WranglerToolDir 'node_modules\.bin\wrangler.cmd'
 
 function Invoke-Native {
@@ -106,20 +145,21 @@ function Invoke-Wrangler {
 function Remove-WorkDirectory {
     if (-not (Test-Path $WorkDir)) { return }
     $resolved = (Resolve-Path $WorkDir).Path
-    if (-not $resolved.StartsWith($RepoRoot + [IO.Path]::DirectorySeparatorChar)) {
-        throw "作業ディレクトリがリポジトリ外です: $resolved"
+    if (-not $resolved.Equals($WorkRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "作業ディレクトリが指定された外部作業先と一致しません: $resolved"
     }
     # build-* 内の bin/obj は保持し、配布・配信検証の出力だけを作り直す。
-    foreach ($name in @('artifacts', 'remote-verification', 'publish-win-x64', 'publish-win-arm64')) {
-        $outputPath = Join-Path $resolved $name
+    foreach ($name in @('packages\windows', 'remote-verification', 'publish-win-x64', 'publish-win-arm64')) {
+        $outputPath = Assert-ReleasePath (Join-Path $resolved $name) $WorkRoot
         if (Test-Path -LiteralPath $outputPath) {
             $cleanupHelper = Join-Path $env:USERPROFILE '.codex\scripts\Remove-CodexItem.ps1'
             if (-not (Test-Path -LiteralPath $cleanupHelper)) {
                 throw "ごみ箱経由の清掃ヘルパーがありません: $cleanupHelper"
             }
-            $ledgerRoot = Join-Path $RepoRoot 'local-macos-build'
+            $ledgerRoot = $RecordRoot
             New-Item -ItemType Directory -Path $ledgerRoot -Force | Out-Null
-            $ledgerPath = Join-Path $ledgerRoot "cleanup-$version-before-$name-$([Guid]::NewGuid().ToString('N')).json"
+            $ledgerName = $name -replace '[\\/]', '-'
+            $ledgerPath = Join-Path $ledgerRoot "cleanup-$version-before-$ledgerName-$([Guid]::NewGuid().ToString('N')).json"
             & pwsh -NoProfile -STA -File $cleanupHelper -LiteralPath $outputPath -AllowedRoot $resolved -LedgerPath $ledgerPath
             if ($LASTEXITCODE -ne 0) { throw "ごみ箱経由の清掃に失敗しました: $outputPath (台帳: $ledgerPath)" }
         }
@@ -159,7 +199,7 @@ $VpkVersion = (Invoke-RestMethod 'https://api.nuget.org/v3-flatcontainer/vpk/ind
 if (-not $VpkVersion) { throw 'vpk の最新安定版バージョンの取得に失敗しました (NuGet API)' }
 Write-Host "vpk 最新安定版: $VpkVersion"
 
-$VpkToolDir = Join-Path $RepoRoot ".release-tools\vpk-$VpkVersion"
+$VpkToolDir = Assert-ReleasePath (Join-Path $WorkRoot "tools\vpk-$VpkVersion") $WorkRoot
 $VpkCommand = Join-Path $VpkToolDir 'vpk.exe'
 # グローバルツールの更新・削除に影響されない専用配置を使う。
 if (-not (Test-Path -LiteralPath $VpkCommand)) {
@@ -208,8 +248,8 @@ foreach ($runtime in $Runtimes) {
         Runtime          = $runtime
         PlatformTarget   = $config.PlatformTarget
         Channel          = $config.Channel
-        PublishDir       = Join-Path $WorkDir "publish-$runtime"
-        BuildArtifactsDir = Join-Path $WorkDir "build-$runtime"
+        PublishDir       = Assert-ReleasePath (Join-Path $WorkDir "publish-$runtime") $WorkRoot
+        BuildArtifactsDir = Assert-ReleasePath (Join-Path $WorkDir "build-$runtime") $WorkRoot
     }
 })
 
@@ -346,7 +386,7 @@ Write-Host ("  ⏱️  キャッシュパージ: {0:N1} 秒" -f $purgeTimer.Elap
 
 Write-Host '== 配信確認 ==' -ForegroundColor Cyan
 $verificationTimer = [System.Diagnostics.Stopwatch]::StartNew()
-$verifyDir = Join-Path $WorkDir 'remote-verification'
+$verifyDir = Assert-ReleasePath (Join-Path $WorkDir 'remote-verification') $WorkRoot
 New-Item -ItemType Directory -Path $verifyDir -Force | Out-Null
 foreach ($runtime in $Runtimes) {
     $channel = $RuntimeMatrix[$runtime].Channel
@@ -387,14 +427,14 @@ $verificationTimer.Stop()
 Write-Host ("  ⏱️  配信確認全体: {0:N1} 秒" -f $verificationTimer.Elapsed.TotalSeconds)
 
 # ---- 旧バージョン nupkg のクリーンアップ (Aggressive 戦略) ----
-# ローカル artifacts の manifest (= 今アップロードしたものと同一) から keep set を作り、
+# ローカル配布物の manifest (= 今アップロードしたものと同一) から keep set を作り、
 # R2 上の「.nupkg かつ manifest 外」だけを削除する。固定ファイル名 (Setup.exe /
 # Portable.zip / RELEASES* / releases.*.json / assets.*.json) は対象外なので安全。
 Write-Host '== 旧 nupkg クリーンアップ ==' -ForegroundColor Cyan
 $cleanupTimer = [System.Diagnostics.Stopwatch]::StartNew()
 $keep = @{}
 $manifests = Get-ChildItem $ArtifactsDir -Filter 'releases.*.json'
-if (-not $manifests) { throw 'artifacts に releases.*.json が見つかりません' }
+if (-not $manifests) { throw '配布物に releases.*.json が見つかりません' }
 foreach ($m in $manifests) {
     foreach ($asset in (Get-Content $m.FullName -Raw | ConvertFrom-Json).Assets) {
         if ($asset.FileName) { $keep[$asset.FileName] = $true }

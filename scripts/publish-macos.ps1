@@ -1,9 +1,44 @@
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$ArtifactsPath)
+param([Parameter(Mandatory)][string]$ArtifactsPath, [string]$WorkRoot, [string]$RecordRoot)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$artifacts = (Resolve-Path -LiteralPath $ArtifactsPath).Path
+# 出力先は作成前に検証し、リンク経由のリポジトリ内保存も拒否する。
+function Assert-ReleasePath {
+    param([string]$Path, [string]$AllowedRoot)
+    if (-not [IO.Path]::IsPathFullyQualified($Path)) { throw "絶対パスを指定してください: $Path" }
+    $full = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
+    }
+    $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
+    foreach ($forbidden in @($repoRoot, (Join-Path $env:USERPROFILE '.codex'), $codexRoot)) {
+        $boundary = [IO.Path]::GetFullPath($forbidden).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        if ($full.Equals($boundary, [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "禁止された保存先です: $full"
+        }
+    }
+    if (@($full -split '[\\/]' | Where-Object { $_ -ieq 'artifacts' }).Count -gt 0) { throw "artifacts フォルダーは使用できません: $full" }
+    $cursor = $full
+    while ($cursor) {
+        if ((Test-Path -LiteralPath $cursor) -and ((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "リンクを含む保存先は使用できません: $cursor"
+        }
+        $cursor = Split-Path -Parent $cursor
+    }
+    return $full
+}
+$releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
+$tempReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'Codex\Fumilume'
+$recordReleaseRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Codex\TaskArtifacts\Fumilume'
+if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
+if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
+$WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
+$RecordRoot = Assert-ReleasePath $RecordRoot $recordReleaseRoot
+Write-Host "作業先: $WorkRoot"
+Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -RecordRoot を指定)"
+$artifacts = Assert-ReleasePath ((Resolve-Path -LiteralPath $ArtifactsPath).Path) $WorkRoot
 $version = ([xml](Get-Content (Join-Path $repoRoot 'Directory.Build.props') -Raw)).Project.PropertyGroup.Version
 $baseUrl = 'https://fumilume.kagayoi.com'
 $bucket = 'fumilume-updates'
@@ -29,7 +64,7 @@ try {
     $env:CLOUDFLARE_ACCOUNT_ID = '10901bfadbf1005164774a7350082985'
     $headers = @{Authorization="Bearer $env:CLOUDFLARE_API_TOKEN"}
     $wranglerVersion = (Import-PowerShellDataFile (Join-Path $PSScriptRoot 'release-tools.psd1')).WranglerVersion
-    $wrangler = Join-Path $repoRoot ".release-tools\wrangler-$wranglerVersion\node_modules\.bin\wrangler.cmd"
+    $wrangler = Assert-ReleasePath (Join-Path $WorkRoot "tools\wrangler-$wranglerVersion\node_modules\.bin\wrangler.cmd") $WorkRoot
     if (-not (Test-Path -LiteralPath $wrangler)) { throw 'Windowsリリースの事前確認を先に実行してください。' }
     $zone = Invoke-RestMethod 'https://api.cloudflare.com/client/v4/zones?name=kagayoi.com' -Headers $headers -TimeoutSec 30
     if (-not $zone.success -or @($zone.result).Count -ne 1) { throw '公開先のゾーンを一意に確認できません。' }
@@ -38,7 +73,7 @@ try {
         & $wrangler r2 object put "$bucket/$($file.Name)" --file $file.FullName --remote
         if ($LASTEXITCODE -ne 0) { throw "Macアップロード失敗: $($file.Name)" }
     }
-    $verify = Join-Path $repoRoot 'local-macos-build\remote-verification'
+    $verify = Assert-ReleasePath (Join-Path $WorkRoot 'verification\remote-macos') $WorkRoot
     New-Item -ItemType Directory -Path $verify -Force | Out-Null
     $stale = @()
     foreach ($file in $ordered) {

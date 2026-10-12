@@ -132,7 +132,9 @@ Avalonia のドロップイベントは Bubble のため、`TextArea` のクラ�
 
 ### 構文ハイライト
 
-`SyntaxHighlightingService` が拡張子から AvaloniaEdit 同梱の定義を選び、定義内の色名を意味上の役割へ分類して One Dark / One Light の対応色へ揃えます。Markdown のインデントコードのような入れ子のルールセットも循環を避けて辿り、親定義だけを置換して言語固有の原色が残ることを防ぎます。書き換えは共有インスタンスへ及ぶため、元の前景色を参照比較の辞書へ控え、毎回そこから変換してテーマ往復で色が積み上がらないようにします。全定義をまとめて読み込まないのは、同梱定義に単体では読み込めない部品が含まれるためです。
+専用定義の文字列・コメント・キーの境界は [TOML の仕様](https://toml.io/en/v1.0.0) と [YAML の仕様](https://yaml.org/spec/1.2.2/) に合わせます。YAML のブロック文字列は開始行の字下げが0〜32桁の範囲を対象とし、それより深い行ではブロック全体への色付けを開始しません。行単位の解析で開始行の字下げを次行の終端条件へ動的に渡せないため、深さごとのルールで後続のキーへ文字列色が漏れることを防ぎます。
+
+`SyntaxHighlightingService` が拡張子から定義を選び、定義内の色名を意味上の役割へ分類して One Dark / One Light の対応色へ揃えます。TOML、YAML / YML、INI、JSONC は `AdditionalSyntaxHighlighting` の専用定義を遅延読み込みし、それ以外は AvaloniaEdit 同梱の定義を使います。C# スクリプト（`.csx`）、C++ の追加拡張子（`.cxx` / `.hh` / `.hxx`）、Markdown の追加拡張子（`.mdown` / `.mkd`）も同じ言語の定義へ解決します。Markdown のインデントコードのような入れ子のルールセットも循環を避けて辿り、親定義だけを置換して言語固有の原色が残ることを防ぎます。書き換えは共有インスタンスへ及ぶため、元の前景色を参照比較の辞書へ控え、毎回そこから変換してテーマ往復で色が積み上がらないようにします。全定義をまとめて読み込まないのは、同梱定義に単体では読み込めない部品が含まれるためです。
 
 `BracketPairService` は C# と JSON / JSONC の文字列・文字リテラル・コメントを除外して `()`・`[]`・`{}` の深さと対応位置を求めます。`BracketHighlighter` はその結果を文書版ごとにキャッシュし、構文色の後段で深さ別の One Dark / One Light 色を当て、カーソルの直前または直後にある括弧と対応相手を選択レイヤーで囲みます。Enter 後のインデントは C# では AvaloniaEdit の C# 戦略、JSON / JSONC では同じ括弧解析に基づく戦略を使い、その他の形式は直前行の字下げを引き継ぐ既定動作を保ちます。
 
@@ -172,7 +174,7 @@ Windows・macOSの配布スクリプトが使うWranglerの固定版は `scripts
 
 アプリ側の `UpdateService` は `VelopackUpdateDialog.Avalonia` を介して更新確認・ダウンロード・適用・再起動を行います。配布側は `scripts/release-local.ps1` が x64 / ARM64 を順番にNative AOT発行し、コード署名、Velopackパッケージ化、Cloudflare R2へのアップロード、固定URLのキャッシュパージ、公開ファイルの版・ハッシュ・サイズ・署名照合を行います。
 
-Windowsの発行前には、導入済みVisual Studioの`vcvarsall.bat`でRIDに対応するC++環境を初期化し、Native AOTへ環境内のリンカー・ライブラリを渡します。配布出力の清掃はユーザー環境の`.codex/scripts/Remove-CodexItem.ps1`でごみ箱への移動と今回分だけの完全消去を行い、台帳を`local-macos-build/cleanup-<version>-before-*.json`へ残します。ヘルパーがない場合や清掃が失敗した場合は直接削除へ切り替えません。
+Windowsの発行前には、導入済みVisual Studioの`vcvarsall.bat`でRIDに対応するC++環境を初期化し、Native AOTへ環境内のリンカー・ライブラリを渡します。配布スクリプトは共通の `WorkRoot`（ユーザーTemp配下の `Codex/Fumilume/<task-id>`）へツール・配布物・検証環境を出力し、`RecordRoot`（LocalAppData配下の `Codex/TaskArtifacts/Fumilume/<task-id>`）へ最小限の再開記録と清掃台帳を残します。事前確認、本実行、再開には同じ2つのパスを指定します。配布物は `packages/` に置き、リポジトリ、Codexユーザーディレクトリ、リンクを含む保存先と禁止名のフォルダーを作成前に拒否します。Mac CIもrunnerの外部Tempへ出力し、同じ場所から配布物と検証記録を収集します。配布出力の清掃はユーザー環境の`.codex/scripts/Remove-CodexItem.ps1`でごみ箱への移動と今回分だけの完全消去を行います。ヘルパーがない場合や清掃が失敗した場合は直接削除へ切り替えません。
 
 更新適用では updater の起動前に未保存文書の確認とセッション保存を完了し、取消・保存失敗時は適用も終了も行いません。ダウンロード済み更新の起動時自動適用は無効にし、次回も更新UIから同じ保存境界を通します。
 
