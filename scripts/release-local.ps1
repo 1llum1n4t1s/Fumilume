@@ -75,6 +75,7 @@ if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
 $WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
 $RecordRoot = Assert-ReleasePath $RecordRoot $recordReleaseRoot
+$env:WRANGLER_LOG_PATH = Assert-ReleasePath (Join-Path $WorkRoot 'logs\wrangler') $WorkRoot
 Write-Host "作業先: $WorkRoot"
 Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -RecordRoot を指定)"
 $WorkDir = $WorkRoot
