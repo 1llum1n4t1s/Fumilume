@@ -62,6 +62,7 @@ jobs:
             ${{ env.FUMILUME_WORK_ROOT }}/verification/native-launch/
             ${{ env.FUMILUME_WORK_ROOT }}/verification/installed-launch/
             ${{ env.FUMILUME_WORK_ROOT }}/verification/update-apply/
+            ${{ env.FUMILUME_WORK_ROOT }}/verification/notarization/
             ${{ env.FUMILUME_WORK_ROOT }}/verification/SHA256SUMS
             ${{ env.FUMILUME_WORK_ROOT }}/verification/distribution.json
             ${{ env.FUMILUME_WORK_ROOT }}/verification/update-sdk/update-results.json

@@ -174,7 +174,7 @@ Windows・macOSの配布スクリプトが使うWranglerの固定版は `scripts
 
 アプリ側の `UpdateService` は `VelopackUpdateDialog.Avalonia` を介して更新確認・ダウンロード・適用・再起動を行います。配布側は `scripts/release-local.ps1` が x64 / ARM64 を順番にNative AOT発行し、コード署名、Velopackパッケージ化、Cloudflare R2へのアップロード、固定URLのキャッシュパージ、公開ファイルの版・ハッシュ・サイズ・署名照合を行います。
 
-Windowsの発行前には、導入済みVisual Studioの`vcvarsall.bat`でRIDに対応するC++環境を初期化し、Native AOTへ環境内のリンカー・ライブラリを渡します。配布スクリプトは共通の `WorkRoot`（ユーザーTemp配下の `Codex/Fumilume/<task-id>`）へツール・配布物・検証環境を出力し、`RecordRoot`（LocalAppData配下の `Codex/TaskArtifacts/Fumilume/<task-id>`）へ最小限の再開記録と清掃台帳を残します。事前確認、本実行、再開には同じ2つのパスを指定します。配布物は `packages/` に置き、リポジトリ、Codexユーザーディレクトリ、リンクを含む保存先と禁止名のフォルダーを作成前に拒否します。Mac CIもrunnerの外部Tempへ出力し、同じ場所から配布物と検証記録を収集します。配布出力の清掃は検証済みの作業範囲に限定し、実行担当がPrunlet CLIをCMDから直接呼んでファイル単位で行います。リリーススクリプトは既存の配布・検証ファイルが残る場合に停止し、清掃してから同じ作業先で再開します。清掃に失敗した対象は残存と理由を記録します。
+Windowsの発行前には、導入済みVisual Studioの`vcvarsall.bat`でRIDに対応するC++環境を初期化し、Native AOTへ環境内のリンカー・ライブラリを渡します。配布スクリプトは共通の `WorkRoot`（ユーザーTemp配下の `Codex/Fumilume/<task-id>`）へツール・配布物・検証環境を出力し、`RecordRoot`（LocalAppData配下の `Codex/TaskArtifacts/Fumilume/<task-id>`）へ最小限の再開記録と清掃台帳を残します。事前確認、本実行、再開には同じ2つのパスを指定します。配布物は `packages/` に置き、リポジトリ、Codexユーザーディレクトリ、リンクを含む保存先と禁止名のフォルダーを作成前に拒否します。Mac CIもrunnerの外部Tempへ出力し、同じ場所から配布物と検証記録を収集します。公証受理後のチケット検証は `validate-notarization.sh` を通し、exit 68と明示的な接続切れ（-1005）またはタイムアウト（-1001）が揃う場合だけ最大5回まで再試行します。待機は2・4・8・16秒で、署名・公証提出を繰り返さず、チケットの不正などの別の失敗と再試行上限は非0終了を維持します。各試行のログをCIの検証記録へ残します。配布出力の清掃は検証済みの作業範囲に限定し、実行担当がPrunlet CLIをCMDから直接呼んでファイル単位で行います。リリーススクリプトは既存の配布・検証ファイルが残る場合に停止し、清掃してから同じ作業先で再開します。清掃に失敗した対象は残存と理由を記録します。
 
 更新適用では updater の起動前に未保存文書の確認とセッション保存を完了し、取消・保存失敗時は適用も終了も行いません。ダウンロード済み更新の起動時自動適用は無効にし、次回も更新UIから同じ保存境界を通します。
 

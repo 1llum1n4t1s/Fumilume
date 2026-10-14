@@ -172,10 +172,10 @@ ditto -x -k "$portable" "$work_dir/verify"
 bundle="$work_dir/verify/Fumilume.app"
 codesign --verify --deep --strict "$bundle"
 spctl --assess --type execute --verbose=4 "$bundle"
-xcrun stapler validate "$bundle"
+bash scripts/macos/validate-notarization.sh "$bundle" "$verification/notarization/app"
 pkgutil --check-signature "$installer"
 spctl --assess --type install --verbose=4 "$installer"
-xcrun stapler validate "$installer"
+bash scripts/macos/validate-notarization.sh "$installer" "$verification/notarization/installer"
 while IFS= read -r -d '' binary; do
   if file -b "$binary" | grep -q 'Mach-O'; then
     lipo "$binary" -verify_arch arm64
