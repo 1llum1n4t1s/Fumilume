@@ -14,7 +14,7 @@ public sealed partial class SettingsView : UserControl
 
     public SettingsView()
     {
-        var systemFonts = FontManager.Current.SystemFonts.ToArray();
+        var systemFonts = FontManager.Current.SystemFonts.Where(IsUsableFontFamily).ToArray();
         FontFamilies =
         [
             .. systemFonts
@@ -62,6 +62,29 @@ public sealed partial class SettingsView : UserControl
 
     /// <summary>エディタ向け候補。OpenType の固定ピッチ情報がある等幅フォントだけを並べる。</summary>
     public IReadOnlyList<FontFamily> EditorFontFamilies { get; }
+
+    internal static bool IsUsableFontFamily(FontFamily fontFamily)
+    {
+        try
+        {
+            // Avalonia 12.1 の正規化は「Eras  ITC」などの連続空白を含む実在名も拒否する。
+            // 空白を詰めると別フォントを選ぶため、描画できない候補は両方の一覧から外す。
+            // OS 候補は同じコレクションで調べ、既定フォントへの代替で成功扱いにしない。
+            if (FontManager.Current.SystemFonts.TryGetGlyphTypeface(fontFamily.Name,
+                    FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out _))
+            {
+                return true;
+            }
+
+            AppLogger.For<SettingsView>().Warn($"Avalonia で書体を取得できないフォントを候補から除外しました: {fontFamily.Name}");
+            return false;
+        }
+        catch (FormatException ex)
+        {
+            AppLogger.For<SettingsView>().Warn($"Avalonia で解決できないフォントを候補から除外しました: {fontFamily.Name}", ex);
+            return false;
+        }
+    }
 
     internal static bool IsMonospaced(FontFamily fontFamily)
         => FontManager.Current.TryGetGlyphTypeface(new Typeface(fontFamily), out var glyphTypeface)

@@ -394,6 +394,12 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.True(uiPicker.IsEditable);
         Assert.True(editorPicker.IsEditable);
 
+        // OS の実在名でも、Avalonia が解決できないものは両方の候補から除外する。
+        Assert.False(SettingsView.IsUsableFontFamily(new FontFamily("Eras  ITC")));
+        Assert.All(settings.FontFamilies, fontFamily =>
+            Assert.True(FontManager.Current.TryGetGlyphTypeface(new Typeface(fontFamily), out _)));
+        Assert.DoesNotContain(settings.FontFamilies, fontFamily => fontFamily.Name == "Eras  ITC");
+
         var font = Assert.IsType<FontFamily>(uiPicker.ItemsSource!.Cast<object>().First());
         var preview = Assert.IsType<TextBlock>(uiPicker.ItemTemplate!.Build(font));
         preview.DataContext = font;
@@ -411,6 +417,36 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("Arial", scope.ViewModel.Options.UiFontFamily);
         Assert.Equal("Consolas", scope.ViewModel.Options.EditorFontFamily);
+
+        if (Environment.GetEnvironmentVariable("FUMILUME_E2E_ARTIFACTS") is { Length: > 0 } artifacts)
+        {
+            Directory.CreateDirectory(artifacts);
+            File.WriteAllText(Path.Combine(artifacts, "settings-font-pickers.json"),
+                System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    UiFontCount = settings.FontFamilies.Count,
+                    EditorFontCount = editorFonts.Length,
+                    ExcludedSystemFonts = FontManager.Current.SystemFonts
+                        .Where(fontFamily => !settings.FontFamilies.Contains(fontFamily))
+                        .Select(fontFamily => fontFamily.Name).ToArray(),
+                    AllCandidatesResolve = true,
+                    TypedUiFont = scope.ViewModel.Options.UiFontFamily,
+                    TypedEditorFont = scope.ViewModel.Options.EditorFontFamily,
+                }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            if (HeadlessAppFixture.UsesSkia)
+            {
+                scope.Window.UpdateLayout();
+                uiPicker.BringIntoView();
+                Dispatcher.UIThread.RunJobs();
+                scope.Window.UpdateLayout();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+                Dispatcher.UIThread.RunJobs();
+                using var frame = scope.Window.CaptureRenderedFrame();
+                Assert.NotNull(frame);
+                frame.Save(Path.Combine(artifacts, "settings-font-pickers.png"),
+                    Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+            }
+        }
     });
 
     [Fact]

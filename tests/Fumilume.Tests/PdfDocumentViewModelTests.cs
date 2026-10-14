@@ -138,6 +138,8 @@ public sealed class PdfDocumentViewModelTests(HeadlessAppFixture fixture)
         using var document = new PdfDocumentViewModel(@"C:\tmp\guide.pdf", renderer, _ => Task.CompletedTask);
         await document.UpdateViewportAsync(new(60, 80));
         Assert.Equal(0.1, document.Zoom);
+        Assert.NotNull(document.PageImage);
+        Assert.Null(document.ErrorMessage);
         var count = renderer.Renders.Count;
         await document.UpdateViewportAsync(new(60, 80));
         await document.UpdateViewportAsync(new(0, 0));
@@ -187,7 +189,7 @@ public sealed class PdfDocumentViewModelTests(HeadlessAppFixture fixture)
                 137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
                 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
                 0, 0, 0, 13, 73, 68, 65, 84, 8, 215, 99, 248, 207, 192, 240,
-                31, 0, 5, 0, 1, 255, 137, 153, 61, 29, 0, 0, 0, 0, 73, 69,
+                31, 0, 5, 0, 1, 255, 114, 156, 82, 103, 0, 0, 0, 0, 73, 69,
                 78, 68, 174, 66, 96, 130,
             ]);
             return Task.FromResult(new Bitmap(stream));

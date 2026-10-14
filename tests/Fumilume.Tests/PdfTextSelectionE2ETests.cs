@@ -97,6 +97,7 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
         var pdf = scope.ViewModel.SelectedPdf!;
         Layout(scope.Window);
         DragAll(scope, reverse: false);
+        Assert.Equal(Expected, Normalize(pdf.SelectedText));
         var selected = pdf.SelectedText;
         Pump(pdf.ZoomInCommand.ExecuteAsync(null));
         Layout(scope.Window);
@@ -200,10 +201,28 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
 
     private static void Layout(MainWindow window)
     {
-        Dispatcher.UIThread.RunJobs();
-        window.UpdateLayout();
-        AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
-        Dispatcher.UIThread.RunJobs();
+        var timer = Stopwatch.StartNew();
+        Size? previousSize = null;
+        while (timer.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+            Dispatcher.UIThread.RunJobs();
+            if (window.DataContext is not MainWindowViewModel { SelectedPdf: { } pdf }) return;
+            var size = new Size(pdf.PageWidth, pdf.PageHeight);
+            var layer = window.FindControl<PdfTextSelectionLayer>("PdfTextSelectionLayer")!;
+            var pixel = 1 / window.RenderScaling;
+            // 初期フィットの描画中は読み込み状態の変化でポインター捕捉が解放される。
+            // 非同期描画と次のレイアウトを終え、同じ表示寸法が続いてから入力する。
+            if (!pdf.IsLoading && pdf.PageImage is not null
+                && Math.Abs(layer.Bounds.Width - size.Width) <= pixel
+                && Math.Abs(layer.Bounds.Height - size.Height) <= pixel
+                && previousSize == size) return;
+            previousSize = !pdf.IsLoading ? size : null;
+            Thread.Yield();
+        }
+        Assert.Fail("PDFの描画と表示寸法が30秒以内に安定しませんでした。");
     }
 
     private static void Pump(Task task)
