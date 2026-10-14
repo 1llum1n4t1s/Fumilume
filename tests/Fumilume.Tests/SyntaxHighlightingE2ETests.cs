@@ -432,7 +432,7 @@ public sealed class SyntaxHighlightingE2ETests(HeadlessAppFixture fixture)
             Window.Close();
             Dispatcher.UIThread.RunJobs();
             AppStoragePaths.OverrideDirectory(null);
-            // 実ファイルは呼出し元が共通のごみ箱手順で清掃する。直接削除しない。
+            // 今回の一時物は実行担当がPrunlet CLIをCMDから直接呼び、検証後に清掃する。
         }
     }
 }

@@ -64,7 +64,7 @@ pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 ```
 
 - 署名付きローカル成果物までの確認には `-SkipUpload` を使う。完全なリリースは `scripts/release-all.ps1` を1回実行し、同じHEADのMac CI成功確認、Windows x64/ARM64とMac arm64の署名・公開ハッシュ検証を完走させる。事前確認と本実行には同じ外部の `-WorkRoot` と `-RecordRoot` を明示し、再開も同じ値を使う。
-- 作業出力はユーザーTemp配下の `Codex/Fumilume/<task-id>`、最小限の再開・清掃記録はLocalAppData配下の `Codex/TaskArtifacts/Fumilume/<task-id>` を使う。配布物は `WorkRoot/packages/`、ツールは `WorkRoot/tools/` に置き、今回の不要な配布物・検証環境・ツールは共通のごみ箱手順で清掃する。`build-*` 内の `bin` / `obj` とその親ディレクトリは保持する。既存の旧出力・共有ツールは今回の清掃に含めない。
+- 作業出力はユーザーTemp配下の `Codex/Fumilume/<task-id>`、最小限の再開・清掃記録はLocalAppData配下の `Codex/TaskArtifacts/Fumilume/<task-id>` を使う。配布物は `WorkRoot/packages/`、ツールは `WorkRoot/tools/` に置き、今回の不要な配布物・検証環境・ツールは対象を確認してPrunlet CLIをCMDから直接呼び、ファイル単位で清掃する。`build-*` 内の `bin` / `obj` とその親ディレクトリは保持する。既存の旧出力・共有ツールは今回の清掃に含めない。
 - リリーススクリプトが読む証明書・Cloudflare認証情報はリポジトリ外の正本を使う。秘密値をコード、ログ、fixture、Git差分へ出力しない。
 - Windowsはローカル検証と `scripts/release-local.ps1`、Macは `.github/workflows/macos-release.yml` のNative AOT・署名・公証・E2E成功と公開ハッシュ一致を出荷判定にする。
 

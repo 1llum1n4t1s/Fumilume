@@ -23,6 +23,9 @@ param(
     [string]$RecordRoot
 )
 
+
+# 検証済みの作業対象だけを標準APIで削除する。
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $ReleaseStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -143,26 +146,15 @@ function Invoke-Wrangler {
     & $WranglerCommand @Arguments
 }
 
-function Remove-WorkDirectory {
-    if (-not (Test-Path $WorkDir)) { return }
-    $resolved = (Resolve-Path $WorkDir).Path
-    if (-not $resolved.Equals($WorkRoot, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "作業ディレクトリが指定された外部作業先と一致しません: $resolved"
-    }
-    # build-* 内の bin/obj は保持し、配布・配信検証の出力だけを作り直す。
+function Assert-CleanWorkOutputs {
+    # ファイル削除は実行担当がPrunlet CLIをCMDから直接行う。スクリプトは残存を拒否する。
     foreach ($name in @('packages\windows', 'remote-verification', 'publish-win-x64', 'publish-win-arm64')) {
-        $outputPath = Assert-ReleasePath (Join-Path $resolved $name) $WorkRoot
-        if (Test-Path -LiteralPath $outputPath) {
-            $cleanupHelper = Join-Path $env:USERPROFILE '.codex\scripts\Remove-CodexItem.ps1'
-            if (-not (Test-Path -LiteralPath $cleanupHelper)) {
-                throw "ごみ箱経由の清掃ヘルパーがありません: $cleanupHelper"
-            }
-            $ledgerRoot = $RecordRoot
-            New-Item -ItemType Directory -Path $ledgerRoot -Force | Out-Null
-            $ledgerName = $name -replace '[\\/]', '-'
-            $ledgerPath = Join-Path $ledgerRoot "cleanup-$version-before-$ledgerName-$([Guid]::NewGuid().ToString('N')).json"
-            & pwsh -NoProfile -STA -File $cleanupHelper -LiteralPath $outputPath -AllowedRoot $resolved -LedgerPath $ledgerPath
-            if ($LASTEXITCODE -ne 0) { throw "ごみ箱経由の清掃に失敗しました: $outputPath (台帳: $ledgerPath)" }
+        $outputPath = Assert-ReleasePath (Join-Path $WorkRoot $name) $WorkRoot
+        if (-not (Test-Path -LiteralPath $outputPath)) { continue }
+        $remaining = @(Get-ChildItem -LiteralPath $outputPath -Recurse -Force -ErrorAction Stop |
+            Where-Object { -not $_.PSIsContainer -or ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) })
+        if ($remaining.Count -gt 0) {
+            throw "既存の配布・検証出力があります。今回の対象を確認し、Prunlet CLIで清掃してから同じ作業先で再開してください: $outputPath"
         }
     }
 }
@@ -238,7 +230,7 @@ if ($PreflightOnly) {
     return
 }
 
-Remove-WorkDirectory
+Assert-CleanWorkOutputs
 New-Item -ItemType Directory -Path $ArtifactsDir -Force | Out-Null
 
 $publishPlans = @(
