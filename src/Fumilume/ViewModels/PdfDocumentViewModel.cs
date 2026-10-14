@@ -14,15 +14,19 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
     private bool _disposed;
     private Size _viewport;
     private Size _pageSize;
+    private readonly PdfTextService? _textService;
+    private int _textPageIndex = -1;
 
     internal PdfDocumentViewModel(
         string filePath,
         IPdfRenderer renderer,
-        Func<WorkspaceTabViewModel, Task> closeAsync)
+        Func<WorkspaceTabViewModel, Task> closeAsync,
+        PdfTextService? textService = null)
         : base(closeAsync)
     {
         FilePath = Path.GetFullPath(filePath);
         _renderer = renderer;
+        _textService = textService;
     }
 
     public static async Task<PdfDocumentViewModel> OpenAsync(
@@ -34,7 +38,7 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 #else
         var renderer = await MacPdfRenderer.OpenAsync(filePath);
 #endif
-        var viewModel = new PdfDocumentViewModel(filePath, renderer, closeAsync);
+        var viewModel = new PdfDocumentViewModel(filePath, renderer, closeAsync, new PdfTextService(filePath));
         await viewModel.RenderCurrentPageAsync();
         return viewModel;
     }
@@ -76,6 +80,62 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
     [ObservableProperty]
     private string? _errorMessage;
+
+    [ObservableProperty]
+    private PdfTextPage? _textPage;
+
+    [ObservableProperty]
+    private string? _textSelectionStatus;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedText))]
+    [NotifyPropertyChangedFor(nameof(HasTextSelection))]
+    private int _selectionStart = -1;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedText))]
+    [NotifyPropertyChangedFor(nameof(HasTextSelection))]
+    private int _selectionEnd = -1;
+
+    public bool HasTextSelection => TextPage is { Characters.Count: > 0 }
+        && SelectionStart >= 0 && SelectionEnd >= 0;
+
+    public string SelectedText
+    {
+        get
+        {
+            if (!HasTextSelection || TextPage is not { } page) return string.Empty;
+            var start = Math.Min(SelectionStart, SelectionEnd);
+            var end = Math.Min(Math.Max(SelectionStart, SelectionEnd), page.Characters.Count - 1);
+            var text = new System.Text.StringBuilder();
+            for (var index = start; index <= end; index++)
+            {
+                var character = page.Characters[index];
+                if (index > start) text.Append(character.SeparatorBefore);
+                text.Append(character.Text);
+            }
+            return text.ToString();
+        }
+    }
+
+    internal void SelectText(int start, int end)
+    {
+        if (TextPage is not { Characters.Count: > 0 } page) return;
+        SelectionStart = Math.Clamp(start, 0, page.Characters.Count - 1);
+        SelectionEnd = Math.Clamp(end, 0, page.Characters.Count - 1);
+    }
+
+    public void ClearSelection()
+    {
+        SelectionStart = -1;
+        SelectionEnd = -1;
+    }
+
+    [RelayCommand]
+    private void SelectAllText()
+    {
+        if (TextPage is { Characters.Count: > 0 } page) SelectText(0, page.Characters.Count - 1);
+    }
 
     public string PageStatus => $"{CurrentPage:N0} / {PageCount:N0}";
 
@@ -149,6 +209,8 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         }
 
         CurrentPage = target;
+        ClearSelection();
+        TextPage = null;
         await RenderCurrentPageAsync();
     }
 
@@ -172,16 +234,17 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         _renderCancellation?.Dispose();
         _renderCancellation = new CancellationTokenSource();
         var token = _renderCancellation.Token;
+        var pageIndex = CurrentPage - 1;
         IsLoading = true;
         ErrorMessage = null;
         NotifyCommandStates();
         try
         {
-            _pageSize = _renderer.GetPageSize(CurrentPage - 1);
+            _pageSize = _renderer.GetPageSize(pageIndex);
             Zoom = GetFitZoom();
             OnPropertyChanged(nameof(PageWidth));
             OnPropertyChanged(nameof(PageHeight));
-            var bitmap = await _renderer.RenderAsync(CurrentPage - 1, Zoom, token);
+            var bitmap = await _renderer.RenderAsync(pageIndex, Zoom, token);
             if (token.IsCancellationRequested)
             {
                 bitmap.Dispose();
@@ -190,6 +253,32 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
             PageImage?.Dispose();
             PageImage = bitmap;
+            if (_textService is not null && (_textPageIndex != pageIndex || TextPage is null))
+            {
+                TextSelectionStatus = "文字情報を読み込んでいます…";
+                try
+                {
+                    var textPage = await _textService.ReadPageAsync(pageIndex, token);
+                    token.ThrowIfCancellationRequested();
+                    ClearSelection();
+                    TextPage = textPage;
+                    _textPageIndex = pageIndex;
+                    TextSelectionStatus = textPage.Characters.Count == 0
+                        ? "このページに選択できる文字はありません"
+                        : null;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    if (!token.IsCancellationRequested)
+                    {
+                        TextSelectionStatus = ex is UnauthorizedAccessException
+                            ? ex.Message
+                            : "文字情報を読み込めないため、このページでは選択できません";
+                        AppLogger.For<PdfDocumentViewModel>().Error($"PDF の文字情報を読み込めませんでした: {FilePath}", ex);
+                    }
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -233,6 +322,9 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         _renderCancellation?.Dispose();
         PageImage?.Dispose();
         PageImage = null;
+        TextPage = null;
+        ClearSelection();
+        _textService?.Dispose();
         _renderer.Dispose();
     }
 }

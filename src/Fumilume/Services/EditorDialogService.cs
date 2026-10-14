@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
@@ -9,6 +10,10 @@ namespace Fumilume.Services;
 
 public sealed class EditorDialogService(Window owner) : IEditorDialogService
 {
+    public Task CopyTextAsync(string text)
+        => (owner.Clipboard ?? throw new InvalidOperationException("クリップボードを利用できません。"))
+            .SetTextAsync(text);
+
     private static readonly FilePickerFileType SupportedFileType = new("対応ファイル")
     {
         Patterns = SupportedFileTypes.All

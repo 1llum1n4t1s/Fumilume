@@ -151,6 +151,21 @@ public sealed partial class MainWindowViewModel
         yield return Entry(ViewCategory, "設定を開く", PrimaryShortcut(","), () => EnsureSettingsTab(select: true));
         if (SelectedPdf is { } pdf)
         {
+            foreach (var definition in EditorCommandCatalog.PdfCommands)
+            {
+                if (pdf.TextPage is not { Characters.Count: > 0 }
+                    || (definition.Id == "CopyPdfSelection" && !pdf.HasTextSelection)) continue;
+                var gesture = OperatingSystem.IsMacOS()
+                    ? definition.Gesture?.Replace("Ctrl+", "⌘", StringComparison.Ordinal)
+                    : definition.Gesture;
+                yield return Entry(definition.Category, definition.Title, gesture,
+                    () =>
+                    {
+                        if (definition.Id == "CopyPdfSelection") return CopyPdfSelectionAsync();
+                        pdf.SelectAllTextCommand.Execute(null);
+                        return Task.CompletedTask;
+                    });
+            }
             yield return Entry(ViewCategory, "PDF を高さに合わせる", null, () => pdf.FitHeightCommand.ExecuteAsync(null));
             yield return Entry(ViewCategory, "PDF を幅に合わせる", null, () => pdf.FitWidthCommand.ExecuteAsync(null));
         }

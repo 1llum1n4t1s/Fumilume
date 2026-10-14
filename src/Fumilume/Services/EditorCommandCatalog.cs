@@ -97,6 +97,12 @@ public static class EditorCommandCatalog
     ];
 
     public const string EditCategory = "編集";
+
+    public static IReadOnlyList<WorkspaceCommandDefinition> PdfCommands { get; } =
+    [
+        new("CopyPdfSelection", EditCategory, "PDF の選択した文字をコピー", "Ctrl+C"),
+        new("SelectAllPdfText", EditCategory, "PDF のページ内の文字をすべて選択", "Ctrl+A"),
+    ];
     public const string ConvertCategory = "変換";
     public const string InsertCategory = "挿入";
 

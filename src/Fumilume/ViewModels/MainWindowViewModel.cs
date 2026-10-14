@@ -996,6 +996,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     partial void OnSelectedTabChanged(WorkspaceTabViewModel? oldValue, WorkspaceTabViewModel? newValue)
     {
+        if (oldValue is PdfDocumentViewModel oldPdf) oldPdf.PropertyChanged -= OnPdfSelectionPropertyChanged;
+        if (newValue is PdfDocumentViewModel newPdf) newPdf.PropertyChanged += OnPdfSelectionPropertyChanged;
+        CopyPdfSelectionCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
         NotifyDocumentCommandsChanged();

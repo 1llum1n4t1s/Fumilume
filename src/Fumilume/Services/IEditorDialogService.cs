@@ -31,4 +31,6 @@ public interface IEditorDialogService
     Task<GrepQuery?> PickGrepQueryAsync(GrepQuery initial);
 
     Task CheckForUpdatesAsync(bool manually);
+
+    Task CopyTextAsync(string text) => throw new NotSupportedException("クリップボードを利用できません。");
 }

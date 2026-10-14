@@ -88,7 +88,7 @@ Avalonia のドロップイベントは Bubble のため、`TextArea` のクラ�
 
 ### PDF
 
-`.pdf` は Windows では `WindowsPdfRenderer` が `Windows.Data.Pdf`、macOS では `MacPdfRenderer` が Core Graphics で開き、要求ページをビットマップへ変換します。`PdfDocumentViewModel` はページ移動、25～400%の手動拡大率、幅・高さへのフィットを管理し、古いレンダリング結果とストリームを破棄します。新規に開いたPDFは幅に合わせ、Viewから受け取る余白を除いたViewportと各ページの寸法で倍率を再計算します。フィット倍率は手動倍率の範囲外も許容し、画像の確保量はレンダラーの上限で抑え、表示寸法はページの縦横比を維持します。セッションには表示方式も保存し、旧形式の正の倍率は固定倍率として復元します。PDFは閲覧専用で、テキスト抽出・編集・保存は責務に含めません。
+`.pdf` は Windows では `WindowsPdfRenderer` が `Windows.Data.Pdf`、macOS では `MacPdfRenderer` が Core Graphics で開き、要求ページをビットマップへ変換します。`PdfDocumentViewModel` はページ移動、25～400%の手動拡大率、幅・高さへのフィットを管理し、古いレンダリング結果とストリームを破棄します。新規に開いたPDFは幅に合わせ、Viewから受け取る余白を除いたViewportと各ページの寸法で倍率を再計算します。フィット倍率は手動倍率の範囲外も許容し、画像の確保量はレンダラーの上限で抑え、表示寸法はページの縦横比を維持します。セッションには表示方式も保存し、旧形式の正の倍率は固定倍率として復元します。PDFは閲覧専用で、編集・保存の対象にはしません。`PdfTextService` が純C#のPdfPigから表示中のページの文字と位置を抽出し、`PdfTextSelectionLayer` が画像と同じ寸法へ座標を対応させて選択範囲を重ねます。選択状態は `PdfDocumentViewModel` が保持し、コピーは `IEditorDialogService` 経由でクリップボードへ渡します。ページ変更で選択を解除し、ズームでは維持します。抽出はUIスレッド外で直列化し、取消・タブ閉鎖後の結果は破棄します。文字がないページやコピー禁止のPDFは選択せず、抽出失敗でも画像の閲覧を維持して状態を表示します。複雑な段組や文字対応情報がないPDFでは、コピー順序や文字を完全に復元できない場合があります。
 
 ### 設定
 
@@ -174,7 +174,7 @@ Windows・macOSの配布スクリプトが使うWranglerの固定版は `scripts
 
 アプリ側の `UpdateService` は `VelopackUpdateDialog.Avalonia` を介して更新確認・ダウンロード・適用・再起動を行います。配布側は `scripts/release-local.ps1` が x64 / ARM64 を順番にNative AOT発行し、コード署名、Velopackパッケージ化、Cloudflare R2へのアップロード、固定URLのキャッシュパージ、公開ファイルの版・ハッシュ・サイズ・署名照合を行います。
 
-Windowsの発行前には、導入済みVisual Studioの`vcvarsall.bat`でRIDに対応するC++環境を初期化し、Native AOTへ環境内のリンカー・ライブラリを渡します。配布スクリプトは共通の `WorkRoot`（ユーザーTemp配下の `Codex/Fumilume/<task-id>`）へツール・配布物・検証環境を出力し、`RecordRoot`（LocalAppData配下の `Codex/TaskArtifacts/Fumilume/<task-id>`）へ最小限の再開記録と清掃台帳を残します。事前確認、本実行、再開には同じ2つのパスを指定します。配布物は `packages/` に置き、リポジトリ、Codexユーザーディレクトリ、リンクを含む保存先と禁止名のフォルダーを作成前に拒否します。Mac CIもrunnerの外部Tempへ出力し、同じ場所から配布物と検証記録を収集します。配布出力の清掃はユーザー環境の`.codex/scripts/Remove-CodexItem.ps1`でごみ箱への移動と今回分だけの完全消去を行います。ヘルパーがない場合や清掃が失敗した場合は直接削除へ切り替えません。
+Windowsの発行前には、導入済みVisual Studioの`vcvarsall.bat`でRIDに対応するC++環境を初期化し、Native AOTへ環境内のリンカー・ライブラリを渡します。配布スクリプトは共通の `WorkRoot`（ユーザーTemp配下の `Codex/Fumilume/<task-id>`）へツール・配布物・検証環境を出力し、`RecordRoot`（LocalAppData配下の `Codex/TaskArtifacts/Fumilume/<task-id>`）へ最小限の再開記録と清掃台帳を残します。事前確認、本実行、再開には同じ2つのパスを指定します。配布物は `packages/` に置き、リポジトリ、Codexユーザーディレクトリ、リンクを含む保存先と禁止名のフォルダーを作成前に拒否します。Mac CIもrunnerの外部Tempへ出力し、同じ場所から配布物と検証記録を収集します。配布出力の清掃は検証済みの作業範囲に限定し、実行担当がPrunlet CLIをCMDから直接呼んでファイル単位で行います。リリーススクリプトは既存の配布・検証ファイルが残る場合に停止し、清掃してから同じ作業先で再開します。清掃に失敗した対象は残存と理由を記録します。
 
 更新適用では updater の起動前に未保存文書の確認とセッション保存を完了し、取消・保存失敗時は適用も終了も行いません。ダウンロード済み更新の起動時自動適用は無効にし、次回も更新UIから同じ保存境界を通します。
 
@@ -221,7 +221,7 @@ Apple Silicon向けは `.github/workflows/macos-release.yml` のarm64 Macで `sc
 
 - **Avalonia + AvaloniaEdit**: Windows と macOS で編集基盤を共有し、OS 固有のウィンドウ・ファイル操作だけを分ける。
 - **MVVMとサービス境界**: タブ・コマンド状態をViewModelで検証し、ファイルやOS依存処理を差し替え可能にする。Avalonia固有の描画・入力接続だけはView側へ残す。
-- **OS 標準の PDF 描画**: Windows は `Windows.Data.Pdf`、macOS は Core Graphics を使い、追加PDFランタイムを同梱しない。閲覧以外のPDF機能は持たない。
+- **OS 標準の PDF 描画**: Windows は `Windows.Data.Pdf`、macOS は Core Graphics を使い、追加のネイティブPDFランタイムを同梱しない。文字選択・コピーに必要な抽出だけをPdfPigで共通化する。
 - **WebViewを使わないMarkdown表示**: 外部ブラウザランタイムやHTML実行を避け、テーマと入力境界をAvalonia内で完結させる。対応構文はパーサーとViewが実装する範囲に限られる。
 - **原子的なローカル保存**: 一時ファイルと置き換えでクラッシュ時の破損を抑える。文書の `.bak` は利用者設定で明示的に有効化した場合だけ作る。
 - **自己完結Native AOT配布**: .NETランタイム不要の起動と配布を優先する。RIDごとの発行・署名・検証が必要になるため、リリース処理は逐次実行する。

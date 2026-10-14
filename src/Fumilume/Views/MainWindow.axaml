@@ -549,8 +549,13 @@
                             <Grid x:Name="PdfPageContainer" Margin="24">
                                 <Border HorizontalAlignment="Center" VerticalAlignment="Top"
                                         Background="White" BoxShadow="0 4 18 0 #40000000">
-                                    <Image x:Name="PdfPageImage" Source="{Binding SelectedPdf.PageImage}" Stretch="Fill"
-                                           Width="{Binding SelectedPdf.PageWidth}" Height="{Binding SelectedPdf.PageHeight}" />
+                                    <Grid Width="{Binding SelectedPdf.PageWidth}" Height="{Binding SelectedPdf.PageHeight}">
+                                        <Image x:Name="PdfPageImage" Source="{Binding SelectedPdf.PageImage}" Stretch="Fill"
+                                               Width="{Binding SelectedPdf.PageWidth}" Height="{Binding SelectedPdf.PageHeight}" />
+                                        <v:PdfTextSelectionLayer x:Name="PdfTextSelectionLayer" Document="{Binding SelectedPdf}"
+                                                                CopyCommand="{Binding CopyPdfSelectionCommand}"
+                                                                AutomationProperties.Name="PDF の文字選択" />
+                                    </Grid>
                                 </Border>
                                 <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
                                            IsVisible="{Binding SelectedPdf.IsLoading}"
@@ -564,7 +569,7 @@
                         <Border Grid.Row="2" Background="{DynamicResource ContentBg}"
                                 BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0">
                             <Grid Margin="16,0,10,0" ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" FontSize="12"
+                                <TextBlock Grid.Column="0" Text="{Binding SelectedPdf.TextSelectionStatus}" FontSize="12"
                                            Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1" x:Name="PdfRendererLabel" Text="Windows 標準 PDF レンダラー" FontSize="12"
                                            Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" />

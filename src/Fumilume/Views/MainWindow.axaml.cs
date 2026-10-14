@@ -893,6 +893,22 @@ public sealed partial class MainWindow : Window
                 return;
         }
         var primaryOnly = args.KeyModifiers == (UsesMacPlatformConventions ? KeyModifiers.Meta : KeyModifiers.Control);
+        if (_viewModel.SelectedPdf is { } pdf && !_viewModel.IsCommandPaletteOpen
+            && FocusManager?.GetFocusedElement() is not TextBox)
+        {
+            if (primaryOnly && args.Key == Key.C)
+            {
+                _viewModel.CopyPdfSelectionCommand.Execute(null);
+                args.Handled = true;
+                return;
+            }
+            if (primaryOnly && args.Key == Key.A)
+            {
+                pdf.SelectAllTextCommand.Execute(null);
+                args.Handled = true;
+                return;
+            }
+        }
         if (_formatDocumentChordPending && primaryOnly && args.Key == Key.O)
         {
             _formatDocumentChordPending = false;
