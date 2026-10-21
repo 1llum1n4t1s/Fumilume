@@ -25,7 +25,7 @@ jobs:
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-        dotnet test --project tests/Fumilume.Tests/Fumilume.Tests.csproj -c Release --no-build
+        dotnet test --project tests/Fumilume.Tests/Fumilume.Tests.csproj -c Release --no-restore
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
   macos:
