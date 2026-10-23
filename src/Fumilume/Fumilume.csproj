@@ -5,6 +5,7 @@
     <Optimize>true</Optimize>
     <DebugType>portable</DebugType>
     <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <NoWarn>$(NoWarn);IL3053</NoWarn>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(FumilumeTargetMac)' != 'true'">win-x64</RuntimeIdentifier>

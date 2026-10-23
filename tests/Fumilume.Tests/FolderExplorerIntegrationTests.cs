@@ -299,7 +299,7 @@ public sealed class FolderExplorerIntegrationTests(HeadlessAppFixture fixture)
 
             foreach (var kind in new[] { SidePanelKind.Tabs, SidePanelKind.Outline, SidePanelKind.Bookmarks })
             {
-                scope.ViewModel.SidePanel = kind;
+                scope.ViewModel.SidePanel.Kind = kind;
                 scope.Window.KeyPress(Key.B, RawInputModifiers.Control, default, null);
                 Dispatcher.UIThread.RunJobs();
                 scope.Window.UpdateLayout();
@@ -316,7 +316,7 @@ public sealed class FolderExplorerIntegrationTests(HeadlessAppFixture fixture)
                 AssertLayout(scope.Window);
                 Assert.Equal(splitRatio, top.Bounds.Height / (top.Bounds.Height + bottom.Bounds.Height), precision: 2);
             }
-            scope.ViewModel.SidePanel = SidePanelKind.Tabs;
+            scope.ViewModel.SidePanel.Kind = SidePanelKind.Tabs;
             Assert.Equal(text, scope.ViewModel.SelectedDocument!.Text);
             Complete(scope.ViewModel.PersistSessionStateAsync());
             Assert.Equal(splitRatio, SessionStateService.Load().SidebarSplitRatio, precision: 2);

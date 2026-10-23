@@ -49,8 +49,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _fileChangeMonitor = fileChangeMonitor;
         Options = new AppOptionsViewModel(settings ?? new AppSettings());
 
-        // 生成プロパティ経由で入れると設定へ書き戻しが走るため、ここは補助フィールドへ直接入れる。
-        _sidePanel = Options.SidePanel;
+        SidePanel = new SidePanelViewModel(Options.SidePanel);
+        SidePanel.KindChanged += Options.RememberSidePanel;
+        SidePanel.StatusChanged += message => StatusMessage = message;
         NewDocument();
     }
 
@@ -59,6 +60,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     /// <summary>エディタ本体と設定タブが共有するオプション。</summary>
     public AppOptionsViewModel Options { get; }
+
+    /// <summary>面の選択・解析・選択文書の購読をまとめて所有する。</summary>
+    public SidePanelViewModel SidePanel { get; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
@@ -131,7 +135,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _sessionRecoveryDeferred = sessionLoad.RecoveryDeferred;
         _pendingSettingsTabOpen = session.SettingsTabOpen;
         await RestoreSessionAsync(session);
-        FolderTreeWidth = double.IsFinite(session.FolderTreeWidth)
+        _folderTreeWidth = double.IsFinite(session.FolderTreeWidth)
             ? Math.Clamp(session.FolderTreeWidth, 140, 400) : 240;
         SidebarSplitRatio = double.IsFinite(session.SidebarSplitRatio)
             ? Math.Clamp(session.SidebarSplitRatio, 0.1, 0.9) : 0.5;
@@ -1002,7 +1006,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
         NotifyDocumentCommandsChanged();
-        OnSelectedTabChangedForSidePanel();
+        SidePanel.ConnectDocument(SelectedDocument);
         OnFolderSelectedTabChanged();
     }
 
@@ -1057,11 +1061,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(CanRedo));
             RedoCommand.NotifyCanExecuteChanged();
-        }
-
-        if (args.PropertyName == nameof(DocumentViewModel.Text))
-        {
-            OnSelectedTextChangedForSidePanel();
         }
     }
 

@@ -90,16 +90,25 @@ public static partial class OutlineService
 
         while (next is not null || lines.MoveNext())
         {
-            var trimmed = (next ?? lines.Current).Trim();
+            var current = next ?? lines.Current;
+            var trimmed = current.Trim();
             next = null;
             lineNumber++;
             if (lineNumber <= start) continue;
 
             if (FencePattern().Match(trimmed) is { Success: true } fenceMatch)
             {
-                // 開いている記号と同じ種類でだけ閉じる（``` の中の ~~~ は本文）。
-                var kind = fenceMatch.Value[..1];
-                fence = fence is null ? kind : fence == kind ? null : fence;
+                // 終端は同じ記号を開始以上の本数並べ、後ろに空白・タブだけを許す。
+                var marker = fenceMatch.Value;
+                if (fence is null)
+                {
+                    fence = marker;
+                }
+                else if (marker[0] == fence[0] && marker.Length >= fence.Length
+                    && current.TrimStart()[marker.Length..].All(character => character is ' ' or '\t'))
+                {
+                    fence = null;
+                }
                 continue;
             }
 

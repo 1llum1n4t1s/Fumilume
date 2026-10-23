@@ -13,6 +13,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     private string? _savedText = string.Empty;
     private DocumentEncoding _savedEncoding = DocumentEncoding.Utf8;
     private string _savedNewLine = Environment.NewLine;
+    // 保存中に編集された場合だけ、正規化前の編集本文へ戻る位置を探す。
+    private string? _pendingSavedEditorText;
     private string? _csvPreviewSource;
     private CsvDocument? _csvPreview;
 
@@ -24,6 +26,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     {
         UntitledName = untitledName;
         EditorDocument.TextChanged += OnEditorDocumentTextChanged;
+        EditorDocument.UpdateFinished += OnEditorDocumentUpdateFinished;
         EditorDocument.UndoStack.PropertyChanged += OnUndoStackPropertyChanged;
         EditorDocument.UndoStack.MarkAsOriginalFile();
         UpdateTextStatistics();
@@ -189,6 +192,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             Text = content.Text;
             CaretIndex = 0;
             _restoredUnsaved = false;
+            _pendingSavedEditorText = null;
             _isMissingOnDisk = false;
             IsModified = false;
         }
@@ -224,6 +228,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             EditorDocument.UndoStack.ClearAll();
             UpdateTextStatistics();
             _savedText = null;
+            _pendingSavedEditorText = null;
             _restoredUnsaved = true;
             IsModified = true;
         }
@@ -235,21 +240,24 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     /// <summary>実際に書き込んだスナップショットだけを保存基準にし、保存待ちの追加入力は未保存として残す。</summary>
     internal void MarkSaved(string path, TextDocumentContent savedContent, object savedVersion)
     {
-        var unchangedDuringSave = ReferenceEquals(EditorDocument.Version, savedVersion)
-            && Encoding == savedContent.Encoding
-            && string.Equals(NewLine, savedContent.NewLine, StringComparison.Ordinal);
+        var textUnchangedDuringSave = ReferenceEquals(EditorDocument.Version, savedVersion);
         FilePath = Path.GetFullPath(path);
         _savedEncoding = savedContent.Encoding;
         _savedNewLine = savedContent.NewLine;
         _savedText = DocumentFileService.NormalizeNewLines(savedContent.Text, savedContent.NewLine);
         _isMissingOnDisk = false;
-        if (unchangedDuringSave)
+        _restoredUnsaved = false;
+        _pendingSavedEditorText = textUnchangedDuringSave ? null : savedContent.Text;
+        if (textUnchangedDuringSave)
         {
             EditorDocument.UndoStack.MarkAsOriginalFile();
         }
+        else
+        {
+            TryRestoreSavedEditorBaseline();
+        }
 
-        _restoredUnsaved = !unchangedDuringSave;
-        IsModified = !unchangedDuringSave;
+        UpdateModifiedState();
     }
 
     /// <summary>監視通知が自分自身の保存に由来する場合、ディスク内容は保存時の基準値と一致する。</summary>
@@ -427,6 +435,27 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         }
     }
 
+    private void OnEditorDocumentUpdateFinished(object? sender, EventArgs args)
+    {
+        if (!_isLoading && _pendingSavedEditorText is not null)
+        {
+            // Undo の位置が確定した後で印を移し、履歴の単位は変更しない。
+            TryRestoreSavedEditorBaseline();
+        }
+    }
+
+    private void TryRestoreSavedEditorBaseline()
+    {
+        if (_pendingSavedEditorText is { } savedEditorText
+            && EditorDocument.TextLength == savedEditorText.Length
+            && string.Equals(Text, savedEditorText, StringComparison.Ordinal))
+        {
+            _pendingSavedEditorText = null;
+            EditorDocument.UndoStack.MarkAsOriginalFile();
+            UpdateModifiedState();
+        }
+    }
+
     partial void OnCaretIndexChanged(int value)
     {
         OnPropertyChanged(nameof(LineColumnText));
@@ -452,7 +481,8 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     }
 
     private void UpdateModifiedState()
-        => IsModified = _restoredUnsaved || _isMissingOnDisk || !EditorDocument.UndoStack.IsOriginalFile
+        => IsModified = _restoredUnsaved || _isMissingOnDisk || _pendingSavedEditorText is not null
+            || !EditorDocument.UndoStack.IsOriginalFile
             || Encoding != _savedEncoding || NewLine != _savedNewLine;
 
     private void UpdateTextStatistics()

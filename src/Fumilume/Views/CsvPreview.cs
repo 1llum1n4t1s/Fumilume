@@ -1081,7 +1081,6 @@ public sealed class CsvPreview : UserControl
     }
 
     internal int RenderedRowCount => _surface.Document.Rows.Count;
-    internal int RenderedColumnCount => _surface.Document.DisplayedColumnCount;
     internal string? TruncationMessage => _limitMessage.IsVisible ? _limitMessage.Text : null;
     internal string EditStatus => _editHint.Text ?? string.Empty;
     internal (bool Rows, int Index, int Count)? SelectedHeaders => _surface.ViewState.SelectionKind switch
@@ -1101,8 +1100,6 @@ public sealed class CsvPreview : UserControl
     internal Task PendingTableOperation => _tableOperationTask ?? Task.CompletedTask;
     internal bool IsRenderPending => _needsRender;
     internal Task PendingRender => _renderTask ?? Task.CompletedTask;
-    internal double GetCsvColumnWidth(int index) => _surface.ViewState.GetColumnWidth(index);
-    internal double GetCsvRowHeight(int index) => _surface.ViewState.GetRowHeight(index);
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -1470,12 +1467,15 @@ public sealed class CsvPreview : UserControl
         private static readonly Cursor RowResizeCursor = new(StandardCursorType.SizeNorthSouth);
         private readonly Canvas _cells = new();
         private readonly Canvas _headers = new();
+        private readonly Dictionary<(int Row, int Column), Border> _visibleCells = new();
+        private readonly Dictionary<(CsvSelectionKind Kind, int Index), Border> _visibleHeaders = new();
         private readonly DrawingSurface _drawingSurface;
         private CsvDocument _document = new([], 0, 0);
         private double[] _columnOffsets = [0];
         private double[] _rowOffsets = [0];
         private ResizeState? _resize;
         private bool _selectingCells;
+        private bool _cellContentStale = true;
 
         public CsvGridSurface()
         {
@@ -1505,6 +1505,7 @@ public sealed class CsvPreview : UserControl
         public void SetDocument(CsvDocument document, CsvViewState viewState)
         {
             _document = document;
+            _cellContentStale = true;
             ViewState = viewState;
             RebuildOffsets();
             RefreshVisibleCells();
@@ -1554,14 +1555,35 @@ public sealed class CsvPreview : UserControl
 
         public void RefreshVisibleCells()
         {
-            _cells.Children.Clear();
-            _headers.Children.Clear();
             if (_document.Rows.Count == 0 || _document.DisplayedColumnCount == 0)
             {
+                _cells.Children.Clear();
+                _headers.Children.Clear();
+                _visibleCells.Clear();
+                _visibleHeaders.Clear();
                 return;
             }
 
             var (firstColumn, lastColumn, firstRow, lastRow) = GetVisibleRange();
+            foreach (var key in _visibleCells.Keys.ToArray())
+            {
+                if (key.Row < firstRow || key.Row >= lastRow || key.Column < firstColumn || key.Column >= lastColumn)
+                {
+                    _cells.Children.Remove(_visibleCells[key]);
+                    _visibleCells.Remove(key);
+                }
+            }
+            foreach (var key in _visibleHeaders.Keys.ToArray())
+            {
+                var visible = key.Kind == CsvSelectionKind.Columns
+                    ? key.Index >= firstColumn && key.Index < lastColumn
+                    : key.Index >= firstRow && key.Index < lastRow;
+                if (!visible)
+                {
+                    _headers.Children.Remove(_visibleHeaders[key]);
+                    _visibleHeaders.Remove(key);
+                }
+            }
             var offset = ScrollOwner?.Offset ?? default;
             var viewport = GetViewport();
             _cells.Clip = new RectangleGeometry(new Rect(
@@ -1577,71 +1599,102 @@ public sealed class CsvPreview : UserControl
                 for (var columnIndex = firstColumn; columnIndex < lastColumn; columnIndex++)
                 {
                     var value = columnIndex < row.Count ? row[columnIndex] : string.Empty;
-                    var text = new SelectableTextBlock
+                    var created = !_visibleCells.TryGetValue((rowIndex, columnIndex), out var cell);
+                    if (created)
                     {
-                        Text = NormalizeCellText(PreviewText(value, 512)),
-                        FontFamily = CellTypeface.FontFamily,
-                        FontSize = 13,
-                        TextWrapping = TextWrapping.NoWrap,
-                        TextTrimming = TextTrimming.CharacterEllipsis,
-                        Foreground = foreground,
-                        Width = Math.Max(1, GetColumnWidth(columnIndex) - 12),
-                        Height = Math.Max(1, GetRowHeight(rowIndex) - 4),
-                    };
-                    ToolTip.SetTip(text, PreviewText(value, 4096));
-                    var cell = new Border
+                        cell = CreateCell(rowIndex, columnIndex);
+                        _visibleCells.Add((rowIndex, columnIndex), cell);
+                        _cells.Children.Insert(
+                            (rowIndex - firstRow) * (lastColumn - firstColumn) + columnIndex - firstColumn,
+                            cell);
+                    }
+                    var text = (SelectableTextBlock)cell!.Child!;
+                    if (created || _cellContentStale)
                     {
-                        Background = Brushes.Transparent, Focusable = true,
-                        Width = GetColumnWidth(columnIndex), Height = GetRowHeight(rowIndex),
-                        Padding = new Thickness(6, 4, 6, 0), Child = text,
-                        ContextMenu = CreateCellMenu(),
-                    };
-                    var selectedRow = rowIndex;
-                    var selectedColumn = columnIndex;
-                    AutomationProperties.SetName(cell, $"{GetColumnName(columnIndex)}{rowIndex + 1}");
-                    cell.AddHandler(PointerPressedEvent,
-                        (_, args) => CellPointerPressed(cell, selectedRow, selectedColumn, args),
-                        RoutingStrategies.Tunnel);
-                    cell.KeyDown += (_, args) =>
-                    {
-                        if (args.Key is not (Key.Enter or Key.F2))
-                        {
-                            return;
-                        }
-                        ViewState.SelectCell(selectedRow, selectedColumn, false);
-                        SelectionChanged?.Invoke();
-                        InvalidateGrid();
-                        CellEditRequested?.Invoke(selectedRow, selectedColumn);
-                        args.Handled = true;
-                    };
+                        text.Text = NormalizeCellText(PreviewText(value, 512));
+                        ToolTip.SetTip(text, PreviewText(value, 4096));
+                    }
+                    text.FontFamily = CellTypeface.FontFamily;
+                    text.FontSize = 13;
+                    text.Foreground = foreground;
+                    text.Width = Math.Max(1, GetColumnWidth(columnIndex) - 12);
+                    text.Height = Math.Max(1, GetRowHeight(rowIndex) - 4);
+                    cell.Width = GetColumnWidth(columnIndex);
+                    cell.Height = GetRowHeight(rowIndex);
                     Canvas.SetLeft(cell, RowHeaderWidth + _columnOffsets[columnIndex]);
                     Canvas.SetTop(cell, HeaderHeight + _rowOffsets[rowIndex]);
-                    _cells.Children.Add(cell);
                 }
             }
 
             for (var columnIndex = firstColumn; columnIndex < lastColumn; columnIndex++)
             {
-                AddHeader(CsvSelectionKind.Columns, columnIndex, new Rect(
+                AddHeader(CsvSelectionKind.Columns, columnIndex, columnIndex - firstColumn, new Rect(
                     RowHeaderWidth + _columnOffsets[columnIndex], offset.Y,
                     GetColumnWidth(columnIndex), HeaderHeight));
             }
             for (var rowIndex = firstRow; rowIndex < lastRow; rowIndex++)
             {
-                AddHeader(CsvSelectionKind.Rows, rowIndex, new Rect(
+                AddHeader(CsvSelectionKind.Rows, rowIndex, lastColumn - firstColumn + rowIndex - firstRow, new Rect(
                     offset.X, HeaderHeight + _rowOffsets[rowIndex],
                     RowHeaderWidth, GetRowHeight(rowIndex)));
             }
+            _cellContentStale = false;
         }
 
-        private void AddHeader(CsvSelectionKind kind, int index, Rect bounds)
+        private Border CreateCell(int selectedRow, int selectedColumn)
+        {
+            var text = new SelectableTextBlock
+            {
+                FontFamily = CellTypeface.FontFamily,
+                FontSize = 13,
+                TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+            var cell = new Border
+            {
+                Background = Brushes.Transparent, Focusable = true,
+                Padding = new Thickness(6, 4, 6, 0), Child = text,
+                ContextMenu = CreateCellMenu(),
+            };
+            AutomationProperties.SetName(cell, $"{GetColumnName(selectedColumn)}{selectedRow + 1}");
+            cell.AddHandler(PointerPressedEvent,
+                (_, args) => CellPointerPressed(cell, selectedRow, selectedColumn, args),
+                RoutingStrategies.Tunnel);
+            cell.KeyDown += (_, args) =>
+            {
+                if (args.Key is not (Key.Enter or Key.F2))
+                {
+                    return;
+                }
+                ViewState.SelectCell(selectedRow, selectedColumn, false);
+                SelectionChanged?.Invoke();
+                InvalidateGrid();
+                CellEditRequested?.Invoke(selectedRow, selectedColumn);
+                args.Handled = true;
+            };
+            return cell;
+        }
+
+        private void AddHeader(CsvSelectionKind kind, int index, int displayIndex, Rect bounds)
+        {
+            if (!_visibleHeaders.TryGetValue((kind, index), out var header))
+            {
+                header = CreateHeader(kind, index);
+                _visibleHeaders.Add((kind, index), header);
+                _headers.Children.Insert(displayIndex, header);
+            }
+            header.Width = bounds.Width;
+            header.Height = bounds.Height;
+            Canvas.SetLeft(header, bounds.X);
+            Canvas.SetTop(header, bounds.Y);
+        }
+
+        private Border CreateHeader(CsvSelectionKind kind, int index)
         {
             var header = new Border
             {
                 Background = Brushes.Transparent,
                 Focusable = true,
-                Width = bounds.Width,
-                Height = bounds.Height,
                 ContextMenu = CreateHeaderMenu(kind),
             };
             AutomationProperties.SetName(header, kind == CsvSelectionKind.Columns
@@ -1650,9 +1703,7 @@ public sealed class CsvPreview : UserControl
             header.AddHandler(PointerPressedEvent, (_, args) => HeaderPointerPressed(header, kind, index, args), RoutingStrategies.Tunnel);
             header.AddHandler(PointerMovedEvent, (_, args) => HeaderPointerMoved(header, kind, args), RoutingStrategies.Tunnel);
             header.AddHandler(PointerReleasedEvent, (_, args) => HeaderPointerReleased(args), RoutingStrategies.Tunnel);
-            Canvas.SetLeft(header, bounds.X);
-            Canvas.SetTop(header, bounds.Y);
-            _headers.Children.Add(header);
+            return header;
         }
 
         private ContextMenu CreateHeaderMenu(CsvSelectionKind kind)

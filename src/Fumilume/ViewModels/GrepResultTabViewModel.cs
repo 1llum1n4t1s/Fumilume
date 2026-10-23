@@ -117,12 +117,9 @@ public sealed partial class GrepResultTabViewModel : WorkspaceTabViewModel, IDis
 
     private static string Describe(GrepResult result)
     {
-        if (result.Matches.Count == 0)
-        {
-            return $"見つかりませんでした（{result.SearchedFiles:N0} ファイルを検索）";
-        }
-
-        var status = $"{result.Matches.Count:N0} 件（{result.SearchedFiles:N0} ファイル）";
+        var status = result.Matches.Count == 0
+            ? $"見つかりませんでした（{result.SearchedFiles:N0} ファイルを検索）"
+            : $"{result.Matches.Count:N0} 件（{result.SearchedFiles:N0} ファイル）";
         if (result.ReachedLimit)
         {
             status += $" ※ {GrepService.MaximumMatches:N0} 件で打ち切りました";

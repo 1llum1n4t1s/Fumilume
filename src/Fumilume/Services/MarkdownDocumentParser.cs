@@ -24,24 +24,32 @@ public static class MarkdownDocumentParser
         var blocks = new List<MarkdownBlock>();
         var paragraph = new StringBuilder();
         var code = new StringBuilder();
-        var inCode = false;
+        var codeFenceLength = 0;
 
-        foreach (var line in DocumentNewLines.SplitLines(markdown ?? string.Empty))
+        foreach (var line in DocumentNewLines.EnumerateLines(markdown ?? string.Empty))
         {
-            if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
+            var trimmed = line.TrimStart();
+            var markerLength = CountPrefix(trimmed, '`');
+            if (markerLength >= 3 && (codeFenceLength == 0
+                || (markerLength >= codeFenceLength
+                    && trimmed[markerLength..].All(character => character is ' ' or '\t'))))
             {
                 FlushParagraph();
-                if (inCode)
+                if (codeFenceLength > 0)
                 {
                     blocks.Add(new MarkdownBlock(MarkdownBlockKind.Code, code.ToString().TrimEnd('\r', '\n')));
                     code.Clear();
+                    codeFenceLength = 0;
                 }
-
-                inCode = !inCode;
+                else
+                {
+                    // 短いフェンスや異種の記号・後続文字ではコードブロックを閉じない。
+                    codeFenceLength = markerLength;
+                }
                 continue;
             }
 
-            if (inCode)
+            if (codeFenceLength > 0)
             {
                 code.AppendLine(line);
                 continue;
@@ -53,7 +61,6 @@ public static class MarkdownDocumentParser
                 continue;
             }
 
-            var trimmed = line.TrimStart();
             var headingLevel = CountPrefix(trimmed, '#');
             if (headingLevel is >= 1 and <= 6 && trimmed.Length > headingLevel && trimmed[headingLevel] == ' ')
             {
@@ -100,7 +107,7 @@ public static class MarkdownDocumentParser
         }
 
         FlushParagraph();
-        if (inCode && code.Length > 0)
+        if (codeFenceLength > 0 && code.Length > 0)
         {
             blocks.Add(new MarkdownBlock(MarkdownBlockKind.Code, code.ToString().TrimEnd('\r', '\n')));
         }

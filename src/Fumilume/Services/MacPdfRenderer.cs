@@ -16,7 +16,7 @@ public interface IPdfRenderer : IDisposable
 }
 
 /// <summary>macOS 標準の Core Graphics を使い、表示中の 1 ページだけを画像化する。</summary>
-public sealed class MacPdfRenderer : IPdfRenderer
+public sealed partial class MacPdfRenderer : IPdfRenderer
 {
     private const string CoreGraphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
     private const uint MaximumDimension = 8192;
@@ -308,47 +308,46 @@ public sealed class MacPdfRenderer : IPdfRenderer
         public readonly double Ty;
     }
 
-    [DllImport(CoreGraphics)]
-    private static extern nint CGDataProviderCreateWithFilename(
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
+    [LibraryImport(CoreGraphics, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial nint CGDataProviderCreateWithFilename(string filename);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGDataProviderRelease(nint provider);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGDataProviderRelease(nint provider);
 
-    [DllImport(CoreGraphics)]
-    private static extern nint CGPDFDocumentCreateWithProvider(nint provider);
+    [LibraryImport(CoreGraphics)]
+    private static partial nint CGPDFDocumentCreateWithProvider(nint provider);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGPDFDocumentRelease(nint document);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGPDFDocumentRelease(nint document);
 
-    [DllImport(CoreGraphics)]
-    private static extern nuint CGPDFDocumentGetNumberOfPages(nint document);
+    [LibraryImport(CoreGraphics)]
+    private static partial nuint CGPDFDocumentGetNumberOfPages(nint document);
 
-    [DllImport(CoreGraphics)]
-    private static extern nint CGPDFDocumentGetPage(nint document, nuint pageNumber);
+    [LibraryImport(CoreGraphics)]
+    private static partial nint CGPDFDocumentGetPage(nint document, nuint pageNumber);
 
-    [DllImport(CoreGraphics)]
-    private static extern CGRect CGPDFPageGetBoxRect(nint page, CGPDFBox box);
+    [LibraryImport(CoreGraphics)]
+    private static partial CGRect CGPDFPageGetBoxRect(nint page, CGPDFBox box);
 
-    [DllImport(CoreGraphics)]
-    private static extern int CGPDFPageGetRotationAngle(nint page);
+    [LibraryImport(CoreGraphics)]
+    private static partial int CGPDFPageGetRotationAngle(nint page);
 
-    [DllImport(CoreGraphics)]
-    private static extern CGAffineTransform CGPDFPageGetDrawingTransform(
+    [LibraryImport(CoreGraphics)]
+    private static partial CGAffineTransform CGPDFPageGetDrawingTransform(
         nint page,
         CGPDFBox box,
         CGRect rectangle,
         int rotate,
         [MarshalAs(UnmanagedType.I1)] bool preserveAspectRatio);
 
-    [DllImport(CoreGraphics)]
-    private static extern nint CGColorSpaceCreateDeviceRGB();
+    [LibraryImport(CoreGraphics)]
+    private static partial nint CGColorSpaceCreateDeviceRGB();
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGColorSpaceRelease(nint colorSpace);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGColorSpaceRelease(nint colorSpace);
 
-    [DllImport(CoreGraphics)]
-    private static extern nint CGBitmapContextCreate(
+    [LibraryImport(CoreGraphics)]
+    private static partial nint CGBitmapContextCreate(
         nint data,
         nuint width,
         nuint height,
@@ -357,30 +356,30 @@ public sealed class MacPdfRenderer : IPdfRenderer
         nint colorSpace,
         uint bitmapInfo);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextRelease(nint context);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGContextRelease(nint context);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextSetRGBFillColor(
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGContextSetRGBFillColor(
         nint context,
         double red,
         double green,
         double blue,
         double alpha);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextFillRect(nint context, CGRect rectangle);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGContextFillRect(nint context, CGRect rectangle);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextConcatCTM(nint context, CGAffineTransform transform);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGContextConcatCTM(nint context, CGAffineTransform transform);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextSetInterpolationQuality(nint context, int quality);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGContextSetInterpolationQuality(nint context, int quality);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextDrawPDFPage(nint context, nint page);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGContextDrawPDFPage(nint context, nint page);
 
-    [DllImport(CoreGraphics)]
-    private static extern void CGContextFlush(nint context);
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGContextFlush(nint context);
 }
 #endif

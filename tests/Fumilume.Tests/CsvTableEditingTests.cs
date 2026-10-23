@@ -12,11 +12,11 @@ public sealed class CsvTableEditingTests
         const string source = "\"a,b\",keep\r\nshort\nlast,\"quoted\r\nline\",tail";
         var document = LoadCsv(source, DocumentNewLines.CrLf);
 
-        Assert.True(document.TryEditCsvStructure(source, CsvTableOperation.InsertColumns, 1));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(source, CsvTableOperation.InsertColumns, 1, 1, TestContext.Current.CancellationToken)));
         const string inserted = "\"a,b\",,keep\r\nshort,\nlast,,\"quoted\r\nline\",tail";
         Assert.Equal(inserted, document.Text);
 
-        Assert.True(document.TryEditCsvStructure(inserted, CsvTableOperation.DeleteColumns, 1));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(inserted, CsvTableOperation.DeleteColumns, 1, 1, TestContext.Current.CancellationToken)));
         Assert.Equal(source, document.Text);
     }
 
@@ -26,7 +26,7 @@ public sealed class CsvTableEditingTests
         const string source = "a,b\nc,d\re,f";
         var document = LoadCsv(source, DocumentNewLines.CrLf);
 
-        Assert.True(document.TryEditCsvStructure(source, CsvTableOperation.InsertRows, 1, 2));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(source, CsvTableOperation.InsertRows, 1, 2, TestContext.Current.CancellationToken)));
 
         Assert.Equal("a,b\n,\r\n,\r\nc,d\re,f", document.Text);
     }
@@ -38,7 +38,7 @@ public sealed class CsvTableEditingTests
     {
         var document = LoadCsv(source, DocumentNewLines.CrLf);
 
-        Assert.True(document.TryEditCsvStructure(source, CsvTableOperation.InsertRows, 1));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(source, CsvTableOperation.InsertRows, 1, 1, TestContext.Current.CancellationToken)));
 
         Assert.Equal(expected, document.Text);
     }
@@ -49,7 +49,7 @@ public sealed class CsvTableEditingTests
         const string source = "first,second\r\nthird,fourth";
         var document = LoadCsv(source, DocumentNewLines.CrLf, DocumentEncoding.ShiftJis);
 
-        Assert.True(document.TryEditCsvStructure(source, CsvTableOperation.InsertColumns, 2, 2));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(source, CsvTableOperation.InsertColumns, 2, 2, TestContext.Current.CancellationToken)));
         var edited = document.Text;
         Assert.Equal("first,second,,\r\nthird,fourth,,", edited);
         Assert.Equal(DocumentEncoding.ShiftJis, document.Encoding);
@@ -72,10 +72,10 @@ public sealed class CsvTableEditingTests
         document.CaretIndex = document.GetLineStartOffset(1);
         Assert.True(document.ToggleBookmark());
 
-        Assert.True(document.TryEditCsvStructure(
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(
             source,
             CsvTableOperation.InsertRows,
-            index: 2));
+            index: 2, 1, TestContext.Current.CancellationToken)));
 
         Assert.Equal("bookmark,row\nlast,row\n,", document.Text);
         Assert.Equal([1], document.Bookmarks.Lines);
@@ -85,13 +85,13 @@ public sealed class CsvTableEditingTests
     public void EmptyCsvCanBecomeAnEditableRowOrColumn()
     {
         var rowDocument = LoadCsv(string.Empty, DocumentNewLines.Lf);
-        Assert.True(rowDocument.TryEditCsvStructure(string.Empty, CsvTableOperation.InsertRows, 0));
+        Assert.True(ApplyCsvEdit(rowDocument, rowDocument.PrepareCsvStructureEditAsync(string.Empty, CsvTableOperation.InsertRows, 0, 1, TestContext.Current.CancellationToken)));
         Assert.Equal("\"\"", rowDocument.Text);
         Assert.True(rowDocument.TryUpdateCsvCell(rowDocument.Text, 0, 0, "row value"));
         Assert.Equal("row value", rowDocument.Text);
 
         var columnDocument = LoadCsv(string.Empty, DocumentNewLines.Lf);
-        Assert.True(columnDocument.TryEditCsvStructure(string.Empty, CsvTableOperation.InsertColumns, 0, 2));
+        Assert.True(ApplyCsvEdit(columnDocument, columnDocument.PrepareCsvStructureEditAsync(string.Empty, CsvTableOperation.InsertColumns, 0, 2, TestContext.Current.CancellationToken)));
         Assert.Equal(",", columnDocument.Text);
         Assert.True(columnDocument.TryUpdateCsvCell(columnDocument.Text, 0, 1, "column value"));
         Assert.Equal(",column value", columnDocument.Text);
@@ -103,7 +103,7 @@ public sealed class CsvTableEditingTests
         const string source = "a\nb,c,d";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.True(document.TryEditCsvStructure(source, CsvTableOperation.InsertColumns, 2));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(source, CsvTableOperation.InsertColumns, 2, 1, TestContext.Current.CancellationToken)));
 
         Assert.Equal("a,,\nb,c,,d", document.Text);
         var parsed = CsvDocumentParser.Parse(document.Text, TestContext.Current.CancellationToken);
@@ -117,19 +117,19 @@ public sealed class CsvTableEditingTests
         const string source = "a\nb,c,d";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.True(document.TryEditCsvStructure(source, CsvTableOperation.DeleteColumns, 1));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(source, CsvTableOperation.DeleteColumns, 1, 1, TestContext.Current.CancellationToken)));
         Assert.Equal("a\nb,d", document.Text);
 
         var oneColumn = LoadCsv("a\nb", DocumentNewLines.Lf);
-        Assert.True(oneColumn.TryEditCsvStructure(oneColumn.Text, CsvTableOperation.DeleteColumns, 0));
+        Assert.True(ApplyCsvEdit(oneColumn, oneColumn.PrepareCsvStructureEditAsync(oneColumn.Text, CsvTableOperation.DeleteColumns, 0, 1, TestContext.Current.CancellationToken)));
         Assert.Equal(string.Empty, oneColumn.Text);
 
         var emptyPrefix = LoadCsv(",value", DocumentNewLines.Lf);
-        Assert.True(emptyPrefix.TryEditCsvStructure(emptyPrefix.Text, CsvTableOperation.DeleteColumns, 1));
+        Assert.True(ApplyCsvEdit(emptyPrefix, emptyPrefix.PrepareCsvStructureEditAsync(emptyPrefix.Text, CsvTableOperation.DeleteColumns, 1, 1, TestContext.Current.CancellationToken)));
         Assert.Equal("\"\"", emptyPrefix.Text);
 
         var emptySuffix = LoadCsv("value,", DocumentNewLines.Lf);
-        Assert.True(emptySuffix.TryEditCsvStructure(emptySuffix.Text, CsvTableOperation.DeleteColumns, 0));
+        Assert.True(ApplyCsvEdit(emptySuffix, emptySuffix.PrepareCsvStructureEditAsync(emptySuffix.Text, CsvTableOperation.DeleteColumns, 0, 1, TestContext.Current.CancellationToken)));
         Assert.Equal("\"\"", emptySuffix.Text);
     }
 
@@ -138,9 +138,9 @@ public sealed class CsvTableEditingTests
     {
         var document = LoadCsv("a\r\nb\nc", DocumentNewLines.Lf);
 
-        Assert.True(document.TryEditCsvStructure(document.Text, CsvTableOperation.DeleteRows, 2));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(document.Text, CsvTableOperation.DeleteRows, 2, 1, TestContext.Current.CancellationToken)));
         Assert.Equal("a\r\nb\n", document.Text);
-        Assert.True(document.TryEditCsvStructure(document.Text, CsvTableOperation.DeleteRows, 0, 2));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(document.Text, CsvTableOperation.DeleteRows, 0, 2, TestContext.Current.CancellationToken)));
         Assert.Equal(string.Empty, document.Text);
     }
 
@@ -153,7 +153,7 @@ public sealed class CsvTableEditingTests
                 .Select(row => $"row-{row},value-{row}"));
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.True(document.TryEditCsvStructure(source, CsvTableOperation.InsertColumns, 1));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(source, CsvTableOperation.InsertColumns, 1, 1, TestContext.Current.CancellationToken)));
 
         var parsed = Assert.IsType<CsvSourceDocument>(CsvDocumentParser.ParseSource(
             document.Text,
@@ -181,7 +181,7 @@ public sealed class CsvTableEditingTests
         const string source = "a,b\nc,d";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.False(document.TryEditCsvStructure(source, operation, index, count));
+        Assert.False(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(source, operation, index, count, TestContext.Current.CancellationToken)));
         Assert.Equal(source, document.Text);
         Assert.False(document.CanUndo);
     }
@@ -191,15 +191,15 @@ public sealed class CsvTableEditingTests
     {
         const string source = "a,b";
         var csv = LoadCsv(source, DocumentNewLines.Lf);
-        Assert.False(csv.TryEditCsvStructure("stale", CsvTableOperation.InsertRows, 0));
+        Assert.False(ApplyCsvEdit(csv, csv.PrepareCsvStructureEditAsync("stale", CsvTableOperation.InsertRows, 0, 1, TestContext.Current.CancellationToken)));
         Assert.Equal(source, csv.Text);
 
         var text = new DocumentViewModel("無題", _ => Task.CompletedTask);
         text.Load(
             @"C:\tmp\data.txt",
             new TextDocumentContent(source, DocumentEncoding.Utf8, DocumentNewLines.Lf));
-        Assert.False(text.TryEditCsvStructure(source, CsvTableOperation.InsertRows, 0));
-        Assert.Null(text.GetCsvSelectionText(source, rows: true, 0));
+        Assert.False(ApplyCsvEdit(text, text.PrepareCsvStructureEditAsync(source, CsvTableOperation.InsertRows, 0, 1, TestContext.Current.CancellationToken)));
+        Assert.Null(CompleteCsvWork(text.GetCsvCellRangeTextAsync(source, new CsvCellRange(0, 0, 1, 2), TestContext.Current.CancellationToken)));
     }
 
     [Fact]
@@ -208,16 +208,16 @@ public sealed class CsvTableEditingTests
         const string malformed = "a,\"unterminated\nvalue";
         var document = LoadCsv(malformed, DocumentNewLines.Lf);
 
-        Assert.False(document.TryEditCsvStructure(malformed, CsvTableOperation.InsertRows, 1));
-        Assert.False(document.TryEditCsvStructure(malformed, CsvTableOperation.InsertColumns, 1));
+        Assert.False(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(malformed, CsvTableOperation.InsertRows, 1, 1, TestContext.Current.CancellationToken)));
+        Assert.False(ApplyCsvEdit(document, document.PrepareCsvStructureEditAsync(malformed, CsvTableOperation.InsertColumns, 1, 1, TestContext.Current.CancellationToken)));
         Assert.Equal(malformed, document.Text);
 
         var valid = LoadCsv("a", DocumentNewLines.Lf);
-        Assert.False(valid.TryEditCsvStructure(
+        Assert.False(ApplyCsvEdit(valid, valid.PrepareCsvStructureEditAsync(
             valid.Text,
             CsvTableOperation.InsertRows,
             0,
-            int.MaxValue));
+            int.MaxValue, TestContext.Current.CancellationToken)));
         Assert.Equal("a", valid.Text);
     }
 
@@ -227,7 +227,7 @@ public sealed class CsvTableEditingTests
         const string source = "\"a\tb\",\"line\nx\",\"say \"\"hi\"\"\",comma\r\nshort";
         var document = LoadCsv(source, DocumentNewLines.CrLf);
 
-        var copied = document.GetCsvSelectionText(source, rows: true, 0, 2);
+        var copied = CsvTableEditingService.GetSelectionText(source, rows: true, 0, 2, TestContext.Current.CancellationToken);
 
         Assert.Equal(
             "\"a\tb\"\t\"line\nx\"\t\"say \"\"hi\"\"\"\tcomma\r\n"
@@ -246,7 +246,7 @@ public sealed class CsvTableEditingTests
                 .Select(row => $"left-{row},right-{row}"));
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        var copied = document.GetCsvSelectionText(source, rows: false, 1);
+        var copied = CsvTableEditingService.GetSelectionText(source, rows: false, 1, 1, TestContext.Current.CancellationToken);
 
         Assert.NotNull(copied);
         var copiedRows = copied.Split("\r\n", StringSplitOptions.None);
@@ -261,14 +261,13 @@ public sealed class CsvTableEditingTests
         const string source = "a,b\nc,d";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.Null(document.GetCsvSelectionText("stale", rows: true, 0));
-        Assert.Null(document.GetCsvSelectionText(source, rows: true, 2));
-        Assert.Null(document.GetCsvSelectionText(source, rows: false, 1, 2));
-        Assert.Null(document.GetCsvSelectionText(source, rows: false, 0, 0));
+        Assert.Null(CompleteCsvWork(document.GetCsvCellRangeTextAsync("stale", new CsvCellRange(0, 0, 1, 2), TestContext.Current.CancellationToken)));
+        Assert.Null(CsvTableEditingService.GetSelectionText(source, rows: true, 2, 1, TestContext.Current.CancellationToken));
+        Assert.Null(CsvTableEditingService.GetSelectionText(source, rows: false, 1, 2, TestContext.Current.CancellationToken));
+        Assert.Null(CsvTableEditingService.GetSelectionText(source, rows: false, 0, 0, TestContext.Current.CancellationToken));
 
-        var empty = LoadCsv(string.Empty, DocumentNewLines.Lf);
-        Assert.Null(empty.GetCsvSelectionText(string.Empty, rows: true, 0));
-        Assert.Null(empty.GetCsvSelectionText(string.Empty, rows: false, 0));
+        Assert.Null(CsvTableEditingService.GetSelectionText(string.Empty, rows: true, 0, 1, TestContext.Current.CancellationToken));
+        Assert.Null(CsvTableEditingService.GetSelectionText(string.Empty, rows: false, 0, 1, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -277,7 +276,7 @@ public sealed class CsvTableEditingTests
         const string source = "a,\"b\tc\"\nshort";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        var copied = document.GetCsvCellRangeText(source, new CsvCellRange(0, 0, 2, 2));
+        var copied = CompleteCsvWork(document.GetCsvCellRangeTextAsync(source, new CsvCellRange(0, 0, 2, 2), TestContext.Current.CancellationToken));
 
         Assert.Equal("a\t\"b\tc\"\r\nshort\t\"\"", copied);
         Assert.Equal(source, document.Text);
@@ -290,19 +289,19 @@ public sealed class CsvTableEditingTests
         const string source = "a\n\"\"";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        var emptyCell = document.GetCsvCellRangeText(source, new CsvCellRange(1, 0, 1, 1));
-        var twoRows = document.GetCsvCellRangeText(source, new CsvCellRange(0, 0, 2, 1));
+        var emptyCell = CompleteCsvWork(document.GetCsvCellRangeTextAsync(source, new CsvCellRange(1, 0, 1, 1), TestContext.Current.CancellationToken));
+        var twoRows = CompleteCsvWork(document.GetCsvCellRangeTextAsync(source, new CsvCellRange(0, 0, 2, 1), TestContext.Current.CancellationToken));
 
         Assert.Equal("\"\"", emptyCell);
         Assert.Equal("a\r\n\"\"", twoRows);
 
         var singleTarget = LoadCsv("old", DocumentNewLines.Lf);
-        Assert.True(singleTarget.TryPasteCsvCells("old", 0, 0, emptyCell!));
+        Assert.True(ApplyCsvEdit(singleTarget, singleTarget.PrepareCsvPasteAsync("old", 0, 0, emptyCell!, TestContext.Current.CancellationToken)));
         Assert.Equal("\"\"", singleTarget.Text);
 
         const string targetSource = "old-1\nold-2";
         var target = LoadCsv(targetSource, DocumentNewLines.Lf);
-        Assert.True(target.TryPasteCsvCells(targetSource, 0, 0, twoRows!));
+        Assert.True(ApplyCsvEdit(target, target.PrepareCsvPasteAsync(targetSource, 0, 0, twoRows!, TestContext.Current.CancellationToken)));
         Assert.Equal("a\n\"\"", target.Text);
     }
 
@@ -312,7 +311,7 @@ public sealed class CsvTableEditingTests
         const string source = "\"keep\",remove\r\nshort,\"quoted\"";
         var document = LoadCsv(source, DocumentNewLines.CrLf);
 
-        Assert.True(document.TryClearCsvCells(source, new CsvCellRange(0, 1, 2, 1)));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvClearAsync(source, new CsvCellRange(0, 1, 2, 1), TestContext.Current.CancellationToken)));
         Assert.Equal("\"keep\",\r\nshort,", document.Text);
 
         document.EditorDocument.UndoStack.Undo();
@@ -327,7 +326,7 @@ public sealed class CsvTableEditingTests
         const string source = "a,\nshort";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.True(document.TryClearCsvCells(source, new CsvCellRange(0, 1, 2, 1)));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvClearAsync(source, new CsvCellRange(0, 1, 2, 1), TestContext.Current.CancellationToken)));
 
         Assert.Equal(source, document.Text);
         Assert.False(document.CanUndo);
@@ -339,15 +338,15 @@ public sealed class CsvTableEditingTests
         const string source = "top,\"x,y\"\nold\nlast,keep,hidden";
         var down = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.True(down.TryFillCsvCells(source, new CsvCellRange(0, 0, 3, 2), down: true));
+        Assert.True(ApplyCsvEdit(down, down.PrepareCsvFillAsync(source, new CsvCellRange(0, 0, 3, 2), down: true, TestContext.Current.CancellationToken)));
         Assert.Equal("top,\"x,y\"\ntop,\"x,y\"\ntop,\"x,y\",hidden", down.Text);
 
         const string rightSource = "seed,a,b\n\"q,r\",x";
         var right = LoadCsv(rightSource, DocumentNewLines.Lf);
-        Assert.True(right.TryFillCsvCells(
+        Assert.True(ApplyCsvEdit(right, right.PrepareCsvFillAsync(
             rightSource,
             new CsvCellRange(0, 0, 2, 3),
-            down: false));
+            down: false, TestContext.Current.CancellationToken)));
         Assert.Equal("seed,seed,seed\n\"q,r\",\"q,r\",\"q,r\"", right.Text);
     }
 
@@ -358,7 +357,7 @@ public sealed class CsvTableEditingTests
         var document = LoadCsv(source, DocumentNewLines.CrLf);
         const string clipboard = "one\ttwo\r\n\"three\nline\"\tfour";
 
-        Assert.True(document.TryPasteCsvCells(source, 1, 1, clipboard));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvPasteAsync(source, 1, 1, clipboard, TestContext.Current.CancellationToken)));
 
         const string expected = "\"keep\",old\r\nshort,one,two\r\n,\"three\r\nline\",four";
         Assert.Equal(expected, document.Text);
@@ -374,7 +373,7 @@ public sealed class CsvTableEditingTests
         const string source = "a";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.True(document.TryPasteCsvCells(source, 0, 0, "x\ty\n1\t2"));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvPasteAsync(source, 0, 0, "x\ty\n1\t2", TestContext.Current.CancellationToken)));
 
         Assert.Equal("x,y\n1,2", document.Text);
         document.EditorDocument.UndoStack.Undo();
@@ -389,7 +388,7 @@ public sealed class CsvTableEditingTests
         document.CaretIndex = document.GetLineStartOffset(3);
         Assert.True(document.ToggleBookmark());
 
-        Assert.True(document.TryClearCsvCells(source, new CsvCellRange(0, 0, 2, 1)));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvClearAsync(source, new CsvCellRange(0, 0, 2, 1), TestContext.Current.CancellationToken)));
 
         Assert.Equal(",here\n,keep\nbookmark,row", document.Text);
         Assert.Equal([3], document.Bookmarks.Lines);
@@ -404,7 +403,7 @@ public sealed class CsvTableEditingTests
                 .Select(row => $"row-{row},keep-{row}"));
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.True(document.TryPasteCsvCells(source, 0, 0, "comma,value"));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvPasteAsync(source, 0, 0, "comma,value", TestContext.Current.CancellationToken)));
 
         var parsed = Assert.IsType<CsvSourceDocument>(CsvDocumentParser.ParseSource(
             document.Text,
@@ -421,11 +420,11 @@ public sealed class CsvTableEditingTests
         const string source = "a,b";
         var document = LoadCsv(source, DocumentNewLines.Lf);
 
-        Assert.True(document.TryFillCsvCells(
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvFillAsync(
             source,
             new CsvCellRange(0, 0, 1, 2),
-            down: true));
-        Assert.True(document.TryPasteCsvCells(source, 0, 0, "a\tb"));
+            down: true, TestContext.Current.CancellationToken)));
+        Assert.True(ApplyCsvEdit(document, document.PrepareCsvPasteAsync(source, 0, 0, "a\tb", TestContext.Current.CancellationToken)));
 
         Assert.Equal(source, document.Text);
         Assert.False(document.CanUndo);
@@ -438,23 +437,23 @@ public sealed class CsvTableEditingTests
         var document = LoadCsv(source, DocumentNewLines.Lf);
         var validRange = new CsvCellRange(0, 0, 1, 1);
 
-        Assert.Null(document.GetCsvCellRangeText("stale", validRange));
-        Assert.False(document.TryClearCsvCells("stale", validRange));
-        Assert.False(document.TryFillCsvCells("stale", validRange, down: true));
-        Assert.False(document.TryPasteCsvCells("stale", 0, 0, "x"));
-        Assert.Null(document.GetCsvCellRangeText(
+        Assert.Null(CompleteCsvWork(document.GetCsvCellRangeTextAsync("stale", validRange, TestContext.Current.CancellationToken)));
+        Assert.False(ApplyCsvEdit(document, document.PrepareCsvClearAsync("stale", validRange, TestContext.Current.CancellationToken)));
+        Assert.False(ApplyCsvEdit(document, document.PrepareCsvFillAsync("stale", validRange, down: true, TestContext.Current.CancellationToken)));
+        Assert.False(ApplyCsvEdit(document, document.PrepareCsvPasteAsync("stale", 0, 0, "x", TestContext.Current.CancellationToken)));
+        Assert.Null(CompleteCsvWork(document.GetCsvCellRangeTextAsync(
             source,
-            new CsvCellRange(0, 0, int.MaxValue, 1)));
-        Assert.False(document.TryPasteCsvCells(source, 0, 0, "\"unterminated"));
+            new CsvCellRange(0, 0, int.MaxValue, 1), TestContext.Current.CancellationToken)));
+        Assert.False(ApplyCsvEdit(document, document.PrepareCsvPasteAsync(source, 0, 0, "\"unterminated", TestContext.Current.CancellationToken)));
         Assert.Equal(source, document.Text);
         Assert.False(document.CanUndo);
 
         const string malformedSource = "a,\"unterminated\nvalue";
         var malformed = LoadCsv(malformedSource, DocumentNewLines.Lf);
-        Assert.Null(malformed.GetCsvCellRangeText(malformedSource, validRange));
-        Assert.False(malformed.TryClearCsvCells(malformedSource, validRange));
-        Assert.False(malformed.TryFillCsvCells(malformedSource, validRange, down: true));
-        Assert.False(malformed.TryPasteCsvCells(malformedSource, 0, 0, "x"));
+        Assert.Null(CompleteCsvWork(malformed.GetCsvCellRangeTextAsync(malformedSource, validRange, TestContext.Current.CancellationToken)));
+        Assert.False(ApplyCsvEdit(malformed, malformed.PrepareCsvClearAsync(malformedSource, validRange, TestContext.Current.CancellationToken)));
+        Assert.False(ApplyCsvEdit(malformed, malformed.PrepareCsvFillAsync(malformedSource, validRange, down: true, TestContext.Current.CancellationToken)));
+        Assert.False(ApplyCsvEdit(malformed, malformed.PrepareCsvPasteAsync(malformedSource, 0, 0, "x", TestContext.Current.CancellationToken)));
         Assert.Equal(malformedSource, malformed.Text);
     }
 
@@ -591,6 +590,27 @@ public sealed class CsvTableEditingTests
             CsvTableEditingService.TryFill("value", range, down: true, out _, cancellation.Token));
         Assert.Throws<OperationCanceledException>(() =>
             CsvTableEditingService.TryPaste("value", 0, 0, "new", "\n", out _, cancellation.Token));
+    }
+
+    private static bool ApplyCsvEdit(DocumentViewModel document, Task<CsvPreparedEdit?> preparation)
+    {
+        var edit = CompleteCsvWork(preparation);
+        return edit is not null && document.TryApplyPreparedCsvEdit(edit);
+    }
+
+    private static T CompleteCsvWork<T>(Task<T> task)
+    {
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
+        while (!task.IsCompleted && timeout.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+            {
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            }
+            Thread.Yield();
+        }
+        Assert.True(task.IsCompleted, "CSV操作が完了しませんでした。");
+        return task.GetAwaiter().GetResult();
     }
 
     private static DocumentViewModel LoadCsv(

@@ -288,7 +288,7 @@ public sealed partial class MainWindowViewModel
             SettingsTabOpen = SettingsTab is not null || _pendingSettingsTabOpen,
             FolderPath = FolderPath,
             FolderTreeVisible = IsFolderTreeVisible,
-            FolderTreeWidth = FolderTreeWidth,
+            FolderTreeWidth = _folderTreeWidth,
             SidebarSplitRatio = SidebarSplitRatio,
         };
         var selectedTabCaptured = false;

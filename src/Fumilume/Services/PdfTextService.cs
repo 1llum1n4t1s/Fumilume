@@ -103,11 +103,10 @@ public sealed class PdfTextService : IDisposable
 
             // PdfPig 0.1.16がCropBoxの移動とRotateを適用する。ここではY軸だけを反転する。
             var box = letter.GlyphRectangleLoose;
-            var points = new[] { box.BottomLeft, box.BottomRight, box.TopLeft, box.TopRight };
-            var left = points.Min(p => p.X);
-            var right = points.Max(p => p.X);
-            var top = page.Height - points.Max(p => p.Y);
-            var bottom = page.Height - points.Min(p => p.Y);
+            var left = Math.Min(Math.Min(box.BottomLeft.X, box.BottomRight.X), Math.Min(box.TopLeft.X, box.TopRight.X));
+            var right = Math.Max(Math.Max(box.BottomLeft.X, box.BottomRight.X), Math.Max(box.TopLeft.X, box.TopRight.X));
+            var top = page.Height - Math.Max(Math.Max(box.BottomLeft.Y, box.BottomRight.Y), Math.Max(box.TopLeft.Y, box.TopRight.Y));
+            var bottom = page.Height - Math.Min(Math.Min(box.BottomLeft.Y, box.BottomRight.Y), Math.Min(box.TopLeft.Y, box.TopRight.Y));
             var bounds = new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top)).Intersect(visible);
             if (bounds.Width <= 0 || bounds.Height <= 0
                 || !double.IsFinite(bounds.X + bounds.Y + bounds.Width + bounds.Height))
@@ -124,9 +123,16 @@ public sealed class PdfTextService : IDisposable
             var across = start.X * normal.X + start.Y * normal.Y;
             var along = start.X * direction.X + start.Y * direction.Y;
             var fontSize = Math.Max(1, letter.PointSize);
-            var line = lines.FirstOrDefault(candidate =>
-                Dot(candidate.Direction, direction) > 0.98
-                && Math.Abs(candidate.Across - across) <= Math.Max(candidate.FontSize, fontSize) * 0.35);
+            TextLine? line = null;
+            foreach (var candidate in lines)
+            {
+                if (Dot(candidate.Direction, direction) > 0.98
+                    && Math.Abs(candidate.Across - across) <= Math.Max(candidate.FontSize, fontSize) * 0.35)
+                {
+                    line = candidate;
+                    break;
+                }
+            }
             if (line is null)
             {
                 line = new TextLine(direction, across, fontSize, bounds);
@@ -141,7 +147,15 @@ public sealed class PdfTextService : IDisposable
         var groups = new List<List<TextLine>>();
         foreach (var line in lines)
         {
-            var group = groups.FirstOrDefault(candidate => Dot(candidate[0].Direction, line.Direction) > 0.98);
+            List<TextLine>? group = null;
+            foreach (var candidate in groups)
+            {
+                if (Dot(candidate[0].Direction, line.Direction) > 0.98)
+                {
+                    group = candidate;
+                    break;
+                }
+            }
             if (group is null)
             {
                 group = [];

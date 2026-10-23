@@ -133,19 +133,19 @@
                 <Grid x:Name="SidePanelRoot" Grid.Row="0" RowDefinitions="Auto,*">
                     <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="10,0,10,4">
                         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
-                            <Button Classes="panelswitch" Classes.active="{Binding IsTabsPanel}"
+                            <Button Classes="panelswitch" Classes.active="{Binding SidePanel.IsTabsPanel}"
                                     Content="&#xF378;"
-                                    Command="{Binding SelectSidePanelCommand}"
+                                    Command="{Binding SidePanel.SelectSidePanelCommand}"
                                     CommandParameter="{x:Static vm:SidePanelKind.Tabs}"
                                     AutomationProperties.Name="開いているもの" ToolTip.Tip="開いているもの" />
-                            <Button Classes="panelswitch" Classes.active="{Binding IsOutlinePanel}"
+                            <Button Classes="panelswitch" Classes.active="{Binding SidePanel.IsOutlinePanel}"
                                     Content="&#xF7AE;"
-                                    Command="{Binding SelectSidePanelCommand}"
+                                    Command="{Binding SidePanel.SelectSidePanelCommand}"
                                     CommandParameter="{x:Static vm:SidePanelKind.Outline}"
                                     AutomationProperties.Name="アウトライン" ToolTip.Tip="アウトライン（見出し）" />
-                            <Button Classes="panelswitch" Classes.active="{Binding IsBookmarksPanel}"
+                            <Button Classes="panelswitch" Classes.active="{Binding SidePanel.IsBookmarksPanel}"
                                     Content="&#xF1F5;"
-                                    Command="{Binding SelectSidePanelCommand}"
+                                    Command="{Binding SidePanel.SelectSidePanelCommand}"
                                     CommandParameter="{x:Static vm:SidePanelKind.Bookmarks}"
                                     AutomationProperties.Name="ブックマーク" ToolTip.Tip="ブックマーク (Ctrl+F2)" />
                         </StackPanel>
@@ -155,7 +155,7 @@
                         <!-- 開いているもの。文書タブと設定タブが同じ一覧に並ぶ。項目の型は
                              WorkspaceTabViewModel で、表示に要る 3 つ（表題・アイコン・ツールチップ）
                              だけを基底が公開している。 -->
-                        <ListBox Classes="verticaltabs" IsVisible="{Binding IsTabsPanel}"
+                        <ListBox Classes="verticaltabs" IsVisible="{Binding SidePanel.IsTabsPanel}"
                                  ItemContainerTheme="{StaticResource VerticalTabItemTheme}"
                                  ItemsSource="{Binding Tabs}"
                                  SelectedItem="{Binding SelectedTab}"
@@ -190,10 +190,10 @@
                         </ListBox>
 
                         <!-- アウトライン。選ぶだけでその行へ飛ぶので、矢印キーで見出しを辿れる。 -->
-                        <Panel IsVisible="{Binding IsOutlinePanel}">
+                        <Panel IsVisible="{Binding SidePanel.IsOutlinePanel}">
                             <ListBox x:Name="OutlineList" Classes="sidelist"
-                                     ItemsSource="{Binding Outline}"
-                                     SelectedItem="{Binding SelectedOutlineItem}"
+                                     ItemsSource="{Binding SidePanel.Outline}"
+                                     SelectedItem="{Binding SidePanel.SelectedOutlineItem}"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      AutomationProperties.Name="アウトライン">
                                 <ListBox.ItemTemplate>
@@ -207,15 +207,15 @@
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                            <TextBlock Classes="sideempty" IsVisible="{Binding !HasOutline}"
-                                       Text="{Binding OutlineEmptyMessage}" />
+                            <TextBlock Classes="sideempty" IsVisible="{Binding !SidePanel.HasOutline}"
+                                       Text="{Binding SidePanel.OutlineEmptyMessage}" />
                         </Panel>
 
                         <!-- ブックマーク。行番号と本文を並べ、選ぶとその行へ飛ぶ。 -->
-                        <Panel IsVisible="{Binding IsBookmarksPanel}">
+                        <Panel IsVisible="{Binding SidePanel.IsBookmarksPanel}">
                             <ListBox x:Name="BookmarkList" Classes="sidelist"
-                                     ItemsSource="{Binding Bookmarks}"
-                                     SelectedItem="{Binding SelectedBookmark}"
+                                     ItemsSource="{Binding SidePanel.Bookmarks}"
+                                     SelectedItem="{Binding SidePanel.SelectedBookmark}"
                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      AutomationProperties.Name="ブックマーク">
                                 <ListBox.ItemTemplate>
@@ -231,8 +231,8 @@
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                            <TextBlock Classes="sideempty" IsVisible="{Binding !HasBookmarks}"
-                                       Text="{Binding BookmarkEmptyMessage}" />
+                            <TextBlock Classes="sideempty" IsVisible="{Binding !SidePanel.HasBookmarks}"
+                                       Text="{Binding SidePanel.BookmarkEmptyMessage}" />
                         </Panel>
                     </Panel>
 

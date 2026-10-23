@@ -86,7 +86,8 @@ public sealed class SessionTabState
     /// <see cref="BufferFile"/> の指す別ファイルへ出し入れする。
     ///
     /// 本文を session.json へ埋め込むと、エスケープでサイズが膨らむうえに 1 文字の変更でも
-    /// 全体を書き直すことになる。タブごとのファイルなら書き換えたタブだけを触れば済む。
+    /// 全体を書き直すことになる。本文を別ファイルへ分離し、スナップショットごとに新しく
+    /// 書き出すことで、一覧の原子的な確定が終わるまで前回の本文を保つ。
     /// </summary>
     [JsonIgnore]
     public string? Text { get; set; }

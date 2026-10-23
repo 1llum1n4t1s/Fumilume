@@ -204,6 +204,18 @@ internal static class AppSettingsDefaults
     public const int MaximumCaretPositions = 200;
 
     public static readonly string[] ThemeModes = ["System", "Light", "Dark"];
+
+    public static double NormalizeFontSize(double value) => Math.Clamp(value, MinimumFontSize, MaximumFontSize);
+
+    public static int NormalizeIndentationSize(int value) => Math.Clamp(value, MinimumIndentationSize, MaximumIndentationSize);
+
+    public static int NormalizeColumnRulerPosition(int value) => Math.Clamp(value, MinimumColumnRulerPosition, MaximumColumnRulerPosition);
+
+    public static double NormalizeLineHeightFactor(double value) => Math.Clamp(value, MinimumLineHeightFactor, MaximumLineHeightFactor);
+
+    public static int NormalizeLargeFileThreshold(int value) => Math.Clamp(value, MinimumLargeFileThresholdMegabytes, MaximumLargeFileThresholdMegabytes);
+
+    public static double NormalizeTabHeight(double value) => Math.Clamp(Math.Round(value), MinimumTabHeight, MaximumTabHeight);
 }
 
 // PublishAot=true のためリフレクションベースのシリアライザは使えない。ソース生成を通す。
@@ -273,34 +285,13 @@ public static class SettingsService
     /// <summary>範囲外の値を安全な値へ丸める。手書き編集や旧バージョンの値がそのまま UI へ届かないようにする。</summary>
     private static AppSettings Normalize(AppSettings settings)
     {
-        settings.UiFontSize = Math.Clamp(
-            settings.UiFontSize,
-            AppSettingsDefaults.MinimumFontSize,
-            AppSettingsDefaults.MaximumFontSize);
-        settings.FontSize = Math.Clamp(
-            settings.FontSize,
-            AppSettingsDefaults.MinimumFontSize,
-            AppSettingsDefaults.MaximumFontSize);
-        settings.IndentationSize = Math.Clamp(
-            settings.IndentationSize,
-            AppSettingsDefaults.MinimumIndentationSize,
-            AppSettingsDefaults.MaximumIndentationSize);
-        settings.ColumnRulerPosition = Math.Clamp(
-            settings.ColumnRulerPosition,
-            AppSettingsDefaults.MinimumColumnRulerPosition,
-            AppSettingsDefaults.MaximumColumnRulerPosition);
-        settings.LineHeightFactor = Math.Clamp(
-            settings.LineHeightFactor,
-            AppSettingsDefaults.MinimumLineHeightFactor,
-            AppSettingsDefaults.MaximumLineHeightFactor);
-        settings.LargeFileThresholdMegabytes = Math.Clamp(
-            settings.LargeFileThresholdMegabytes,
-            AppSettingsDefaults.MinimumLargeFileThresholdMegabytes,
-            AppSettingsDefaults.MaximumLargeFileThresholdMegabytes);
-        settings.TabHeight = Math.Clamp(
-            Math.Round(settings.TabHeight),
-            AppSettingsDefaults.MinimumTabHeight,
-            AppSettingsDefaults.MaximumTabHeight);
+        settings.UiFontSize = AppSettingsDefaults.NormalizeFontSize(settings.UiFontSize);
+        settings.FontSize = AppSettingsDefaults.NormalizeFontSize(settings.FontSize);
+        settings.IndentationSize = AppSettingsDefaults.NormalizeIndentationSize(settings.IndentationSize);
+        settings.ColumnRulerPosition = AppSettingsDefaults.NormalizeColumnRulerPosition(settings.ColumnRulerPosition);
+        settings.LineHeightFactor = AppSettingsDefaults.NormalizeLineHeightFactor(settings.LineHeightFactor);
+        settings.LargeFileThresholdMegabytes = AppSettingsDefaults.NormalizeLargeFileThreshold(settings.LargeFileThresholdMegabytes);
+        settings.TabHeight = AppSettingsDefaults.NormalizeTabHeight(settings.TabHeight);
         settings.SidePanelWidth = Math.Clamp(
             Math.Round(settings.SidePanelWidth),
             AppSettingsDefaults.MinimumSidePanelWidth,

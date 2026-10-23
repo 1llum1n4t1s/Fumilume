@@ -8,7 +8,7 @@ namespace Fumilume.Services;
 /// 現在のWindowsユーザーに対するファイル関連付けを管理します。
 /// </summary>
 [SupportedOSPlatform("windows")]
-public static class FileAssociationService
+public static partial class FileAssociationService
 {
     private const string ClassesRootPath = @"Software\Classes";
     private const string ProgIdPrefix = "Fumilume";
@@ -245,8 +245,8 @@ public static class FileAssociationService
         }
     }
 
-    [DllImport("shell32.dll")]
-    private static extern void SHChangeNotify(
+    [LibraryImport("shell32.dll")]
+    private static partial void SHChangeNotify(
         uint eventId,
         uint flags,
         IntPtr item1,

@@ -1,10 +1,7 @@
-using CommunityToolkit.Mvvm.ComponentModel;
-
 namespace Fumilume.ViewModels;
 
 public sealed partial class MainWindowViewModel
 {
-    [ObservableProperty]
     // 旧セッションの値を往復させるだけで、現行のレイアウトには使わない。
     private double _folderTreeWidth = 240;
 

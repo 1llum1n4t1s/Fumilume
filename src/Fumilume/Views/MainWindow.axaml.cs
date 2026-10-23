@@ -1249,9 +1249,6 @@ public sealed partial class MainWindow : Window
     private void Find_Click(object? sender, RoutedEventArgs args)
         => OpenSearch(replace: false);
 
-    private void Replace_Click(object? sender, RoutedEventArgs args)
-        => OpenSearch(replace: true);
-
     // ===== ウィンドウ状態 =====
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

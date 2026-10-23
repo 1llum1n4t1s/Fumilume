@@ -43,7 +43,7 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: bash scripts/build-macos-arm64.sh
       - name: 更新フィードとパッケージの取得を検証
-        run: dotnet run --project tests/Fumilume.MacE2E -p:FumilumeTargetMac=true -c Release --no-restore --artifacts-path "$FUMILUME_WORK_ROOT/build-e2e" -- --verify-updates "$FUMILUME_WORK_ROOT/packages" "$FUMILUME_WORK_ROOT/verification/update-sdk"
+        run: dotnet run --project tests/Fumilume.MacE2E -p:FumilumeTargetMac=true -c Release --no-build --artifacts-path "$FUMILUME_WORK_ROOT/build-e2e" -- --verify-updates "$FUMILUME_WORK_ROOT/packages" "$FUMILUME_WORK_ROOT/verification/update-sdk"
       # 配信は署名済み artifact の検証後に既存の R2 配布経路で行う。
       - name: 配布物を保存
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

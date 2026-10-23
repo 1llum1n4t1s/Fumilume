@@ -470,8 +470,18 @@ public sealed partial class DocumentViewModel
     }
 
     /// <summary>同じ桁を保ったまま別の行へ移る。行が短ければその行末で止める。</summary>
-    private static int? OffsetOnLine(DocumentLine? line, int column)
-        => line is null ? null : line.Offset + Math.Min(Math.Max(column, 0), line.Length);
+    private int? OffsetOnLine(DocumentLine? line, int column)
+    {
+        if (line is null) return null;
+        var target = line.Offset + Math.Clamp(column, 0, line.Length);
+        if (target == line.Offset || target == line.EndOffset) return target;
+
+        // UTF-16 の同じ桁が文字の途中なら、通常の左右移動と同じ境界まで手前へ戻す。
+        // サロゲートだけでなく結合文字も、選択や後続の編集で分断しない。
+        return NextCaretPosition(target - 1, LogicalDirection.Forward) == target
+            ? target
+            : NextCaretPosition(target, LogicalDirection.Backward) ?? line.Offset;
+    }
 
     // ===== 対括弧の検索 =====
 

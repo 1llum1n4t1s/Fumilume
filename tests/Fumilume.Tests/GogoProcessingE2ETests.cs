@@ -33,10 +33,10 @@ public sealed class GogoProcessingE2ETests(HeadlessAppFixture fixture)
         var file = Path.Combine(scope.Path, "outline" + extension);
         File.WriteAllText(file, text);
         Pump(scope.Model.OpenPathsAsync([file]));
-        scope.Model.SidePanel = SidePanelKind.Outline;
+        scope.Model.SidePanel.Kind = SidePanelKind.Outline;
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(2000, scope.Model.Outline.Count);
-        var original = scope.Model.Outline.ToArray();
+        Assert.Equal(2000, scope.Model.SidePanel.Outline.Count);
+        var original = scope.Model.SidePanel.Outline.ToArray();
         Assert.Equal(kind == "markdown" ? "setext" : "Item0", original[0].Title);
         Assert.Equal(kind == "markdown" ? "Item1998" : "Item1999", original[^1].Title);
         var editor = scope.Window.FindControl<TextEditor>("Editor")!;
@@ -51,7 +51,7 @@ public sealed class GogoProcessingE2ETests(HeadlessAppFixture fixture)
             elapsed.Stop();
             measurements.Add(new { Milliseconds = elapsed.Elapsed.TotalMilliseconds,
                 AllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - start });
-            Assert.Equal(original, scope.Model.Outline.ToArray());
+            Assert.Equal(original, scope.Model.SidePanel.Outline.ToArray());
             editor.Undo();
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(text, editor.Text);

@@ -39,8 +39,6 @@ public sealed class DocumentBookmarks
         }
     }
 
-    public bool IsBookmarked(int lineNumber) => Lines.Contains(lineNumber);
-
     /// <summary>指定行の印を反転する。付けたときは <see langword="true"/>。</summary>
     public bool Toggle(int lineNumber)
     {

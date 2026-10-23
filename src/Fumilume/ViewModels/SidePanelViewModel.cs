@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fumilume.Services;
@@ -35,8 +36,16 @@ public sealed record BookmarkEntry(int LineNumber, string Preview)
 /// 同じ場所で切り替える。フォルダ横断検索の結果だけは横幅が要るので、ここではなく
 /// 中央のタブに出す（縦 190px では 1 行 1 一致の一覧が読めない）。
 /// </summary>
-public sealed partial class MainWindowViewModel
+public sealed partial class SidePanelViewModel : ObservableObject
 {
+    private DocumentViewModel? _document;
+
+    public SidePanelViewModel(SidePanelKind initialKind) => _kind = initialKind;
+
+    internal event Action<SidePanelKind>? KindChanged;
+
+    internal event Action<string>? StatusChanged;
+
     /// <summary>印の増減を受け取っている文書のブックマーク。タブを切り替えるたびに張り替える。</summary>
     private DocumentBookmarks? _watchedBookmarks;
 
@@ -49,13 +58,13 @@ public sealed partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(IsTabsPanel))]
     [NotifyPropertyChangedFor(nameof(IsOutlinePanel))]
     [NotifyPropertyChangedFor(nameof(IsBookmarksPanel))]
-    private SidePanelKind _sidePanel;
+    private SidePanelKind _kind;
 
-    public bool IsTabsPanel => SidePanel is SidePanelKind.Tabs;
+    public bool IsTabsPanel => Kind is SidePanelKind.Tabs;
 
-    public bool IsOutlinePanel => SidePanel is SidePanelKind.Outline;
+    public bool IsOutlinePanel => Kind is SidePanelKind.Outline;
 
-    public bool IsBookmarksPanel => SidePanel is SidePanelKind.Bookmarks;
+    public bool IsBookmarksPanel => Kind is SidePanelKind.Bookmarks;
 
     /// <summary>本文から拾った見出し。</summary>
     public ObservableCollection<OutlineItem> Outline { get; } = [];
@@ -76,18 +85,18 @@ public sealed partial class MainWindowViewModel
     public bool HasBookmarks => Bookmarks.Count > 0;
 
     /// <summary>見出しが 1 つも無いときに、その理由を出す。</summary>
-    public string OutlineEmptyMessage => SelectedDocument is not { } document
+    public string OutlineEmptyMessage => _document is not { } document
         ? "文書のタブを選ぶと見出しが出ます"
         : OutlineService.IsSupported(document.FilePath)
             ? "見出しが見つかりません"
             : "この形式のアウトラインには対応していません";
 
-    public string BookmarkEmptyMessage => IsDocumentSelected
+    public string BookmarkEmptyMessage => _document is not null
         ? "Ctrl+F2 で今の行に印を付けます"
         : "文書のタブを選ぶと印の一覧が出ます";
 
     [RelayCommand]
-    private void SelectSidePanel(SidePanelKind kind) => SidePanel = kind;
+    private void SelectSidePanel(SidePanelKind kind) => Kind = kind;
 
     /// <summary>
     /// 一覧で選んだ行へ飛ぶ。フォーカスは一覧に残す（矢印キーで見出しを辿ると本文が追う）。
@@ -99,24 +108,35 @@ public sealed partial class MainWindowViewModel
 
     private void GoToLine(int? lineNumber)
     {
-        if (lineNumber is { } line && SelectedDocument is { } document)
+        if (lineNumber is { } line && _document is { } document)
         {
             document.GoToLine(line);
-            StatusMessage = $"行 {line:N0} へ移動しました";
+            StatusChanged?.Invoke($"行 {line:N0} へ移動しました");
         }
     }
 
-    partial void OnSidePanelChanged(SidePanelKind value)
+    partial void OnKindChanged(SidePanelKind value)
     {
-        Options.RememberSidePanel(value);
+        KindChanged?.Invoke(value);
         RefreshOutline();
         RefreshBookmarks();
     }
 
     /// <summary>タブが変わったときの張り替え。印の購読先も選択中の文書へ移す。</summary>
-    private void OnSelectedTabChangedForSidePanel()
+    internal void ConnectDocument(DocumentViewModel? document)
     {
-        var bookmarks = SelectedDocument is { } document ? document.Bookmarks : null;
+        if (_document is not null)
+        {
+            _document.PropertyChanged -= OnDocumentPropertyChanged;
+        }
+
+        _document = document;
+        if (_document is not null)
+        {
+            _document.PropertyChanged += OnDocumentPropertyChanged;
+        }
+
+        var bookmarks = document?.Bookmarks;
         if (!ReferenceEquals(_watchedBookmarks, bookmarks))
         {
             if (_watchedBookmarks is not null)
@@ -143,7 +163,13 @@ public sealed partial class MainWindowViewModel
     }
 
     /// <summary>本文が変わったときの追随。開いている面だけを引き直す。</summary>
-    private void OnSelectedTextChangedForSidePanel() => MarkSidePanelStale();
+    private void OnDocumentPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(DocumentViewModel.Text) or nameof(DocumentViewModel.FilePath))
+        {
+            MarkSidePanelStale();
+        }
+    }
 
     private void MarkSidePanelStale()
     {
@@ -161,7 +187,7 @@ public sealed partial class MainWindowViewModel
         }
 
         _outlineStale = false;
-        var parsed = SelectedDocument is { } document
+        var parsed = _document is { } document
             ? OutlineService.Parse(document.FilePath, document.Text)
             : [];
 
@@ -187,7 +213,7 @@ public sealed partial class MainWindowViewModel
         }
 
         _bookmarksStale = false;
-        var entries = SelectedDocument is { } document && _watchedBookmarks is { } bookmarks
+        var entries = _document is { } document && _watchedBookmarks is { } bookmarks
             ? bookmarks.Lines.Select(lineNumber => ReadBookmark(document, lineNumber)).ToList()
             : [];
 

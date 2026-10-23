@@ -105,9 +105,6 @@ public sealed class DocumentFileService : IDocumentFileService
         var encoder = DocumentEncodingService.GetEncoding(content.Encoding);
         var preamble = encoder.GetPreamble();
         var body = encoder.GetBytes(normalizedText);
-        var payload = new byte[preamble.Length + body.Length];
-        preamble.CopyTo(payload, 0);
-        body.CopyTo(payload, preamble.Length);
 
         var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
         try
@@ -121,7 +118,11 @@ public sealed class DocumentFileService : IDocumentFileService
                 useAsync: true);
             await using (stream.ConfigureAwait(false))
             {
-                await stream.WriteAsync(payload, cancellationToken);
+                if (preamble.Length > 0)
+                {
+                    await stream.WriteAsync(preamble, cancellationToken);
+                }
+                await stream.WriteAsync(body, cancellationToken);
 
                 // 置き換え前にディスクまで送る（電源断で「置き換えは済んだが中身は空」を避ける）。
                 // 設定ファイルと同じ扱いにする。失われて困る度合いは本文のほうが大きい。
@@ -169,7 +170,47 @@ public sealed class DocumentFileService : IDocumentFileService
     }
 
     public static string NormalizeNewLines(string text, string newLine)
-        => text.Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Replace("\n", newLine, StringComparison.Ordinal);
+    {
+        // 1文字の区切りは標準の一括置換を使い、正規化済み本文の走査も軽くする。
+        if (newLine == "\n")
+            return text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        if (newLine == "\r")
+            return text.Replace("\r\n", "\r", StringComparison.Ordinal).Replace('\n', '\r');
+
+        var replacement = newLine ?? string.Empty;
+        var changed = false;
+        long resultLength = text.Length;
+        var position = 0;
+        while (position < text.Length)
+        {
+            var relative = text.AsSpan(position).IndexOfAny('\r', '\n');
+            if (relative < 0) break;
+            var index = position + relative;
+            var length = text[index] == '\r' && index + 1 < text.Length && text[index + 1] == '\n' ? 2 : 1;
+            position = index + length;
+            changed |= !text.AsSpan(index, length).SequenceEqual(replacement.AsSpan());
+            resultLength += replacement.Length - length;
+        }
+
+        if (!changed) return text;
+        if (resultLength > int.MaxValue) throw new OutOfMemoryException();
+        // 拡張する改行でも、中間バッファと完成文字列の二重確保を避ける。
+        return string.Create((int)resultLength, (Text: text, Replacement: replacement), static (destination, state) =>
+        {
+            var remaining = state.Text.AsSpan();
+            var written = 0;
+            while (!remaining.IsEmpty)
+            {
+                var index = remaining.IndexOfAny('\r', '\n');
+                if (index < 0) break;
+                remaining[..index].CopyTo(destination[written..]);
+                written += index;
+                state.Replacement.AsSpan().CopyTo(destination[written..]);
+                written += state.Replacement.Length;
+                var length = remaining[index] == '\r' && index + 1 < remaining.Length && remaining[index + 1] == '\n' ? 2 : 1;
+                remaining = remaining[(index + length)..];
+            }
+            remaining.CopyTo(destination[written..]);
+        });
+    }
 }

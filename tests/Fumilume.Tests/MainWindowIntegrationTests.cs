@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
@@ -623,7 +624,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         switches[1].Command?.Execute(switches[1].CommandParameter);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(SidePanelKind.Outline, scope.ViewModel.SidePanel);
+        Assert.Equal(SidePanelKind.Outline, scope.ViewModel.SidePanel.Kind);
         Assert.True(outline.IsEffectivelyVisible);
         Assert.False(bookmarks.IsEffectivelyVisible);
         Assert.Equal([false, true, false], switches.Select(button => button.Classes.Contains("active")));
@@ -1324,11 +1325,13 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         var originalWidth = column.Bounds.Width;
         DragCsvBoundary(scope.Window, column, new Point(originalWidth - 1, column.Bounds.Height / 2), new Vector(60, 0));
         var resizedWidth = FindCsvHeader(preview, "CsvColumnHeader:A").Bounds.Width;
+        Assert.Same(column, FindCsvHeader(preview, "CsvColumnHeader:A"));
         Assert.True(resizedWidth > originalWidth + 40);
         var row = FindCsvHeader(preview, "CsvRowHeader:1");
         var originalHeight = row.Bounds.Height;
         DragCsvBoundary(scope.Window, row, new Point(row.Bounds.Width / 2, originalHeight - 1), new Vector(0, 35));
         Assert.True(FindCsvHeader(preview, "CsvRowHeader:1").Bounds.Height > originalHeight + 20);
+        Assert.Same(row, FindCsvHeader(preview, "CsvRowHeader:1"));
         Assert.False(document.IsModified);
         Assert.Equal("a,b\n1,2", document.Text);
         scope.ViewModel.NewDocumentCommand.Execute(null);
@@ -1685,11 +1688,61 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         var scroll = preview.GetVisualDescendants().OfType<ScrollViewer>().Single();
         Assert.True(scroll.Extent.Width > scroll.Viewport.Width);
         Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
+        var initialCell = FindCsvCell(preview, "A1");
+        var initialElements = preview.GetVisualDescendants().OfType<Border>()
+            .Where(element => !string.IsNullOrEmpty(AutomationProperties.GetName(element)))
+            .ToDictionary(element => AutomationProperties.GetName(element)!, element => element);
+        var cellCanvas = (Canvas)initialCell.Parent!;
+        var headerCanvas = (Canvas)FindCsvHeader(preview, "CsvColumnHeader:A").Parent!;
+        void AssertVisibleOrder()
+        {
+            var cells = cellCanvas.Children.OfType<Border>().ToArray();
+            Assert.Equal(cells.OrderBy(Canvas.GetTop).ThenBy(Canvas.GetLeft), cells);
+            var headers = headerCanvas.Children.OfType<Border>().ToArray();
+            Assert.Equal(headers
+                .OrderBy(header => AutomationProperties.GetName(header)!.StartsWith("CsvColumnHeader:", StringComparison.Ordinal) ? 0 : 1)
+                .ThenBy(header => AutomationProperties.GetName(header)!.StartsWith("CsvColumnHeader:", StringComparison.Ordinal)
+                    ? Canvas.GetLeft(header) : Canvas.GetTop(header)), headers);
+        }
+        AssertVisibleOrder();
+        ClickCsvHeader(scope.Window, preview, "CsvColumnHeader:B");
+        scroll.Offset = new Vector(1, 1);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
+        Assert.Same(initialCell, FindCsvCell(preview, "A1"));
         scroll.Offset = new Vector(180, 120);
         Dispatcher.UIThread.RunJobs();
         scope.Window.UpdateLayout();
         Assert.Equal(180, scroll.Offset.X);
         Assert.Equal(120, scroll.Offset.Y);
+        var currentElements = preview.GetVisualDescendants().OfType<Border>()
+            .Where(element => !string.IsNullOrEmpty(AutomationProperties.GetName(element)))
+            .ToDictionary(element => AutomationProperties.GetName(element)!, element => element);
+        var sharedNames = initialElements.Keys.Intersect(currentElements.Keys).ToArray();
+        Assert.NotEmpty(sharedNames);
+        Assert.All(sharedNames, name => Assert.Same(initialElements[name], currentElements[name]));
+        Assert.DoesNotContain(initialCell, currentElements.Values);
+        AssertVisibleOrder();
+        foreach (var offset in new[] { new Vector(0, 120), new Vector(0, 0) })
+        {
+            scroll.Offset = offset;
+            Dispatcher.UIThread.RunJobs();
+            scope.Window.UpdateLayout();
+            AssertVisibleOrder();
+        }
+        AssertVisibleOrder();
+        ClickCsvHeader(scope.Window, preview, "CsvRowHeader:2");
+        foreach (var offset in new[] { new Vector(180, 0), new Vector(180, 120), new Vector(0, 120), new Vector(0, 0) })
+        {
+            scroll.Offset = offset;
+            Dispatcher.UIThread.RunJobs();
+            scope.Window.UpdateLayout();
+            AssertVisibleOrder();
+        }
+        AssertVisibleOrder();
+        scroll.Offset = new Vector(180, 120);
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.UpdateLayout();
         scope.ViewModel.TogglePreviewCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         scope.ViewModel.TogglePreviewCommand.Execute(null);
@@ -1736,11 +1789,13 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         scope.ViewModel.TogglePreviewCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         var preview = scope.Window.GetVisualDescendants().OfType<CsvPreview>().Single();
+        var originalCell = FindCsvCell(preview, "A1");
         foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark, ThemeVariant.Light })
         {
             scope.Window.RequestedThemeVariant = theme;
             Dispatcher.UIThread.RunJobs();
             scope.Window.UpdateLayout();
+            Assert.Same(originalCell, FindCsvCell(preview, "A1"));
             Assert.True(scope.Window.TryFindResource("TextPrimary", theme, out var expected));
             Assert.All(preview.GetVisualDescendants().OfType<SelectableTextBlock>(), cell => Assert.Equal(expected, cell.Foreground));
         }

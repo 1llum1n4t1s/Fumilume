@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace Fumilume.Services;
 
 /// <summary>Avalonia の起動前に失敗した場合に OS の標準ダイアログで通知する。</summary>
-internal static class StartupErrorReporter
+internal static partial class StartupErrorReporter
 {
     private const uint ErrorIcon = 0x00000010;
 
@@ -46,6 +46,6 @@ internal static class StartupErrorReporter
         Console.Error.WriteLine(message);
     }
 
-    [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode)]
-    private static extern int MessageBox(IntPtr windowHandle, string text, string caption, uint type);
+    [LibraryImport("user32.dll", EntryPoint = "MessageBoxW", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int MessageBox(IntPtr windowHandle, string text, string caption, uint type);
 }

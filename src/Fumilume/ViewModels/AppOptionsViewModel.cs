@@ -65,10 +65,7 @@ public sealed class AppOptionsViewModel : ObservableObject
         get => _settings.ColumnRulerPosition;
         set => SetOption(
             _settings.ColumnRulerPosition,
-            Math.Clamp(
-                value,
-                AppSettingsDefaults.MinimumColumnRulerPosition,
-                AppSettingsDefaults.MaximumColumnRulerPosition),
+            AppSettingsDefaults.NormalizeColumnRulerPosition(value),
             v => _settings.ColumnRulerPosition = v);
     }
 
@@ -77,10 +74,7 @@ public sealed class AppOptionsViewModel : ObservableObject
         get => _settings.LineHeightFactor;
         set => SetOption(
             _settings.LineHeightFactor,
-            Math.Clamp(
-                value,
-                AppSettingsDefaults.MinimumLineHeightFactor,
-                AppSettingsDefaults.MaximumLineHeightFactor),
+            AppSettingsDefaults.NormalizeLineHeightFactor(value),
             v => _settings.LineHeightFactor = v);
     }
 
@@ -129,7 +123,7 @@ public sealed class AppOptionsViewModel : ObservableObject
         get => _settings.UiFontSize;
         set => SetOption(
             _settings.UiFontSize,
-            Math.Clamp(value, AppSettingsDefaults.MinimumFontSize, AppSettingsDefaults.MaximumFontSize),
+            AppSettingsDefaults.NormalizeFontSize(value),
             v => _settings.UiFontSize = v);
     }
 
@@ -150,7 +144,7 @@ public sealed class AppOptionsViewModel : ObservableObject
         get => _settings.FontSize;
         set => SetOption(
             _settings.FontSize,
-            Math.Clamp(value, AppSettingsDefaults.MinimumFontSize, AppSettingsDefaults.MaximumFontSize),
+            AppSettingsDefaults.NormalizeFontSize(value),
             v => _settings.FontSize = v);
     }
 
@@ -161,10 +155,7 @@ public sealed class AppOptionsViewModel : ObservableObject
         get => _settings.IndentationSize;
         set => SetOption(
             _settings.IndentationSize,
-            Math.Clamp(
-                value,
-                AppSettingsDefaults.MinimumIndentationSize,
-                AppSettingsDefaults.MaximumIndentationSize),
+            AppSettingsDefaults.NormalizeIndentationSize(value),
             v => _settings.IndentationSize = v);
     }
 
@@ -267,10 +258,7 @@ public sealed class AppOptionsViewModel : ObservableObject
         get => _settings.LargeFileThresholdMegabytes;
         set => SetOption(
             _settings.LargeFileThresholdMegabytes,
-            Math.Clamp(
-                value,
-                AppSettingsDefaults.MinimumLargeFileThresholdMegabytes,
-                AppSettingsDefaults.MaximumLargeFileThresholdMegabytes),
+            AppSettingsDefaults.NormalizeLargeFileThreshold(value),
             v => _settings.LargeFileThresholdMegabytes = v);
     }
 
@@ -326,7 +314,7 @@ public sealed class AppOptionsViewModel : ObservableObject
         get => _settings.TabHeight;
         set => SetOption(
             _settings.TabHeight,
-            Math.Clamp(Math.Round(value), AppSettingsDefaults.MinimumTabHeight, AppSettingsDefaults.MaximumTabHeight),
+            AppSettingsDefaults.NormalizeTabHeight(value),
             v => _settings.TabHeight = v);
     }
 
