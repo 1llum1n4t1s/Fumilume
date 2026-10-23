@@ -30,8 +30,8 @@ function Assert-ReleasePath {
     return $full
 }
 $releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
-$tempReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'Codex\Fumilume'
-$recordReleaseRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Codex\TaskArtifacts\Fumilume'
+$tempReleaseRoot = 'D:\Codex\Fumilume'
+$recordReleaseRoot = 'D:\Codex\TaskArtifacts\Fumilume'
 if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
 $WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot

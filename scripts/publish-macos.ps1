@@ -30,8 +30,8 @@ function Assert-ReleasePath {
     return $full
 }
 $releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
-$tempReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'Codex\Fumilume'
-$recordReleaseRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Codex\TaskArtifacts\Fumilume'
+$tempReleaseRoot = 'D:\Codex\Fumilume'
+$recordReleaseRoot = 'D:\Codex\TaskArtifacts\Fumilume'
 if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
 $WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
@@ -61,7 +61,7 @@ if ($package.Length -ne $asset[0].Size -or (Get-FileHash $package.FullName -Algo
 $previousToken = $env:CLOUDFLARE_API_TOKEN
 $previousAccount = $env:CLOUDFLARE_ACCOUNT_ID
 try {
-    $env:CLOUDFLARE_API_TOKEN = (Get-Content 'C:\Users\IMT\dev\Secret\secrets.json' -Raw | ConvertFrom-Json).cloudflare.api_token
+    $env:CLOUDFLARE_API_TOKEN = (Get-Content 'D:\Dev\Secret\secrets.json' -Raw | ConvertFrom-Json).cloudflare.api_token
     $env:CLOUDFLARE_ACCOUNT_ID = '10901bfadbf1005164774a7350082985'
     $headers = @{Authorization="Bearer $env:CLOUDFLARE_API_TOKEN"}
     $wranglerVersion = (Import-PowerShellDataFile (Join-Path $PSScriptRoot 'release-tools.psd1')).WranglerVersion

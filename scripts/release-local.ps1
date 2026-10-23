@@ -34,7 +34,7 @@ $Bucket = 'fumilume-updates'
 $BaseUrl = 'https://fumilume.kagayoi.com'
 $ZoneName = 'kagayoi.com'
 $AccountId = '10901bfadbf1005164774a7350082985'
-$SecretsPath = 'C:\Users\IMT\dev\Secret\secrets.json'
+$SecretsPath = 'D:\Dev\Secret\secrets.json'
 $CertSubjectName = 'Open Source Developer Yuichiro Shinozaki'
 $SignParams = "/n `"$CertSubjectName`" /fd SHA256 /td SHA256 /tr http://time.certum.pl"
 $WranglerVersion = (Import-PowerShellDataFile (Join-Path $PSScriptRoot 'release-tools.psd1')).WranglerVersion
@@ -72,8 +72,8 @@ function Assert-ReleasePath {
     return $full
 }
 $releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
-$tempReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'Codex\Fumilume'
-$recordReleaseRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Codex\TaskArtifacts\Fumilume'
+$tempReleaseRoot = 'D:\Codex\Fumilume'
+$recordReleaseRoot = 'D:\Codex\TaskArtifacts\Fumilume'
 if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
 $WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
@@ -319,6 +319,11 @@ foreach ($exe in Get-ChildItem $ArtifactsDir -Filter '*.exe') {
     }
     Write-Host "  ✅ $($exe.Name)"
 }
+
+Write-Host '== Windows配布実物の検証 ==' -ForegroundColor Cyan
+& (Join-Path $PSScriptRoot 'verify-windows-package.ps1') `
+    -PackageRoot $ArtifactsDir -WorkRoot $WorkRoot -RecordRoot $RecordRoot `
+    -Version $version -Runtimes $Runtimes -CertificateSubjectName $CertSubjectName
 
 if ($SkipUpload) {
     $ReleaseStopwatch.Stop()
