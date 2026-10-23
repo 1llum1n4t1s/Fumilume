@@ -135,10 +135,19 @@ try {
         if ($packageExecutables.Count -ne 1) { throw 'nupkgのFumilume.exeが一意ではありません' }
         $portablePath = Assert-SafePath (Join-Path $PackageRoot "Fumilume-$channel-Portable.zip") $PackageRoot
         $portableDir = Expand-CheckedZip $portablePath (Join-Path $verificationRoot "$runId\$runtime\portable")
-        $portableExecutables = @(Get-ChildItem -LiteralPath $portableDir -Filter Fumilume.exe -File -Recurse)
-        if ($portableExecutables.Count -ne 1) { throw 'PortableのFumilume.exeが一意ではありません' }
+        # PortableのルートはVelopack launcher、current配下が配布アプリ本体。
+        $portableExecutablePath = Assert-SafePath (Join-Path $portableDir 'current\Fumilume.exe') $portableDir
+        $portableExecutable = Get-Item -LiteralPath $portableExecutablePath
+        $launcherPath = Assert-SafePath (Join-Path $portableDir 'Fumilume.exe') $portableDir
+        $launcher = Get-SignedExecutable $launcherPath '014C'
+        if ($launcher.Machine -ne '014C' -or ($launcher.ProductVersion -split '\+')[0] -notin @($Version, "$Version.0")) {
+            throw "Portable launcherの版/PE machineが不一致です: $launcherPath"
+        }
+        $updaterPath = Assert-SafePath (Join-Path $portableDir 'Update.exe') $portableDir
+        $updater = Get-SignedExecutable $updaterPath '014C'
+        if ($updater.Machine -ne '014C') { throw "Portable updaterのPE machineが不一致です: $updaterPath" }
         $payloads = @()
-        foreach ($exe in @($packageExecutables[0], $portableExecutables[0])) {
+        foreach ($exe in @($packageExecutables[0], $portableExecutable)) {
             $payloadRoot = $exe.DirectoryName
             foreach ($required in @('README.txt', 'libSkiaSharp.dll', 'libHarfBuzzSharp.dll', 'Assets\Fonts\LICENSE-FLUENT-SYSTEM-ICONS.txt', 'Assets\Fonts\LICENSE-IBM-PLEX.txt', 'Assets\Fonts\LICENSE-UDEV-GOTHIC.txt')) {
                 $requiredPath = Assert-SafePath (Join-Path $payloadRoot $required) $payloadRoot
@@ -152,7 +161,7 @@ try {
         if (($installer.ProductVersion -split '\+')[0] -notin @($Version, "$Version.0") -and $installer.FileVersion -notin @($Version, "$Version.0")) {
             throw "Setupの版をreleaseと照合できません: $installerPath ($($installer.FileVersion), $($installer.ProductVersion))"
         }
-        $report.Packages += [ordered]@{ Runtime = $runtime; Channel = $channel; Feed = (Get-FileEvidence $feedPath); Package = $package; PackageId = $id; PackageVersion = $packageVersion; Payloads = $payloads; Portable = (Get-FileEvidence $portablePath); Installer = $installer }
+        $report.Packages += [ordered]@{ Runtime = $runtime; Channel = $channel; Feed = (Get-FileEvidence $feedPath); Package = $package; PackageId = $id; PackageVersion = $packageVersion; Payloads = $payloads; Portable = (Get-FileEvidence $portablePath); PortableLauncher = $launcher; PortableUpdater = $updater; Installer = $installer }
         Write-Host "  ✅ 配布物検証: $runtime / $Version"
     }
     $report.Status = 'Passed'
