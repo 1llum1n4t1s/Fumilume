@@ -39,7 +39,7 @@ ViewModel は状態と操作を持ち、View は表示とAvalonia固有の接続
 1. `Program` が `AppLogger` を初期化し、未処理例外を記録する。
 2. Velopackがインストール・更新後の関連付け更新と、アンインストール前の関連付け解除を処理する。
 3. `App` が `SettingsService` から設定を1回読み、初回描画前に `ThemeService` へ適用する。
-4. `MainWindow` と `MainWindowViewModel` が作られ、起動引数のファイルをワークスペースへ開く。
+4. `MainWindow` と `MainWindowViewModel` が作られ、セッション復元後に起動引数のファイルをワークスペースへ開く。後続プロセスからの転送も同じ順序を保つ（[セッションの復元](#セッションの復元)を参照）。
 
 ### テキストの読込・編集・保存
 

@@ -6,6 +6,7 @@
 
 - `src/Fumilume/`: WindowsとApple Silicon macOS向けAvaloniaデスクトップアプリ
 - `tests/Fumilume.Tests/`: xUnit v3 と Avalonia.Headless による単体・統合テスト
+- `tests/Fumilume.MacE2E/`: Apple Silicon Macで実Avalonia・Core Graphicsと更新パッケージを検証するE2E実行アプリ
 - `scripts/release-local.ps1`: x64 / ARM64 の Native AOT、署名、Velopack パッケージ化、R2 配布、公開検証
 - `scripts/build-macos-arm64.sh`: Apple Silicon Mac上でNative AOT・Developer ID署名・公証済みPKG/ZIPと更新パッケージを作成
 - `../vps-web/lp/fumilume/`: `fumilume.kagayoi.com` のVPS配信のランディングページ
@@ -51,7 +52,7 @@ dotnet test Fumilume.slnx -c Release --no-restore
 - macOS 向けの変更では `dotnet restore src/Fumilume/Fumilume.csproj -p:FumilumeTargetMac=true -r osx-arm64 --locked-mode` を通す。Apple Silicon Mac で `bash scripts/build-macos-arm64.sh` を実行し、文書の開く・保存・再起動後の復元・PDFの通常ページと回転ページを実機確認する。Windows では macOS Native AOT の発行と実機確認を完了扱いにしない。
 - ファイルのドロップ経路を変更するときは、[DESIGN.md の入力境界](DESIGN.md#ファイルのドロップ)を維持し、`MainWindowIntegrationTests` で未知の拡張子・拡張子なし・重複ドロップ・フォルダ除外・文字ドラッグ設定の両状態を確認する。
 - ファイルI/O、設定永続化、文字変換、Markdown、PDFを変更した場合は、実際の経路を通る E2E テストで正常系と境界条件を確認し、再現可能な成果物を残す。
-- NuGet依存関係を変更した場合は、アプリとテストの `packages.lock.json` を同時に更新し、locked restore を通す。
+- NuGet依存関係を変更した場合は、影響するWindows・macOS両方のlockfileを更新する。対象は `src/Fumilume/packages.lock.json`、`src/Fumilume/packages.macos.lock.json`、`tests/Fumilume.Tests/packages.lock.json`、`tests/Fumilume.MacE2E/packages.lock.json`。通常の検証とmacOS向けrestoreに加え、`dotnet restore tests/Fumilume.MacE2E/Fumilume.MacE2E.csproj -p:FumilumeTargetMac=true --locked-mode` を通す。
 - Native AOT、RID依存API、配布物へ影響する変更では、リリース前に両アーキテクチャを検証する。直接発行する場合は `win-x64` に `PlatformTarget=x64`、`win-arm64` に `PlatformTarget=ARM64` を対応させる。
 
 ## リリース
