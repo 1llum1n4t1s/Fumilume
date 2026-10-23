@@ -88,13 +88,13 @@
       },
       "VelopackUpdateDialog.Avalonia": {
         "type": "Direct",
-        "requested": "[1.0.19, )",
-        "resolved": "1.0.19",
-        "contentHash": "7XakW+QFLDoAtTjdvN7foEfZ3INqGc/jPgs04o6Z7/lAR4p1GB7oB77fdKCTC+RZ9KUgYMy+f0eRIS+Q/YCbvg==",
+        "requested": "[1.0.20, )",
+        "resolved": "1.0.20",
+        "contentHash": "JwUdg47IowAll1TaD8L8e9aBGGGgwjXT4fXBmxyHMYCPrhFrTKF+eV9sim9ETsgPgvAkyfB9S2ta93/OIE6Pwg==",
         "dependencies": {
-          "Avalonia": "12.1.2",
+          "Avalonia": "12.1.4",
           "CommunityToolkit.Mvvm": "8.4.2",
-          "Velopack": "1.2.0"
+          "Velopack": "1.2.161"
         }
       },
       "Avalonia.Angle.Windows.Natives": {
