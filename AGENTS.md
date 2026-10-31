@@ -57,7 +57,7 @@ dotnet test Fumilume.slnx -c Release --no-restore
 
 ## リリース
 
-- リリースは既存の `$vava` ワークフローと `vava.config.json` に従い、版番号を一度だけ決定する。
+- リリースは既存の `$vava` ワークフローに従い、版番号を一度だけ決定する。
 - 外部状態を変えない事前確認は次で行う。
 
 ```powershell
@@ -79,3 +79,12 @@ pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 ## 製品ページの配信先
 
 [DESIGN.md の配信先](DESIGN.md#製品ページの配信先)を参照し、公開URLと既存のR2・ライセンス通信を維持する。製品ページの配信には `../vps-web/deploy/deploy-lp.ps1` を使う。
+
+### ローカルリリースの実行
+
+リポジトリルートで事前確認を行い、失敗時は「リリースの事前確認に失敗しました。SimplySign Desktop、ネットワーク、Cloudflare 認証、Wrangler の状態を確認してください」。公開依頼時に成功を確認してから実行する。
+
+```powershell
+pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
+if ($LASTEXITCODE -eq 0) { pwsh -NoProfile -File scripts/release-all.ps1 } else { throw 'リリースの事前確認に失敗しました。SimplySign Desktop、ネットワーク、Cloudflare 認証、Wrangler の状態を確認してください' }
+```
