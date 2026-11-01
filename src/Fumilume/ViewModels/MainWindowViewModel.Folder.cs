@@ -15,7 +15,7 @@ public sealed partial class MainWindowViewModel
     private long _folderOpenGeneration;
     private long _folderRevealGeneration;
     private bool _folderDisposed;
-    private bool _folderRefreshRunning;
+    private Task? _folderRefreshTask;
     private bool _folderRefreshPending;
     private bool _folderRevealStale;
 
@@ -168,27 +168,28 @@ public sealed partial class MainWindowViewModel
     }
 
     [RelayCommand]
-    private async Task RefreshFolderAsync()
+    private Task RefreshFolderAsync()
     {
-        if (_folderDisposed || !HasFolder) return;
-        if (_folderRefreshRunning) { _folderRefreshPending = true; return; }
-        _folderRefreshRunning = true;
-        try
+        if (_folderDisposed || !HasFolder) return Task.CompletedTask;
+        _folderRefreshPending = true;
+        // 監視処理と手動更新で、追加要求を反映し終えるまでの完了を共有する。
+        if (_folderRefreshTask is { IsCompleted: false } running) return running;
+        return _folderRefreshTask = RefreshFolderCoreAsync();
+    }
+
+    private async Task RefreshFolderCoreAsync()
+    {
+        do
         {
-            do
-            {
-                _folderRefreshPending = false;
-                var generation = _folderGeneration;
-                var selectedPath = SelectedFolderNode?.FullPath;
-                foreach (var root in FolderRoots.ToArray())
-                    await LoadFolderNodeAsync(root, generation, refresh: true);
-                if (generation != _folderGeneration) return;
-                // 再読込ではユーザーの折りたたみ状態を維持し、残っている選択だけを引き継ぐ。
-                if (selectedPath is not null)
-                    SelectedFolderNode = FindLoadedFolderNode(selectedPath);
-            } while (_folderRefreshPending && !_folderDisposed);
-        }
-        finally { _folderRefreshRunning = false; }
+            _folderRefreshPending = false;
+            var generation = _folderGeneration;
+            var selectedPath = SelectedFolderNode?.FullPath;
+            foreach (var root in FolderRoots.ToArray())
+                await LoadFolderNodeAsync(root, generation, refresh: true);
+            // 再読込ではユーザーの折りたたみ状態を維持し、同じ世代の選択だけを引き継ぐ。
+            if (generation == _folderGeneration && selectedPath is not null)
+                SelectedFolderNode = FindLoadedFolderNode(selectedPath);
+        } while (_folderRefreshPending && !_folderDisposed && HasFolder);
     }
 
     private FolderTreeNode? FindLoadedFolderNode(string path)

@@ -6,10 +6,10 @@
 - UDEV Gothic JPDOC 2.2.0 (`UDEVGothicJPDOC-Regular.ttf`, `UDEVGothicJPDOC-Bold.ttf`)
   - Source: <https://github.com/yuru7/udev-gothic/releases/tag/v2.2.0>
   - License: `LICENSE-UDEV-GOTHIC.txt`
-- Fluent System Icons 1.1.344 (`FluentSystemIcons-Regular.ttf`)
-  - Source: <https://github.com/microsoft/fluentui-system-icons/tree/a347af95478f989038cccbf085978865264c048a/fonts>
-  - Code points: <https://github.com/microsoft/fluentui-system-icons/blob/a347af95478f989038cccbf085978865264c048a/fonts/FluentSystemIcons-Regular.json>
-  - SHA256: `f977ae5bfb46661e7ba94b098e0d7720e27af888e57b9b14e239933ac4c0e6f4`
+- Fluent System Icons 1.1.345 (`FluentSystemIcons-Regular.ttf`)
+  - Source: <https://github.com/microsoft/fluentui-system-icons/tree/9eb184e96268d3293462f9d9d19225b4c7b07774/fonts>
+  - Code points: <https://github.com/microsoft/fluentui-system-icons/blob/9eb184e96268d3293462f9d9d19225b4c7b07774/fonts/FluentSystemIcons-Regular.json>
+  - SHA256: `af1b71ab7bb475ae30b8c87172551503f8de6cf733548fe7ddbda15fc08dea34`
   - License: `LICENSE-FLUENT-SYSTEM-ICONS.txt`
 
 The font files are redistributed unmodified and embedded as Avalonia resources.

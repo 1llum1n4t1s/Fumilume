@@ -509,20 +509,7 @@ public sealed class MacroTests
         => new() { Kind = MacroStepKind.MoveCaret, Motion = motion };
 
     private static MainWindowViewModel CreateViewModel(StubDialogService? dialogs = null)
-        => new(new StubFileService(), dialogs ?? new StubDialogService(), new AppSettings());
-
-    private sealed class StubFileService : IDocumentFileService
-    {
-        public Task<TextDocumentContent> ReadAsync(string path, CancellationToken cancellationToken = default)
-            => Task.FromResult(new TextDocumentContent(string.Empty, DocumentEncoding.Utf8, Environment.NewLine));
-
-        public Task WriteAsync(
-            string path,
-            TextDocumentContent content,
-            bool createBackup = false,
-            CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
-    }
+        => new(new EmptyDocumentFileService(), dialogs ?? new StubDialogService(), new AppSettings());
 
     private sealed class StubDialogService : IEditorDialogService
     {

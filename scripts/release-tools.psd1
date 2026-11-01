@@ -1,3 +1,3 @@
 @{
-    WranglerVersion = '4.150.0'
+    WranglerVersion = '4.156.0'
 }

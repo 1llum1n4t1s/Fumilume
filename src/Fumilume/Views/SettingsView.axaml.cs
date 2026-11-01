@@ -107,8 +107,10 @@ public sealed partial class SettingsView : UserControl
             var visibleCards = 0;
             foreach (var card in entry.Cards)
             {
-                var visible = trimmed.Length == 0
-                    || card.Text.Contains(trimmed, StringComparison.CurrentCultureIgnoreCase);
+                // OS 限定セクションなど、親の表示条件は検索で上書きしない。
+                var visible = card.Control.Parent is not Control { IsVisible: false }
+                    && (trimmed.Length == 0
+                        || card.Text.Contains(trimmed, StringComparison.CurrentCultureIgnoreCase));
                 card.Control.IsVisible = visible;
                 if (visible)
                 {

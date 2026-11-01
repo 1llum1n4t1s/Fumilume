@@ -9,7 +9,7 @@ using Fumilume.Views;
 namespace Fumilume.Tests;
 
 /// <summary>
-/// 設定画面の検索。6 タブ 20 枚のカードを端から開いて回らずに済むことが目的なので、
+/// 設定画面の検索。各タブのカードを端から開いて回らずに済むことが目的なので、
 /// 「選んでいないタブの中身も当たること」を中心に確かめる。
 /// </summary>
 [Collection(HeadlessAppCollection.Name)]
@@ -46,6 +46,34 @@ public sealed class SettingsSearchTests(HeadlessAppFixture fixture)
 
         // 「横スクロール」は項目名ではなく、折り返しの説明文にしか出てこない。
         Assert.Equal(1, scope.View.ApplySearch("横スクロール"));
+    });
+
+    [Fact]
+    public void FileAssociationsAreSearchableOnlyWhenAvailable() => fixture.Run(() =>
+    {
+        using var scope = new SettingsScope();
+        var box = scope.View.FindControl<TextBox>("SettingsSearchBox")!;
+        var card = scope.View.FindControl<HeaderedContentControl>("FileAssociationCard")!;
+        var section = scope.View.FindControl<StackPanel>("FileAssociationSection")!;
+
+        box.Text = "ファイルの関連付け";
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(OperatingSystem.IsWindows(), section.IsVisible);
+        Assert.Equal(OperatingSystem.IsWindows(), card.IsVisible);
+        Assert.Equal(OperatingSystem.IsWindows(), scope.Tabs.IsVisible);
+        if (OperatingSystem.IsWindows())
+        {
+            var selected = Assert.IsType<TabItem>(scope.Tabs.SelectedItem);
+            Assert.True(selected.IsVisible);
+            Assert.Contains(card, scope.CardsOf(selected));
+            Assert.Single(scope.Tabs.Items.OfType<TabItem>(), tab => tab.IsVisible);
+        }
+
+        box.Text = string.Empty;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(OperatingSystem.IsWindows(), section.IsVisible);
+        Assert.Equal(OperatingSystem.IsWindows(), card.IsVisible);
     });
 
     [Fact]
@@ -136,7 +164,9 @@ public sealed class SettingsSearchTests(HeadlessAppFixture fixture)
         public TabControl Tabs { get; }
 
         public IReadOnlyList<Control> CardsOf(TabItem tab)
-            => tab.Content is null ? [] : FindCards(tab.Content);
+            => tab.Content is null ? [] : FindCards(tab.Content)
+                .Where(card => card.Name != "FileAssociationCard" || OperatingSystem.IsWindows())
+                .ToList();
 
         public void Dispose()
         {

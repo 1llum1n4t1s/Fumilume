@@ -457,9 +457,24 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         var editor = scope.Window.FindControl<TextEditor>("Editor");
         Assert.NotNull(editor);
 
-        var brush = Assert.IsAssignableFrom<ISolidColorBrush>(editor.TextArea.TextView.CurrentLineBackground);
-        Assert.True(brush.Color.B > brush.Color.G);
-        Assert.True(brush.Color.B > brush.Color.R);
+        foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark, ThemeVariant.Light })
+        {
+            scope.Window.RequestedThemeVariant = theme;
+            Dispatcher.UIThread.RunJobs();
+
+            var textView = editor.TextArea.TextView;
+            Assert.Equal(theme, textView.ActualThemeVariant);
+            Assert.True(textView.TryFindResource("EditorCurrentLineBg", theme, out var background));
+            Assert.True(textView.TryFindResource("EditorCurrentLineBorder", theme, out var border));
+            var brush = Assert.IsAssignableFrom<ISolidColorBrush>(textView.CurrentLineBackground);
+            Assert.Equal(Assert.IsAssignableFrom<ISolidColorBrush>(background).Color, brush.Color);
+            Assert.True(brush.Color.B > brush.Color.G);
+            Assert.True(brush.Color.B > brush.Color.R);
+            var pen = Assert.IsAssignableFrom<IPen>(textView.CurrentLineBorder);
+            Assert.Equal(
+                Assert.IsAssignableFrom<ISolidColorBrush>(border).Color,
+                Assert.IsAssignableFrom<ISolidColorBrush>(pen.Brush).Color);
+        }
     });
 
     [Fact]
@@ -670,16 +685,54 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     });
 
     [Fact]
+    public void NonEditorSettingsKeepTheCurrentSyntaxAndIndentation() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        scope.ViewModel.SelectedDocument!.Load(
+            @"C:\tmp\data.json",
+            new TextDocumentContent("{}", DocumentEncoding.Utf8, DocumentNewLines.Lf));
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        var syntax = editor.SyntaxHighlighting;
+        var indentation = editor.TextArea.IndentationStrategy;
+        Assert.NotNull(syntax);
+        var options = scope.ViewModel.Options;
+        Action[] changes =
+        [
+            () => options.SearchMatchCase = !options.SearchMatchCase,
+            () => options.SearchUseRegex = !options.SearchUseRegex,
+            () => options.SearchUseCaretWord = !options.SearchUseCaretWord,
+            () => options.RestoreCaretPosition = !options.RestoreCaretPosition,
+            () => options.WarnOnLargeFile = !options.WarnOnLargeFile,
+            () => options.LargeFileThresholdMegabytes = options.LargeFileThresholdMegabytes == 1 ? 2 : 1,
+            () => options.CreateBackupOnSave = !options.CreateBackupOnSave,
+            () => options.ConfirmOnExit = !options.ConfirmOnExit,
+            () => options.RestoreSession = !options.RestoreSession,
+            () => options.RememberWindowBounds = !options.RememberWindowBounds,
+            () => options.CheckUpdatesOnStartup = !options.CheckUpdatesOnStartup,
+        ];
+
+        foreach (var change in changes)
+        {
+            change();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Same(syntax, editor.SyntaxHighlighting);
+            Assert.Same(indentation, editor.TextArea.IndentationStrategy);
+        }
+    });
+
+    [Fact]
     public void JsonEnterUsesBracketDepthAndRefreshesAfterSettingsChange() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
-        scope.ViewModel.Options.ConvertTabsToSpaces = true;
-        scope.ViewModel.Options.IndentationSize = 2;
+        scope.ViewModel.Options.ConvertTabsToSpaces = false;
+        scope.ViewModel.Options.IndentationSize = 4;
         var document = scope.ViewModel.SelectedDocument!;
         document.Load(
             @"C:\tmp\data.json",
             new TextDocumentContent("{\n  \"items\": [", DocumentEncoding.Utf8, DocumentNewLines.Lf));
         var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        scope.ViewModel.Options.ConvertTabsToSpaces = true;
+        scope.ViewModel.Options.IndentationSize = 2;
         editor.CaretOffset = editor.Document.TextLength;
         editor.Focus();
         Dispatcher.UIThread.RunJobs();

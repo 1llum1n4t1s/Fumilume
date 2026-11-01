@@ -123,7 +123,11 @@ public sealed partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, OnFileDragOver);
         AddHandler(DragDrop.DropEvent, OnFileDrop);
         // システムのライト・ダーク切り替えにも強調表示の配色を追従させる。
-        ActualThemeVariantChanged += (_, _) => ApplySyntaxHighlighting();
+        ActualThemeVariantChanged += (_, _) =>
+        {
+            ApplySyntaxHighlighting();
+            ApplyCurrentLineColors();
+        };
         BindSelectedDocument();
 
         _fileChangeMonitor.FileChanged += OnExternalFileChanged;
@@ -342,15 +346,19 @@ public sealed partial class MainWindow : Window
         _editor.FontSize = _options.EditorFontSize;
 
         ApplySyntaxHighlighting();
+        ApplyCurrentLineColors();
+    }
 
+    private void ApplyCurrentLineColors()
+    {
         // AvaloniaEdit の既定色（緑系）を使わず、テーマに合う青系へ固定する。
         var textView = _editor.TextArea.TextView;
-        if (textView.TryFindResource("EditorCurrentLineBg", textView.ActualThemeVariant, out var currentLineBackground))
+        if (textView.TryFindResource("EditorCurrentLineBg", ActualThemeVariant, out var currentLineBackground))
         {
             textView.CurrentLineBackground = currentLineBackground as IBrush;
         }
 
-        if (textView.TryFindResource("EditorCurrentLineBorder", textView.ActualThemeVariant, out var currentLineBorder))
+        if (textView.TryFindResource("EditorCurrentLineBorder", ActualThemeVariant, out var currentLineBorder))
         {
             textView.CurrentLineBorder = currentLineBorder is IBrush brush
                 ? new Pen(brush, 1)
@@ -405,6 +413,24 @@ public sealed partial class MainWindow : Window
         if (args.PropertyName is nameof(AppOptionsViewModel.UiFontFamily) or nameof(AppOptionsViewModel.UiFontSize))
         {
             ApplyUiFontOptions();
+            return;
+        }
+
+        // エディタに関係しない設定では、構文表示とインデント規則を作り直さない。
+        // テーマは ActualThemeVariantChanged から現在の変種を反映する。
+        if (args.PropertyName is nameof(AppOptionsViewModel.SearchMatchCase)
+            or nameof(AppOptionsViewModel.SearchUseRegex)
+            or nameof(AppOptionsViewModel.SearchUseCaretWord)
+            or nameof(AppOptionsViewModel.RestoreCaretPosition)
+            or nameof(AppOptionsViewModel.WarnOnLargeFile)
+            or nameof(AppOptionsViewModel.LargeFileThresholdMegabytes)
+            or nameof(AppOptionsViewModel.CreateBackupOnSave)
+            or nameof(AppOptionsViewModel.ConfirmOnExit)
+            or nameof(AppOptionsViewModel.RestoreSession)
+            or nameof(AppOptionsViewModel.RememberWindowBounds)
+            or nameof(AppOptionsViewModel.CheckUpdatesOnStartup)
+            or nameof(AppOptionsViewModel.ThemeMode))
+        {
             return;
         }
 

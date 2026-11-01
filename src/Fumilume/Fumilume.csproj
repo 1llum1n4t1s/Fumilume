@@ -48,7 +48,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="SuperLightLogger" Version="1.0.19" />
     <PackageReference Include="Velopack" Version="1.2.161" />
-    <PackageReference Include="VelopackUpdateDialog.Avalonia" Version="1.0.20" />
+    <PackageReference Include="VelopackUpdateDialog.Avalonia" Version="1.0.21" />
   </ItemGroup>
 
   <ItemGroup>

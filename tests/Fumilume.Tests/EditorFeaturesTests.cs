@@ -76,20 +76,7 @@ public sealed class EditorFeaturesTests
     }
 
     private static MainWindowViewModel CreateViewModel(FakeDialogService dialogs)
-        => new(new FakeFileService(), dialogs);
-
-    private sealed class FakeFileService : IDocumentFileService
-    {
-        public Task<TextDocumentContent> ReadAsync(string path, CancellationToken cancellationToken = default)
-            => Task.FromResult(new TextDocumentContent(string.Empty, DocumentEncoding.Utf8, Environment.NewLine));
-
-        public Task WriteAsync(
-            string path,
-            TextDocumentContent content,
-            bool createBackup = false,
-            CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
-    }
+        => new(new EmptyDocumentFileService(), dialogs);
 
     private sealed class FakeDialogService : IEditorDialogService
     {

@@ -18,7 +18,7 @@ public sealed partial class MainWindowViewModel
     /// <summary>
     /// 初回復元でまだ処理していないタブ。復元途中の同期終了では現在のタブへ足し、前回の一覧を欠落させない。
     /// </summary>
-    private readonly List<SessionTabState> _pendingSessionTabs = [];
+    private readonly Queue<SessionTabState> _pendingSessionTabs = new();
 
     /// <summary>
     /// 復元を完了できなかった未保存タブ。終了時の再保存へ混ぜ、前回の控えを次回も参照できるようにする。
@@ -66,7 +66,8 @@ public sealed partial class MainWindowViewModel
 
         _sessionBuffersLost = 0;
         _pendingSessionTabs.Clear();
-        _pendingSessionTabs.AddRange(session.Tabs);
+        foreach (var tab in session.Tabs)
+            _pendingSessionTabs.Enqueue(tab);
         _unrestoredSessionTabs.Clear();
         _sessionSelectedTabState = session.SelectedTabIndex >= 0 && session.SelectedTabIndex < session.Tabs.Count
             ? session.Tabs[session.SelectedTabIndex]
@@ -82,7 +83,7 @@ public sealed partial class MainWindowViewModel
         {
             var state = session.Tabs[index];
             var restored = await RestoreTabAsync(state);
-            _pendingSessionTabs.Remove(state);
+            _pendingSessionTabs.Dequeue();
             if (restored is null)
             {
                 if (state.IsModified)

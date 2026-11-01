@@ -45,7 +45,7 @@
 
 ```powershell
 dotnet restore Fumilume.slnx --locked-mode
-dotnet test Fumilume.slnx -c Release --no-restore
+dotnet test --solution Fumilume.slnx -c Release --no-restore
 ```
 
 - UI、binding、テーマ、タブ状態を変更した場合は `MainWindowIntegrationTests` を含む全テストを実行する。

@@ -40,12 +40,12 @@ internal static class DocumentEncodingService
 
         // EUC-JP のバイト構造は Shift_JIS より狭い。先に厳密判定すると、一般的な日本語本文を
         // Shift_JIS の半角文字列として誤って受け入れるのを避けられる。
-        if (ContainsNonAscii(bytes) && TryDecode(bytes, EucJpStrict, out text))
+        if (TryDecode(bytes, EucJpStrict, out text))
         {
             return CreateContent(text, DocumentEncoding.EucJp);
         }
 
-        if (ContainsNonAscii(bytes) && TryDecode(bytes, ShiftJisStrict, out text))
+        if (TryDecode(bytes, ShiftJisStrict, out text))
         {
             return CreateContent(text, DocumentEncoding.ShiftJis);
         }
@@ -211,19 +211,6 @@ internal static class DocumentEncodingService
 
     private static InvalidDataException CreateUnsupportedEncodingException(Exception? innerException = null)
         => new("対応している文字コードとして判定できませんでした。", innerException);
-
-    private static bool ContainsNonAscii(ReadOnlySpan<byte> bytes)
-    {
-        foreach (var value in bytes)
-        {
-            if (value >= 0x80)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     private static bool ContainsIso2022JpEscape(ReadOnlySpan<byte> bytes)
     {

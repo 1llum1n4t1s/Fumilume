@@ -266,8 +266,8 @@
       },
       "VelopackUpdateDialog.Avalonia": {
         "type": "Transitive",
-        "resolved": "1.0.20",
-        "contentHash": "JwUdg47IowAll1TaD8L8e9aBGGGgwjXT4fXBmxyHMYCPrhFrTKF+eV9sim9ETsgPgvAkyfB9S2ta93/OIE6Pwg==",
+        "resolved": "1.0.21",
+        "contentHash": "/uN8WhaiEAc2l7MQzNDowNyY8KvvAm2Rc+94RomYdsKV3YzUmpwXKcjJfMLvqljPoUg3CTuCDAPULw/fOJka4A==",
         "dependencies": {
           "Avalonia": "12.1.4",
           "CommunityToolkit.Mvvm": "8.4.2",
@@ -285,7 +285,7 @@
           "PdfPig": "[0.1.16, )",
           "SuperLightLogger": "[1.0.19, )",
           "Velopack": "[1.2.161, )",
-          "VelopackUpdateDialog.Avalonia": "[1.0.20, )"
+          "VelopackUpdateDialog.Avalonia": "[1.0.21, )"
         }
       }
     },

@@ -398,47 +398,51 @@
                                 </StackPanel>
                             </HeaderedContentControl>
 
-                            <StackPanel IsVisible="{Binding IsFileAssociationAvailable}">
-                                <TextBlock Classes="settingscaption" Margin="0,4,0,10" TextWrapping="Wrap"
-                                           Text="ダブルクリックで Fumilume が開く拡張子を選びます。切り替えるとすぐ反映され、変更は現在のユーザーにだけ適用されます。" />
+                            <StackPanel x:Name="FileAssociationSection" IsVisible="{Binding IsFileAssociationAvailable}">
+                                <HeaderedContentControl x:Name="FileAssociationCard" Classes="settingscard" Header="ファイルの関連付け">
+                                    <StackPanel Classes="settingsfields">
+                                        <TextBlock Classes="settingscaption" Margin="0,4,0,10" TextWrapping="Wrap"
+                                                   Text="ダブルクリックで Fumilume が開く拡張子を選びます。切り替えるとすぐ反映され、変更は現在のユーザーにだけ適用されます。" />
 
-                                <!-- 全選択 / 全解除 -->
-                                <StackPanel Margin="0,0,0,12" Orientation="Horizontal" Spacing="8">
-                                    <Button Classes="cmd" Content="全選択"
-                                            Command="{Binding SelectAllAssociationsCommand}" />
-                                    <Button Classes="cmd" Content="全解除"
-                                            Command="{Binding DeselectAllAssociationsCommand}" />
-                                </StackPanel>
+                                        <!-- 全選択 / 全解除 -->
+                                        <StackPanel Margin="0,0,0,12" Orientation="Horizontal" Spacing="8">
+                                            <Button Classes="cmd" Content="全選択"
+                                                    Command="{Binding SelectAllAssociationsCommand}" />
+                                            <Button Classes="cmd" Content="全解除"
+                                                    Command="{Binding DeselectAllAssociationsCommand}" />
+                                        </StackPanel>
 
-                                <!-- カード内リスト。行ごとに下線を引き、外周だけを角丸で囲う。
-                                     カードの左右パディング 4 は、行の下線が角丸の縁へ噛まないようにするための逃げ。 -->
-                                <Border Padding="4,0"
-                                        Background="{DynamicResource SettingsCardBg}"
-                                        BorderBrush="{DynamicResource SettingsCardBorder}"
-                                        BorderThickness="1"
-                                        CornerRadius="14">
-                                    <ItemsControl ItemsSource="{Binding Associations}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="vm:FileAssociationItemViewModel">
-                                                <Border Padding="12,8"
-                                                        BorderBrush="{DynamicResource SettingsCardBorder}"
-                                                        BorderThickness="0,0,0,1">
-                                                    <Grid ColumnDefinitions="*,Auto">
-                                                        <TextBlock Grid.Column="0" VerticalAlignment="Center"
-                                                                   FontSize="13"
-                                                                   Foreground="{DynamicResource TextPrimary}"
-                                                                   Text="{Binding Description}" />
-                                                        <ToggleSwitch Grid.Column="1" Margin="0" Padding="0"
-                                                                      VerticalAlignment="Center"
-                                                                      AutomationProperties.Name="{Binding Description}"
-                                                                      IsChecked="{Binding IsAssociated, Mode=TwoWay}"
-                                                                      OffContent="" OnContent="" />
-                                                    </Grid>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </Border>
+                                        <!-- カード内リスト。行ごとに下線を引き、外周だけを角丸で囲う。
+                                             カードの左右パディング 4 は、行の下線が角丸の縁へ噛まないようにするための逃げ。 -->
+                                        <Border Padding="4,0"
+                                                Background="{DynamicResource SettingsCardBg}"
+                                                BorderBrush="{DynamicResource SettingsCardBorder}"
+                                                BorderThickness="1"
+                                                CornerRadius="14">
+                                            <ItemsControl ItemsSource="{Binding Associations}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:FileAssociationItemViewModel">
+                                                        <Border Padding="12,8"
+                                                                BorderBrush="{DynamicResource SettingsCardBorder}"
+                                                                BorderThickness="0,0,0,1">
+                                                            <Grid ColumnDefinitions="*,Auto">
+                                                                <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                                                                           FontSize="13"
+                                                                           Foreground="{DynamicResource TextPrimary}"
+                                                                           Text="{Binding Description}" />
+                                                                <ToggleSwitch Grid.Column="1" Margin="0" Padding="0"
+                                                                              VerticalAlignment="Center"
+                                                                              AutomationProperties.Name="{Binding Description}"
+                                                                              IsChecked="{Binding IsAssociated, Mode=TwoWay}"
+                                                                              OffContent="" OnContent="" />
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Border>
+                                    </StackPanel>
+                                </HeaderedContentControl>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>

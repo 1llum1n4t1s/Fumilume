@@ -6,6 +6,7 @@ using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -321,6 +322,28 @@ internal static class Program
                 vm.Options.EditorFontSize = 19;
                 vm.Options.WordWrap = true;
                 vm.OpenSettingsCommand.Execute(null);
+                await WaitAsync(() => window.GetVisualDescendants().OfType<SettingsView>()
+                    .Any(view => view.IsEffectivelyVisible));
+                var settingsView = window.GetVisualDescendants().OfType<SettingsView>()
+                    .Single(view => view.IsEffectivelyVisible);
+                Require(settingsView.DataContext is SettingsTabViewModel { IsFileAssociationAvailable: false },
+                    "File associations unexpectedly available on macOS");
+                var searchBox = settingsView.FindControl<TextBox>("SettingsSearchBox")!;
+                var settingsTabs = settingsView.FindControl<TabControl>("SettingsTabs")!;
+                var noMatch = settingsView.FindControl<TextBlock>("SettingsNoMatch")!;
+                searchBox.Text = "ファイルの関連付け";
+                await WaitAsync(() => noMatch.IsVisible);
+                Require(settingsView.FindControl<StackPanel>("FileAssociationSection") is { IsVisible: false },
+                    "File association section became visible on macOS");
+                Require(settingsView.FindControl<HeaderedContentControl>("FileAssociationCard") is { IsVisible: false },
+                    "File association card became visible after searching on macOS");
+                Require(settingsView.FindControl<TextBlock>("SettingsSearchSummary") is { IsVisible: true, Text: "0 件" },
+                    "Unavailable file associations counted as search results");
+                Require(!settingsTabs.IsVisible, "Empty settings tabs remained visible after searching");
+                searchBox.Text = string.Empty;
+                await WaitAsync(() => settingsTabs.IsVisible && !noMatch.IsVisible);
+                Require(settingsTabs.Items.OfType<TabItem>().All(tab => tab.IsVisible),
+                    "Clearing the search did not restore settings tabs");
                 Require(await vm.PersistSessionStateAsync(), "Session persistence failed");
                 var settings = SettingsService.Load();
                 Require(settings.FontSize == 19 && settings.WordWrap, "Settings persistence failed");
