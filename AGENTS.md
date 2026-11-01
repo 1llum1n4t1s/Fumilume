@@ -28,7 +28,7 @@
 - アウトラインは `OutlineService` が対応を宣言した拡張子だけを解析し、判定できない形式では空を返す。宣言でない行を拾わないことを、拾えることより優先する。
 - キーボードマクロは操作（`MacroStep`）を記録し、キー入力そのものを溜めない。再生は `DocumentViewModel` へ当て直す経路だけにし、View の状態（`SearchPanel` など）へ依存させない。手を増やすときは `MacroStepKind`、View 側の翻訳、`ApplyAsync` の分岐、`MacroTests` を同じ変更で揃える。
 - マクロへ記録できないコマンド（入力ダイアログを開くもの）を足したときは `NotRecordable` へ加える。再生側で読み飛ばす作りにしない。
-- 設定画面へまとまりを足すときは `HeaderedContentControl Classes="settingscard"` で囲う。検索の索引はこの目印で作るので、付け忘れると検索から漏れる。
+- 設定画面へまとまりを足すときは `HeaderedContentControl Classes="settingscard"` で囲う。検索の索引はこの目印で作るので、付け忘れると検索から漏れる。OSなどの表示条件はカードの親へ置き、検索によって非表示の項目が再表示されたり件数に含まれたりしないことを `SettingsSearchTests` で確認する。
 - 構文ハイライトは [DESIGN.md の「構文ハイライト」](DESIGN.md#構文ハイライト) に定めた One Dark / One Light の意味別配色と、入れ子のルールセットまで辿る挙動を維持する。AvaloniaEdit 同梱の定義を個別に使い、テーマ切替では元色から再計算する。
 - PDF は Windows では `Windows.Data.Pdf`、macOS では Core Graphics による読み取り専用表示として扱う。テキスト文書向けの保存・編集コマンドをPDF選択中に有効化しない。
 - Markdown プレビューは `.md` 文書だけに提供し、編集元テキストを正本とする。プレビューは Avalonia コントロールで構築し、外部ブラウザ実行環境へ依存させない。
