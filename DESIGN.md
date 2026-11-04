@@ -174,7 +174,9 @@ Avalonia のドロップイベントは Bubble のため、`TextArea` のクラ�
 
 ### 更新と配布
 
-Windows・macOSの配布スクリプトが使うWranglerの固定版は `scripts/release-tools.psd1` を共通の正本とします。準備とMac公開は同じ版のローカル実行ファイルを参照します。
+Windows・macOSの配布スクリプトは同梱の `scripts/R2Distribution.Common.ps1` を使い、PowerShell 7.2 以降と .NET 標準 API で R2 に配布します。配布に Node.js・pnpm・Wrangler は不要です。バージョン付き成果物は不変として条件付きで作成し、固定名は ETag を照合して更新します。ペイロードを先に、assets・RELEASES・releases メタデータを最後に送信し、R2 から再取得した SHA-256 と既存の公開 URL 検証を通して配布を確認します。
+
+署名・転送・artifact manifest と path 検証の正本は同じディレクトリの `R2Transfer.Core.cs` です。2 本の PS helper は既存の関数名・引数・環境変数・戻り値を保つ入口として使い、PowerShell 同梱の Add-Type で中核をメモリ内に読み込みます。追加 SDK や外部 runtime、DLL キャッシュは不要です。同一 pwsh での再読込と別 repo の同梱コピーの再利用は source 全体の SHA-256 一致時だけ許可し、異版の同名型は認証前に停止します。ファイルの相対pathは FileSystem provider の現在位置の実体パス（PSDrive の ProviderPath）を基準に解決し、拒否する pattern は正規化前に検査します。非 FileSystem provider の現在地からの相対入力は通信前に拒否し、明示した通常の filesystem 絶対パスは引き続き扱います。
 
 アプリ側の `UpdateService` は `VelopackUpdateDialog.Avalonia` を介して更新確認・ダウンロード・適用・再起動を行います。配布側は `scripts/release-local.ps1` が x64 / ARM64 を順番にNative AOT発行し、コード署名、Velopackパッケージ化、Cloudflare R2へのアップロード、固定URLのキャッシュパージ、公開ファイルの版・ハッシュ・サイズ・署名照合を行います。
 

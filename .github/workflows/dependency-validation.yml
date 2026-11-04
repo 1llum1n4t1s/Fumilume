@@ -18,6 +18,9 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
+    - name: R2 transfer mock checks
+      shell: pwsh
+      run: ./tests/R2Transfer/Run.ps1 -WorkRoot (Join-Path $env:RUNNER_TEMP 'fumilume-r2-transfer')
     - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
       with:
         global-json-file: global.json
@@ -36,6 +39,9 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
+    - name: R2 transfer mock checks
+      shell: pwsh
+      run: ./tests/R2Transfer/Run.ps1 -WorkRoot (Join-Path $env:RUNNER_TEMP 'fumilume-r2-transfer')
     - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
       with:
         global-json-file: global.json

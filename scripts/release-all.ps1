@@ -2,6 +2,7 @@
 param([string]$WorkRoot, [string]$RecordRoot, [string]$StatePath)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'R2Artifact.Common.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
 # 出力先は作成前に検証し、リンク経由のリポジトリ内保存も拒否する。
 function Assert-ReleasePath {
@@ -85,11 +86,24 @@ if (Test-Path -LiteralPath $statePath) {
     $state.windowsPublished = $saved.windowsPublished
     $state.macPublished = $saved.macPublished
 }
-# ghは既存ファイルを上書きしないため、再取得は新しい専用ディレクトリへ行う。
-& gh run download $run.id --repo $repository --name velopack.osx-arm64 --dir $download
-if ($LASTEXITCODE -ne 0) { throw '検証済みMac成果物の取得失敗。' }
-& gh run download $run.id --repo $repository --name verification.osx-arm64 --dir $evidence
-if ($LASTEXITCODE -ne 0) { throw 'Mac検証記録の取得失敗。' }
+# 成功した単一 Mac job の commit/run/attempt を固定し、新しい専用ディレクトリへ取得する。
+$artifactToken = $env:CLOUDFLARE_API_TOKEN
+if (-not $artifactToken) { $artifactToken = (Get-Content 'D:\Dev\Secret\secrets.json' -Raw | ConvertFrom-Json).cloudflare.api_token }
+$artifactIdentity = @{
+    AccountId = '10901bfadbf1005164774a7350082985'
+    Bucket = 'fumilume-builds'
+    Repository = $repository
+    Commit = [string]$run.head_sha
+    RunId = [string]$run.id
+    RunAttempt = [string]$run.run_attempt
+    ApiToken = $artifactToken
+    AccessKeyId = ''
+    SecretAccessKey = ''
+}
+try {
+    Receive-R2Artifact @artifactIdentity -Name 'velopack.osx-arm64' -Destination $download | Out-Null
+    Receive-R2Artifact @artifactIdentity -Name 'verification.osx-arm64' -Destination $evidence | Out-Null
+} finally { $artifactToken = $null; $artifactIdentity = $null }
 $checksum = @(Get-ChildItem -LiteralPath $evidence -Recurse -Filter SHA256SUMS)
 if ($checksum.Count -ne 1) { throw 'Mac CIのハッシュ記録を特定できません。' }
 foreach ($line in Get-Content $checksum[0].FullName) {

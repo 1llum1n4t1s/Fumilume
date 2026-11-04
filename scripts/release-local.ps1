@@ -28,6 +28,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'R2Distribution.Common.ps1')
 $ReleaseStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 $Bucket = 'fumilume-updates'
@@ -37,7 +38,6 @@ $AccountId = '10901bfadbf1005164774a7350082985'
 $SecretsPath = 'D:\Dev\Secret\secrets.json'
 $CertSubjectName = 'Open Source Developer Yuichiro Shinozaki'
 $SignParams = "/n `"$CertSubjectName`" /fd SHA256 /td SHA256 /tr http://time.certum.pl"
-$WranglerVersion = (Import-PowerShellDataFile (Join-Path $PSScriptRoot 'release-tools.psd1')).WranglerVersion
 $RuntimeMatrix = @{
     'win-x64'   = @{ PlatformTarget = 'x64';   Channel = 'win' }
     'win-arm64' = @{ PlatformTarget = 'ARM64'; Channel = 'win-arm64' }
@@ -78,15 +78,11 @@ if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
 $WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
 $RecordRoot = Assert-ReleasePath $RecordRoot $recordReleaseRoot
-$env:WRANGLER_LOG_PATH = Assert-ReleasePath (Join-Path $WorkRoot 'logs\wrangler') $WorkRoot
 Write-Host "作業先: $WorkRoot"
 Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -RecordRoot を指定)"
 $WorkDir = $WorkRoot
 $ArtifactsDir = Join-Path $WorkDir 'packages\windows'
-$WranglerToolDir = Join-Path $WorkRoot "tools\wrangler-$WranglerVersion"
 $ArtifactsDir = Assert-ReleasePath $ArtifactsDir $WorkRoot
-$WranglerToolDir = Assert-ReleasePath $WranglerToolDir $WorkRoot
-$WranglerCommand = Join-Path $WranglerToolDir 'node_modules\.bin\wrangler.cmd'
 
 function Invoke-Native {
     param([string]$Description, [scriptblock]$Block)
@@ -114,37 +110,9 @@ function Invoke-Download {
     }
 }
 
-function Initialize-Wrangler {
-    New-Item -ItemType Directory -Path $WranglerToolDir -Force | Out-Null
-    Invoke-Native 'Wrangler の準備' {
-        pnpm --dir $WranglerToolDir add --ignore-workspace --save-exact `
-            --allow-build=esbuild --allow-build=sharp --allow-build=workerd `
-            "wrangler@$WranglerVersion"
-    }
-    if (-not (Test-Path $WranglerCommand)) {
-        throw "Wrangler の実行ファイルが見つかりません: $WranglerCommand"
-    }
 
-    $versionOutput = @(& $WranglerCommand --version 2>&1)
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0 -or $versionOutput -notcontains $WranglerVersion) {
-        throw "Wrangler $WranglerVersion の起動確認に失敗しました: $($versionOutput -join ' ')"
-    }
-    Write-Host "Wrangler: $WranglerVersion"
 
-    $bucketOutput = @(& $WranglerCommand r2 bucket list 2>&1 | ForEach-Object { $_.ToString() })
-    $exitCode = $LASTEXITCODE
-    $bucketPattern = "(?m)^name:\s+$([regex]::Escape($Bucket))\s*$"
-    if ($exitCode -ne 0 -or ($bucketOutput -join "`n") -notmatch $bucketPattern) {
-        throw "R2 bucket '$Bucket' の事前確認に失敗しました: $($bucketOutput -join ' ')"
-    }
-    Write-Host "R2 bucket: $Bucket"
-}
 
-function Invoke-Wrangler {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
-    & $WranglerCommand @Arguments
-}
 
 function Assert-CleanWorkOutputs {
     # ファイル削除は実行担当がPrunlet CLIをCMDから直接行う。スクリプトは残存を拒否する。
@@ -215,13 +183,16 @@ if (-not $SkipUpload) {
     if (-not $secrets.cloudflare.api_token) { throw "secrets.json に cloudflare.api_token が見つかりません" }
     $env:CLOUDFLARE_API_TOKEN = $secrets.cloudflare.api_token
     $env:CLOUDFLARE_ACCOUNT_ID = $AccountId
+    $r2Headers = @{ Authorization = "Bearer $($env:CLOUDFLARE_API_TOKEN)" }
+    $bucketResponse = Invoke-RestMethod -Uri "https://api.cloudflare.com/client/v4/accounts/$AccountId/r2/buckets/$Bucket" -Headers $r2Headers -TimeoutSec 30 -MaximumRedirection 0
+    if (-not $bucketResponse.success -or $bucketResponse.result.name -cne $Bucket) { throw "R2 bucket '$Bucket' の読み取り事前確認に失敗しました" }
+    Write-Host "R2 bucket: $Bucket (存在・読み取り権限を確認。書き込みは配布時に確認)"
 
     $cfHeaders = @{ Authorization = "Bearer $($env:CLOUDFLARE_API_TOKEN)" }
     $zoneResp = Invoke-RestMethod -Uri "https://api.cloudflare.com/client/v4/zones?name=$ZoneName" -Headers $cfHeaders -TimeoutSec 30
     if (-not $zoneResp.success -or @($zoneResp.result).Count -eq 0) { throw "Cloudflare zone '$ZoneName' の取得に失敗しました (トークンの zone:read 権限を確認してください)" }
     $zoneId = $zoneResp.result[0].id
     Write-Host "Cloudflare zone: $ZoneName ($zoneId)"
-    Initialize-Wrangler
 }
 
 if ($PreflightOnly) {
@@ -336,15 +307,15 @@ if ($SkipUpload) {
 Write-Host '== R2 アップロード ==' -ForegroundColor Cyan
 $uploadTimer = [System.Diagnostics.Stopwatch]::StartNew()
 $files = Get-ChildItem $ArtifactsDir -File
-$orderedFiles = @($files | Where-Object { $_.Name -notlike 'releases.*.json' }) +
-    @($files | Where-Object { $_.Name -like 'releases.*.json' })
+$orderedFiles = @($files | Where-Object { $_.Name -notmatch '^(?:releases\..*\.json|assets\..*\.json|RELEASES(?:-.*)?)$' }) +
+    @($files | Where-Object { $_.Name -match '^(?:releases\..*\.json|assets\..*\.json|RELEASES(?:-.*)?)$' })
 $uploaded = 0
 foreach ($file in $orderedFiles) {
     Write-Host "  ↑ $($file.Name)"
-    Invoke-Native "R2 put ($($file.Name))" {
-        Invoke-Wrangler r2 object put "$Bucket/$($file.Name)" `
-            --file $file.FullName --remote
-    }
+    $immutable = $file.Name -match '(?:\.nupkg$|[-_.]\d+\.\d+\.\d+(?:[-_.]|$))'
+    $cacheControl = if ($immutable) { 'public, max-age=31536000, immutable' } else { 'no-cache, must-revalidate' }
+    $contentType = switch -Regex ($file.Name) { '\.json$' { 'application/json'; break }; '^RELEASES' { 'text/plain'; break }; '\.(zip|nupkg)$' { 'application/zip'; break }; default { 'application/octet-stream' } }
+    Publish-R2Object -AccountId $AccountId -Bucket $Bucket -FilePath $file.FullName -Immutable:$immutable -CacheControl $cacheControl -ContentType $contentType | Out-Null
     $uploaded++
 }
 $uploadTimer.Stop()

@@ -2,6 +2,7 @@
 param([Parameter(Mandatory)][string]$ArtifactsPath, [string]$WorkRoot, [string]$RecordRoot)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'R2Distribution.Common.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
 # 出力先は作成前に検証し、リンク経由のリポジトリ内保存も拒否する。
 function Assert-ReleasePath {
@@ -36,7 +37,6 @@ if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
 $WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
 $RecordRoot = Assert-ReleasePath $RecordRoot $recordReleaseRoot
-$env:WRANGLER_LOG_PATH = Assert-ReleasePath (Join-Path $WorkRoot 'logs\wrangler') $WorkRoot
 Write-Host "作業先: $WorkRoot"
 Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -RecordRoot を指定)"
 $artifacts = Assert-ReleasePath ((Resolve-Path -LiteralPath $ArtifactsPath).Path) $WorkRoot
@@ -64,15 +64,15 @@ try {
     $env:CLOUDFLARE_API_TOKEN = (Get-Content 'D:\Dev\Secret\secrets.json' -Raw | ConvertFrom-Json).cloudflare.api_token
     $env:CLOUDFLARE_ACCOUNT_ID = '10901bfadbf1005164774a7350082985'
     $headers = @{Authorization="Bearer $env:CLOUDFLARE_API_TOKEN"}
-    $wranglerVersion = (Import-PowerShellDataFile (Join-Path $PSScriptRoot 'release-tools.psd1')).WranglerVersion
-    $wrangler = Assert-ReleasePath (Join-Path $WorkRoot "tools\wrangler-$wranglerVersion\node_modules\.bin\wrangler.cmd") $WorkRoot
-    if (-not (Test-Path -LiteralPath $wrangler)) { throw 'Windowsリリースの事前確認を先に実行してください。' }
     $zone = Invoke-RestMethod 'https://api.cloudflare.com/client/v4/zones?name=kagayoi.com' -Headers $headers -TimeoutSec 30
     if (-not $zone.success -or @($zone.result).Count -ne 1) { throw '公開先のゾーンを一意に確認できません。' }
-    $ordered = @($files | Where-Object Name -NE $manifestName) + @($files | Where-Object Name -EQ $manifestName)
+    $ordered = @($files | Where-Object { $_.Name -notmatch '^(?:releases\..*\.json|assets\..*\.json|RELEASES(?:-.*)?)$' }) +
+        @($files | Where-Object { $_.Name -match '^(?:releases\..*\.json|assets\..*\.json|RELEASES(?:-.*)?)$' })
     foreach ($file in $ordered) {
-        & $wrangler r2 object put "$bucket/$($file.Name)" --file $file.FullName --remote
-        if ($LASTEXITCODE -ne 0) { throw "Macアップロード失敗: $($file.Name)" }
+        $immutable = $file.Name -match '(?:\.nupkg$|[-_.]\d+\.\d+\.\d+(?:[-_.]|$))'
+        $cacheControl = if ($immutable) { 'public, max-age=31536000, immutable' } else { 'no-cache, must-revalidate' }
+        $contentType = switch -Regex ($file.Name) { '\.json$' { 'application/json'; break }; '^RELEASES' { 'text/plain'; break }; '\.(zip|nupkg)$' { 'application/zip'; break }; default { 'application/octet-stream' } }
+        Publish-R2Object -AccountId $env:CLOUDFLARE_ACCOUNT_ID -Bucket $bucket -FilePath $file.FullName -Immutable:$immutable -CacheControl $cacheControl -ContentType $contentType | Out-Null
     }
     $verify = Assert-ReleasePath (Join-Path $WorkRoot 'verification\remote-macos') $WorkRoot
     New-Item -ItemType Directory -Path $verify -Force | Out-Null

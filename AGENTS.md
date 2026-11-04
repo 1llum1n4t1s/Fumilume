@@ -49,6 +49,7 @@ dotnet test --solution Fumilume.slnx -c Release --no-restore
 ```
 
 - UI、binding、テーマ、タブ状態を変更した場合は `MainWindowIntegrationTests` を含む全テストを実行する。
+- R2 中核・入口の変更時は `pwsh -NoProfile -File tests/R2Transfer/Run.ps1 -WorkRoot <未使用の外部絶対パス>` を新しい pwsh で実行する。SDK・外部サービスを使わず、mock transport と外向き接続を転送しない loopback proxy で公開入口・条件付き転送・manifest・相対path・秘密のマスクを検証する。
 - macOS 向けの変更では `dotnet restore src/Fumilume/Fumilume.csproj -p:FumilumeTargetMac=true -r osx-arm64 --locked-mode` を通す。Apple Silicon Mac で `bash scripts/build-macos-arm64.sh` を実行し、文書の開く・保存・再起動後の復元・PDFの通常ページと回転ページを実機確認する。Windows では macOS Native AOT の発行と実機確認を完了扱いにしない。
 - ファイルのドロップ経路を変更するときは、[DESIGN.md の入力境界](DESIGN.md#ファイルのドロップ)を維持し、`MainWindowIntegrationTests` で未知の拡張子・拡張子なし・重複ドロップ・フォルダ除外・文字ドラッグ設定の両状態を確認する。
 - ファイルI/O、設定永続化、文字変換、Markdown、PDFを変更した場合は、実際の経路を通る E2E テストで正常系と境界条件を確認し、再現可能な成果物を残す。
@@ -81,6 +82,8 @@ pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 [DESIGN.md の配信先](DESIGN.md#製品ページの配信先)を参照し、公開URLと既存のR2・ライセンス通信を維持する。製品ページの配信には `../vps-web/deploy/deploy-lp.ps1` を使う。
 
 ### ローカルリリースの実行
+
+R2 配布は PowerShell 7.2 以降と同梱の `scripts/R2Distribution.Common.ps1` を使う。配布に Node.js・pnpm・Wrangler は不要（製品の JS ビルド要件は別途維持）。署名・転送・検証の正本は同梱の `scripts/R2Transfer.Core.cs` とし、PS helper は公開関数の互換入口とする。更新時は中核と使用する入口を同じディレクトリへ同梱する。固定名は `no-cache, must-revalidate`、バージョン付き成果物は不変として 1 年キャッシュし、payload を先、assets・RELEASES・releases を最後に送信する。
 
 リポジトリルートで事前確認を行い、失敗時は「リリースの事前確認に失敗しました。SimplySign Desktop、ネットワーク、Cloudflare 認証、Wrangler の状態を確認してください」。公開依頼時に成功を確認してから実行する。
 
