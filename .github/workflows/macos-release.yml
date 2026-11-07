@@ -14,7 +14,7 @@ jobs:
   package:
     outputs:
       artifact-attempt: ${{ steps.artifact-attempt.outputs['attempt'] }}
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64, m3mb14, fumilume-isolated]
     timeout-minutes: 90
     steps:
       - name: 外部作業先を設定
@@ -49,24 +49,40 @@ jobs:
               $sdkVersion = [string]$settings['sdk']['version']
             }
           }
-          $extension = if ($windows) { 'ps1' } else { 'sh' }
-          $installer = Join-Path $env:RUNNER_TEMP "dotnet-install.$extension"
-          Invoke-WebRequest "https://dot.net/v1/dotnet-install.$extension" -OutFile $installer
-          $install = Join-Path $env:RUNNER_TEMP 'dotnet'
-          $global:LASTEXITCODE = 0
-          if ($windows) {
-            if ($sdkVersion) { & $installer -Version $sdkVersion -InstallDir $install }
-            else { & $installer -Channel '10.0' -InstallDir $install }
-          } else {
-            if ($sdkVersion) { & bash $installer --version $sdkVersion --install-dir $install }
-            else { & bash $installer --channel '10.0' --install-dir $install }
+          $dotnet = $null
+          $existing = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue
+          if ($existing -and $sdkVersion) {
+            $global:LASTEXITCODE = 0
+            $availableVersion = & $existing.Source --version 2>$null
+            if ($LASTEXITCODE -eq 0 -and ($availableVersion -join "`n").Trim() -ceq $sdkVersion) {
+              $executable = Get-Item -LiteralPath $existing.Source
+              $resolved = $executable.ResolveLinkTarget($true)
+              $dotnet = if ($resolved) { $resolved.FullName } else { $executable.FullName }
+              $install = Split-Path -Parent $dotnet
+            }
           }
-          if ($LASTEXITCODE -ne 0) { throw '.NET SDK installation failed' }
-          $dotnetName = if ($windows) { 'dotnet.exe' } else { 'dotnet' }
-          $dotnet = Join-Path $install $dotnetName
+          if (-not $dotnet) {
+            $extension = if ($windows) { 'ps1' } else { 'sh' }
+            $installer = Join-Path $env:RUNNER_TEMP "dotnet-install.$extension"
+            Invoke-WebRequest "https://dot.net/v1/dotnet-install.$extension" -OutFile $installer
+            $install = Join-Path $env:RUNNER_TEMP 'dotnet'
+            $global:LASTEXITCODE = 0
+            if ($windows) {
+              if ($sdkVersion) { & $installer -Version $sdkVersion -InstallDir $install }
+              else { & $installer -Channel '10.0' -InstallDir $install }
+            } else {
+              if ($sdkVersion) { & bash $installer --version $sdkVersion --install-dir $install }
+              else { & bash $installer --channel '10.0' --install-dir $install }
+            }
+            if ($LASTEXITCODE -ne 0) { throw '.NET SDK installation failed' }
+            $dotnetName = if ($windows) { 'dotnet.exe' } else { 'dotnet' }
+            $dotnet = Join-Path $install $dotnetName
+          }
           if (-not (Test-Path -LiteralPath $dotnet -PathType Leaf)) { throw '.NET SDK executable is missing' }
-          & $dotnet --version
+          $actualVersion = & $dotnet --version
           if ($LASTEXITCODE -ne 0) { throw '.NET SDK version check failed' }
+          if ($sdkVersion -and ($actualVersion -join "`n").Trim() -cne $sdkVersion) { throw '.NET SDK version differs from global.json' }
+          Write-Output $actualVersion
           & $dotnet --info
           if ($LASTEXITCODE -ne 0) { throw '.NET SDK runtime check failed' }
           $install | Out-File $env:GITHUB_PATH -Append -Encoding utf8
