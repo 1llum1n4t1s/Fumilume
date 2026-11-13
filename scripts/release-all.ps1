@@ -4,38 +4,8 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'R2Artifact.Common.ps1')
 $repoRoot = Split-Path -Parent $PSScriptRoot
-# 出力先は作成前に検証し、リンク経由のリポジトリ内保存も拒否する。
-function Assert-ReleasePath {
-    # AllowedRoot を省略すると「配下にあること」の判定を行わない。
-    # 最上位の作業先・記録先は特定ドライブ・フォルダーへ固定しない方針のため省略して呼び、
-    # 作業先内部のパスだけ AllowedRoot に WorkRoot 等を渡して配下へ閉じ込める。
-    # リポジトリ・.codex 配下の禁止、artifacts 名の禁止、リンク拒否は場所と無関係に常に行う。
-    param([string]$Path, [string]$AllowedRoot = '')
-    if (-not [IO.Path]::IsPathFullyQualified($Path)) { throw "絶対パスを指定してください: $Path" }
-    $full = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    if ($AllowedRoot) {
-        $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
-        if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
-        }
-    }
-    $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
-    foreach ($forbidden in @($repoRoot, (Join-Path $env:USERPROFILE '.codex'), $codexRoot)) {
-        $boundary = [IO.Path]::GetFullPath($forbidden).TrimEnd([IO.Path]::DirectorySeparatorChar)
-        if ($full.Equals($boundary, [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($boundary + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "禁止された保存先です: $full"
-        }
-    }
-    if (@($full -split '[\\/]' | Where-Object { $_ -ieq 'artifacts' }).Count -gt 0) { throw "artifacts フォルダーは使用できません: $full" }
-    $cursor = $full
-    while ($cursor) {
-        if ((Test-Path -LiteralPath $cursor) -and ((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            throw "リンクを含む保存先は使用できません: $cursor"
-        }
-        $cursor = Split-Path -Parent $cursor
-    }
-    return $full
-}
+# 出力先の安全検査（Assert-ReleasePath）は 3 つのリリーススクリプトで共通の実装を使う。
+. (Join-Path $PSScriptRoot 'ReleasePath.Common.ps1')
 $releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
 # 既定の作業先・記録先は OS の一時フォルダー（[IO.Path]::GetTempPath()）配下に置く。
 # C ドライブになっても構わない。明示指定の -WorkRoot / -RecordRoot は場所を問わず、
