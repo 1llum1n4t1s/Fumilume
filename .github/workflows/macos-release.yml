@@ -16,6 +16,11 @@ jobs:
       artifact-attempt: ${{ steps.artifact-attempt.outputs['attempt'] }}
     runs-on: [self-hosted, macOS, ARM64, m3mb14]
     timeout-minutes: 90
+    env:
+      # この Mac は IPv6 のデフォルト経路だけが残り、グローバル IPv6 アドレスを持たない。
+      # .NET は IPv6 を先に試すため、nuget.org への接続が約10分待ってタイムアウトし、
+      # restore が NU1900 で失敗した（2026-11-13 の v1.0.27 リリース）。.NET の通信を IPv4 に限定する。
+      DOTNET_SYSTEM_NET_DISABLEIPV6: '1'
     steps:
       - name: 外部作業先を設定
         run: echo "FUMILUME_WORK_ROOT=$RUNNER_TEMP/Codex/Fumilume/release-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
