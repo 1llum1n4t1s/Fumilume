@@ -14,6 +14,7 @@ using Fumilume.Models;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 using Fumilume.Views;
+using static Fumilume.Tests.MainWindowE2ETestHelper;
 
 namespace Fumilume.Tests;
 
@@ -223,19 +224,6 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
             Thread.Yield();
         }
         Assert.Fail("PDFの描画と表示寸法が30秒以内に安定しませんでした。");
-    }
-
-    private static void Pump(Task task)
-    {
-        var timer = Stopwatch.StartNew();
-        while (!task.IsCompleted && timer.Elapsed < TimeSpan.FromSeconds(30))
-        {
-            Dispatcher.UIThread.RunJobs();
-            Thread.Yield();
-        }
-        Assert.True(task.IsCompleted, "PDF E2E処理が30秒以内に完了しませんでした。");
-        task.GetAwaiter().GetResult();
-        Dispatcher.UIThread.RunJobs();
     }
 
     private static void Record(Scope scope, string name, object result)

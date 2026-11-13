@@ -12,6 +12,7 @@ using Fumilume.Models;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 using Fumilume.Views;
+using static Fumilume.Tests.MainWindowE2ETestHelper;
 
 namespace Fumilume.Tests;
 
@@ -106,7 +107,7 @@ public sealed class OpopIntegrationTests(HeadlessAppFixture fixture)
             Assert.True(settings.FindControl<TextBlock>("SettingsSearchSummary")!.IsVisible);
             var selected = tabs.SelectedIndex;
             var oldTab = vm.SettingsTab!;
-            Complete(oldTab.CloseTabCommand.ExecuteAsync(null));
+            Pump(oldTab.CloseTabCommand.ExecuteAsync(null));
             Assert.Null(vm.SettingsTab);
             vm.OpenSettingsCommand.Execute(null);
             Dispatcher.UIThread.RunJobs();
@@ -164,16 +165,16 @@ public sealed class OpopIntegrationTests(HeadlessAppFixture fixture)
                 if (order == 0)
                 {
                     oldRequest.Completion.SetException(new IOException("古い描画"));
-                    Complete(old);
+                    Pump(old);
                     Assert.Null(pdf.ErrorMessage);
                     Assert.True(pdf.IsLoading);
                 }
                 currentRequest.Completion.SetResult(NewBitmap());
-                Complete(current);
+                Pump(current);
                 if (order == 1)
                 {
                     oldRequest.Completion.SetException(new IOException("古い描画"));
-                    Complete(old);
+                    Pump(old);
                 }
                 Assert.Null(pdf.ErrorMessage);
                 Assert.False(pdf.IsLoading);
@@ -183,7 +184,7 @@ public sealed class OpopIntegrationTests(HeadlessAppFixture fixture)
             }
             var failed = pdf.FitWidthCommand.ExecuteAsync(null);
             renderer.Requests[^1].Completion.SetException(new IOException("現在の描画"));
-            Complete(failed);
+            Pump(failed);
             Assert.Equal("現在の描画", pdf.ErrorMessage);
             Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(),
                 block => block.IsEffectivelyVisible && block.Text == "現在の描画");
@@ -191,7 +192,7 @@ public sealed class OpopIntegrationTests(HeadlessAppFixture fixture)
             var closingRequest = renderer.Requests[^1];
             pdf.Dispose();
             closingRequest.Completion.SetException(new IOException("閉じた描画"));
-            Complete(closing);
+            Pump(closing);
             Assert.Null(pdf.ErrorMessage);
             Assert.Null(pdf.PageImage);
             WriteArtifact("pdf-render-order.json", new
@@ -262,19 +263,6 @@ public sealed class OpopIntegrationTests(HeadlessAppFixture fixture)
             return completion.Task;
         }
         public void Dispose() { }
-    }
-
-    private static void Complete(Task task)
-    {
-        var timer = Stopwatch.StartNew();
-        while (!task.IsCompleted)
-        {
-            Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10));
-            Dispatcher.UIThread.RunJobs();
-            Thread.Sleep(1);
-        }
-        task.GetAwaiter().GetResult();
-        Dispatcher.UIThread.RunJobs();
     }
 
     private static void WriteArtifact(string name, object value)

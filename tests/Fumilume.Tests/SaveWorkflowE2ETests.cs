@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using Avalonia.Threading;
@@ -6,6 +5,7 @@ using Fumilume.Models;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 using Fumilume.Views;
+using static Fumilume.Tests.MainWindowE2ETestHelper;
 
 namespace Fumilume.Tests;
 
@@ -153,19 +153,6 @@ public sealed class SaveWorkflowE2ETests(HeadlessAppFixture fixture)
         if (Environment.GetEnvironmentVariable("FUMILUME_E2E_ARTIFACTS") is not { Length: > 0 } directory) return;
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, $"save-workflow-{name}.json"), JsonSerializer.Serialize(value));
-    }
-
-    private static void Pump(Task task)
-    {
-        var elapsed = Stopwatch.StartNew();
-        while (!task.IsCompleted && elapsed.Elapsed < TimeSpan.FromSeconds(30))
-        {
-            Dispatcher.UIThread.RunJobs();
-            Thread.Sleep(1);
-        }
-        Assert.True(task.IsCompleted, "保存操作が30秒以内に終了しませんでした。");
-        task.GetAwaiter().GetResult();
-        Dispatcher.UIThread.RunJobs();
     }
 
     private sealed class Scope : IDisposable

@@ -1,10 +1,10 @@
-using System.Diagnostics;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 using Fumilume.Views;
+using static Fumilume.Tests.MainWindowE2ETestHelper;
 
 namespace Fumilume.Tests;
 
@@ -41,7 +41,7 @@ public sealed class GogoMacroE2ETests(HeadlessAppFixture fixture)
             foreach (var macro in vm.SavedMacros.ToArray())
             {
                 vm.SelectedPaletteCommand = vm.CommandPaletteResults.Single(entry => entry.Title == $"{macro.Name}（{macro.Summary}）");
-                Complete(vm.RunSelectedPaletteCommandCommand.ExecuteAsync(null));
+                Pump(vm.RunSelectedPaletteCommandCommand.ExecuteAsync(null));
                 OpenPalette(window, vm);
             }
             Assert.Empty(vm.SavedMacros);
@@ -53,7 +53,7 @@ public sealed class GogoMacroE2ETests(HeadlessAppFixture fixture)
             document.SelectionStart = 0;
             document.SelectionLength = 3;
             vm.SelectedPaletteCommand = vm.CommandPaletteResults.Single(entry => entry.Title == "大文字");
-            Complete(vm.RunSelectedPaletteCommandCommand.ExecuteAsync(null));
+            Pump(vm.RunSelectedPaletteCommandCommand.ExecuteAsync(null));
             Assert.False(vm.IsCommandPaletteOpen);
             Assert.Equal("ABC", document.Text);
             Assert.Equal(json, File.ReadAllText(Path.Combine(storage.Path, "macros.json")));
@@ -104,7 +104,7 @@ public sealed class GogoMacroE2ETests(HeadlessAppFixture fixture)
             vm.CommandPaletteQuery = "保存00";
             Dispatcher.UIThread.RunJobs();
             vm.SelectedPaletteCommand = Assert.Single(vm.CommandPaletteResults);
-            Complete(vm.RunSelectedPaletteCommandCommand.ExecuteAsync(null));
+            Pump(vm.RunSelectedPaletteCommandCommand.ExecuteAsync(null));
             Assert.Equal("復元", vm.Documents.Single().Text);
             vm.Documents.Single().EditorDocument.UndoStack.Undo();
             Assert.Equal(string.Empty, vm.Documents.Single().Text);
@@ -133,19 +133,6 @@ public sealed class GogoMacroE2ETests(HeadlessAppFixture fixture)
         Assert.True(vm.IsCommandPaletteOpen);
         Assert.True(window.FindControl<ListBox>("CommandPaletteList")!.IsEffectivelyVisible);
         Assert.Contains(vm.CommandPaletteResults, entry => entry.Title == "新しい文書");
-    }
-
-    private static void Complete(Task task)
-    {
-        var elapsed = Stopwatch.StartNew();
-        while (!task.IsCompleted)
-        {
-            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(20), "マクロのUI操作が20秒以内に完了しませんでした。");
-            Dispatcher.UIThread.RunJobs();
-            Thread.Sleep(5);
-        }
-        task.GetAwaiter().GetResult();
-        Dispatcher.UIThread.RunJobs();
     }
 
     private static void CloseWindow(MainWindow? window, string storagePath)

@@ -10,6 +10,7 @@ using AvaloniaEdit.Highlighting;
 using Fumilume.Services;
 using Fumilume.ViewModels;
 using Fumilume.Views;
+using static Fumilume.Tests.MainWindowE2ETestHelper;
 
 namespace Fumilume.Tests;
 
@@ -376,19 +377,6 @@ public sealed class SyntaxHighlightingE2ETests(HeadlessAppFixture fixture)
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
         if (HeadlessAppFixture.UsesSkia) AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
-        Dispatcher.UIThread.RunJobs();
-    }
-
-    private static void Pump(Task task)
-    {
-        var watch = Stopwatch.StartNew();
-        while (!task.IsCompleted && watch.Elapsed < TimeSpan.FromSeconds(15))
-        {
-            Dispatcher.UIThread.RunJobs();
-            Thread.Yield();
-        }
-        Assert.True(task.IsCompleted, "UI処理が15秒以内に完了しませんでした");
-        task.GetAwaiter().GetResult();
         Dispatcher.UIThread.RunJobs();
     }
 
