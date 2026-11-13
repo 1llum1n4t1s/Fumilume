@@ -184,12 +184,51 @@ while IFS= read -r -d '' binary; do
 done < <(find "$bundle" -type f -print0)
 bash scripts/macos/verify-native-launch.sh "$bundle" "$verification/native-launch"
 if [[ "${CI:-}" == true ]]; then
-  # 新規のCI Macでは実インストール後のアプリも起動して確認する。
+  # CI Mac では実インストール後のアプリも起動して確認する。
+  # この Mac は常設のセルフホスト runner なので、検証で /Applications へ入れたものを残したままにすると
+  # 次回のリリースが「既存のインストールがある」安全確認で止まる（2026-11-14 の v1.0.28 リリース）。
+  # そのため検証後に必ず外す。ただし利用者が自分で入れた Fumilume を誤って消さないよう、
+  # 外してよいのは「この CI が入れたと記録したもの」だけにする。記録は PKG のレシート
+  # （pkgutil のインストール時刻）と一緒に残し、現在のレシートと一致するときに限り削除する。
+  ci_install_marker="${FUMILUME_CI_INSTALL_MARKER:-$HOME/CodexBuild/github-actions/state/fumilume-installed.txt}"
+  installed_receipt_time() { pkgutil --pkg-info com.kagayoi.fumilume 2>/dev/null | sed -n 's/^install-time: //p'; }
+  remove_ci_installation() {
+    # 起動したままだと削除できないので、/Applications のこのアプリから起動したプロセスだけを止める。
+    local pid command
+    pid="$(pgrep -x Fumilume || true)"
+    if [[ -n "$pid" ]]; then
+      [[ "$pid" =~ ^[0-9]+$ ]]
+      command="$(ps -p "$pid" -o command=)"
+      [[ "$command" == /Applications/Fumilume.app/Contents/MacOS/Fumilume* ]]
+      kill "$pid"
+      for _ in {1..30}; do
+        ! kill -0 "$pid" 2>/dev/null && break
+        sleep 1
+      done
+      if kill -0 "$pid" 2>/dev/null; then
+        echo "インストールしたアプリのプロセスを停止できませんでした。" >&2
+        return 1
+      fi
+    fi
+    sudo rm -rf -- /Applications/Fumilume.app
+    sudo pkgutil --forget com.kagayoi.fumilume >/dev/null
+    rm -f -- "$ci_install_marker"
+  }
   if [[ -e /Applications/Fumilume.app ]]; then
-    echo "既存のインストールがあるため停止します。" >&2
-    exit 1
+    recorded_time="$(sed -n 's/^receipt_time=//p' "$ci_install_marker" 2>/dev/null || true)"
+    current_time="$(installed_receipt_time)"
+    if [[ -n "$recorded_time" && "$recorded_time" == "$current_time" ]]; then
+      echo "前回の CI が入れたインストールを片付けてから続行します。"
+      remove_ci_installation
+    else
+      echo "既存のインストールがあるため停止します。" >&2
+      exit 1
+    fi
   fi
   sudo installer -pkg "$installer" -target /
+  # 以降で失敗して片付けが走らなくても、次回の CI が自分の入れたものと分かるよう先に記録する。
+  mkdir -p "$(dirname "$ci_install_marker")"
+  printf 'receipt_time=%s\nrun=%s\n' "$(installed_receipt_time)" "${GITHUB_RUN_ID:-local}" > "$ci_install_marker"
   codesign --verify --deep --strict /Applications/Fumilume.app
   spctl --assess --type execute --verbose=4 /Applications/Fumilume.app
   # PKG の postinstall が起動した、今回インストールした実行ファイルだけを停止する。
@@ -210,6 +249,8 @@ if [[ "${CI:-}" == true ]]; then
     fi
   fi
   bash scripts/macos/verify-native-launch.sh /Applications/Fumilume.app "$verification/installed-launch"
+  # 検証が済んだら、この CI が入れたインストールを外して常設 Mac を元の状態に戻す。
+  remove_ci_installation
 fi
 bash scripts/macos/verify-update-apply.sh "$bundle" "$artifacts" "$verification/update-apply"
 (cd "$artifacts" && shasum -a 256 ./*) > "$verification/SHA256SUMS"
