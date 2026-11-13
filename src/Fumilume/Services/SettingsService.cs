@@ -301,11 +301,13 @@ public static class SettingsService
         settings.CaretPositions ??= [];
         if (settings.CaretPositions.Count > AppSettingsDefaults.MaximumCaretPositions)
         {
+            // Dictionary は Remove した空きスロットを次の Add で再利用するため、その場で
+            // 先頭を消すと、次に覚えた（最新の）位置が列挙の先頭へ入り、次回の上限処理で
+            // 真っ先に捨てられてしまう。残す分だけで作り直し、追加順を保つ。
             var excess = settings.CaretPositions.Count - AppSettingsDefaults.MaximumCaretPositions;
-            foreach (var key in settings.CaretPositions.Keys.Take(excess).ToList())
-            {
-                settings.CaretPositions.Remove(key);
-            }
+            settings.CaretPositions = new Dictionary<string, int>(
+                settings.CaretPositions.Skip(excess),
+                settings.CaretPositions.Comparer);
         }
 
         if (string.IsNullOrWhiteSpace(settings.UiFontFamily)

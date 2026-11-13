@@ -236,9 +236,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private bool TryPersistSessionState()
     {
+        // 位置はメモリ上で控え、直後の Persist で 1 回だけ書き出す。
         foreach (var document in Documents)
         {
-            RememberCaretPosition(document);
+            RecordCaretPosition(document);
         }
 
         Options.Persist();
@@ -986,16 +987,29 @@ public sealed partial class MainWindowViewModel : ObservableObject
         document.CaretIndex = Math.Clamp(offset, 0, document.EditorDocument.TextLength);
     }
 
-    /// <summary>閉じる・保存のたびにカーソル位置を控える。</summary>
+    /// <summary>閉じる・保存のたびにカーソル位置を控え、settings.json へ書き出す。</summary>
     private void RememberCaretPosition(DocumentViewModel document)
+    {
+        if (RecordCaretPosition(document))
+        {
+            Options.Persist();
+        }
+    }
+
+    /// <summary>
+    /// カーソル位置を設定（メモリ上）へ控えるだけで、保存はしない。控えたら <see langword="true"/>。
+    /// 終了時のように複数文書をまとめて控える経路は、最後に 1 回だけ保存する。
+    /// 1 回の保存は JSON 生成・fsync・置換を伴うため、文書ごとに書き直さない。
+    /// </summary>
+    private bool RecordCaretPosition(DocumentViewModel document)
     {
         if (!Options.RestoreCaretPosition || document.FilePath is not { } path)
         {
-            return;
+            return false;
         }
 
         Options.Settings.CaretPositions[path] = document.CaretIndex;
-        Options.Persist();
+        return true;
     }
 
     partial void OnSelectedTabChanged(WorkspaceTabViewModel? oldValue, WorkspaceTabViewModel? newValue)
@@ -1111,7 +1125,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         => document.FilePath is null
             && !document.IsModified
             && !document.IsPinned
-            && document.Text.Length == 0;
+            && document.EditorDocument.TextLength == 0;
 
     /// <summary>一覧から外す文書の購読を解く。</summary>
     private void DetachDocument(DocumentViewModel document)

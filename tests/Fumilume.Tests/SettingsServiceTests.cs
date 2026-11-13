@@ -173,6 +173,41 @@ public sealed class SettingsServiceTests
         Assert.True(loaded.CaretPositions.ContainsKey(@"C:\tmp\file259.txt"));
     }
 
+    /// <summary>
+    /// 上限に達した後も、覚えるたびに保存する通常の使い方で最新の位置が残ること。
+    /// Dictionary の空きスロット再利用により、上限処理の直後に覚えた位置が列挙の先頭へ入り、
+    /// 次の保存で真っ先に捨てられていた不具合の再発防止。
+    /// </summary>
+    [Fact]
+    public void CappedCaretPositionsKeepNewestAcrossRepeatedSaves()
+    {
+        using var storage = new TemporaryStorage();
+        var settings = new AppSettings();
+        for (var index = 0; index < AppSettingsDefaults.MaximumCaretPositions + 1; index++)
+        {
+            settings.CaretPositions[$@"C:\tmp\file{index}.txt"] = index;
+        }
+
+        // 1 回目の上限処理で最古の 1 件を捨てる。
+        SettingsService.Save(settings);
+
+        // アプリと同じく、同じ設定オブジェクトへ覚えては保存する、を繰り返す。
+        settings.CaretPositions[@"C:\tmp\newer.txt"] = 1;
+        SettingsService.Save(settings);
+        settings.CaretPositions[@"C:\tmp\newest.txt"] = 2;
+        SettingsService.Save(settings);
+
+        var loaded = SettingsService.Load();
+        Assert.Equal(AppSettingsDefaults.MaximumCaretPositions, loaded.CaretPositions.Count);
+        Assert.True(loaded.CaretPositions.ContainsKey(@"C:\tmp\newer.txt"));
+        Assert.True(loaded.CaretPositions.ContainsKey(@"C:\tmp\newest.txt"));
+        // 捨てるのは古い順（追加順の先頭から）。
+        Assert.False(loaded.CaretPositions.ContainsKey(@"C:\tmp\file0.txt"));
+        Assert.False(loaded.CaretPositions.ContainsKey(@"C:\tmp\file1.txt"));
+        Assert.False(loaded.CaretPositions.ContainsKey(@"C:\tmp\file2.txt"));
+        Assert.True(loaded.CaretPositions.ContainsKey(@"C:\tmp\file3.txt"));
+    }
+
     [Fact]
     public void CaretPositionsRoundTrip()
     {
