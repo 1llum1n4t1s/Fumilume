@@ -67,8 +67,10 @@ public sealed partial class SettingsView : UserControl
     {
         try
         {
-            // Avalonia 12.1 の正規化は「Eras  ITC」などの連続空白を含む実在名も拒否する。
-            // 空白を詰めると別フォントを選ぶため、描画できない候補は両方の一覧から外す。
+            // Avalonia が書体を解決できない名前は描画できないため、両方の一覧から外す。
+            // （12.1.4 以前は「Eras  ITC」のような連続空白を含む実在名も拒否していたが、
+            // 12.1.5 の Typeface.Normalize 修正で解決できるようになった。名前の空白を詰めると
+            // 別フォントを選ぶため、名前は加工せずそのまま照会する。）
             // OS 候補は同じコレクションで調べ、既定フォントへの代替で成功扱いにしない。
             if (FontManager.Current.SystemFonts.TryGetGlyphTypeface(fontFamily.Name,
                     FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out _))

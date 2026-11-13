@@ -395,11 +395,17 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.True(uiPicker.IsEditable);
         Assert.True(editorPicker.IsEditable);
 
-        // OS の実在名でも、Avalonia が解決できないものは両方の候補から除外する。
-        Assert.False(SettingsView.IsUsableFontFamily(new FontFamily("Eras  ITC")));
+        // 一覧のフォントはすべて Avalonia で書体を解決できる。
         Assert.All(settings.FontFamilies, fontFamily =>
-            Assert.True(FontManager.Current.TryGetGlyphTypeface(new Typeface(fontFamily), out _)));
-        Assert.DoesNotContain(settings.FontFamilies, fontFamily => fontFamily.Name == "Eras  ITC");
+            Assert.True(FontManager.Current.TryGetGlyphTypeface(new Typeface(fontFamily), out _),
+                $"書体を解決できないフォントが候補に含まれています: 「{fontFamily.Name}」"));
+        // 「Eras  ITC」のような連続空白を含む実在名は、Avalonia 12.1.4 以前では正規化で
+        // FormatException になり、描画できても候補から外れていた。12.1.5 の Typeface.Normalize
+        // 修正（AvaloniaUI/Avalonia#22487）以降は名前を加工せずに照会できる。そのフォントが
+        // 入っているかは環境次第なので、照会が例外にならないことだけを確かめ、依存を戻して
+        // 実在フォントが黙って消える退行を検出する。
+        Assert.Null(Record.Exception(() => FontManager.Current.SystemFonts.TryGetGlyphTypeface(
+            "Eras  ITC", FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out _)));
 
         var font = Assert.IsType<FontFamily>(uiPicker.ItemsSource!.Cast<object>().First());
         var preview = Assert.IsType<TextBlock>(uiPicker.ItemTemplate!.Build(font));

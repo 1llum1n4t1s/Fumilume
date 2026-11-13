@@ -8,10 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="xunit.v3" Version="4.0.2" />
+    <PackageReference Include="xunit.v3" Version="4.0.3" />
     <!-- タイトルバーのヒットテストのように、実際のコントロールツリーへ入力を流さないと
          確かめられない挙動の検証に使う（ウィンドウは開かずプロセス内で完結する）。 -->
-    <PackageReference Include="Avalonia.Headless" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.6" />
   </ItemGroup>
 
   <ItemGroup>
