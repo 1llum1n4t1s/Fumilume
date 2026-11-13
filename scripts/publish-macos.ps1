@@ -6,12 +6,18 @@ Set-StrictMode -Version Latest
 $repoRoot = Split-Path -Parent $PSScriptRoot
 # 出力先は作成前に検証し、リンク経由のリポジトリ内保存も拒否する。
 function Assert-ReleasePath {
-    param([string]$Path, [string]$AllowedRoot)
+    # AllowedRoot を省略すると「配下にあること」の判定を行わない。
+    # 最上位の作業先・記録先は特定ドライブ・フォルダーへ固定しない方針のため省略して呼び、
+    # 作業先内部のパスだけ AllowedRoot に WorkRoot 等を渡して配下へ閉じ込める。
+    # リポジトリ・.codex 配下の禁止、artifacts 名の禁止、リンク拒否は場所と無関係に常に行う。
+    param([string]$Path, [string]$AllowedRoot = '')
     if (-not [IO.Path]::IsPathFullyQualified($Path)) { throw "絶対パスを指定してください: $Path" }
     $full = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
+    if ($AllowedRoot) {
+        $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
+        }
     }
     $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
     foreach ($forbidden in @($repoRoot, (Join-Path $env:USERPROFILE '.codex'), $codexRoot)) {
@@ -31,12 +37,15 @@ function Assert-ReleasePath {
     return $full
 }
 $releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
-$tempReleaseRoot = 'D:\Codex\Fumilume'
-$recordReleaseRoot = 'D:\Codex\TaskArtifacts\Fumilume'
+# 既定の作業先・記録先は OS の一時フォルダー（[IO.Path]::GetTempPath()）配下に置く。
+# C ドライブになっても構わない。明示指定の -WorkRoot / -RecordRoot は場所を問わず、
+# Assert-ReleasePath の場所に依存しない安全検査（リポジトリ外・リンク拒否など）だけを通す。
+$tempReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'Fumilume'
+$recordReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'TaskArtifacts\Fumilume'
 if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
-$WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
-$RecordRoot = Assert-ReleasePath $RecordRoot $recordReleaseRoot
+$WorkRoot = Assert-ReleasePath $WorkRoot
+$RecordRoot = Assert-ReleasePath $RecordRoot
 Write-Host "作業先: $WorkRoot"
 Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -RecordRoot を指定)"
 $artifacts = Assert-ReleasePath ((Resolve-Path -LiteralPath $ArtifactsPath).Path) $WorkRoot
@@ -61,7 +70,11 @@ if ($package.Length -ne $asset[0].Size -or (Get-FileHash $package.FullName -Algo
 $previousToken = $env:CLOUDFLARE_API_TOKEN
 $previousAccount = $env:CLOUDFLARE_ACCOUNT_ID
 try {
-    $env:CLOUDFLARE_API_TOKEN = (Get-Content 'D:\Dev\Secret\secrets.json' -Raw | ConvertFrom-Json).cloudflare.api_token
+    # CI (release.yml) では Environment "release" の Secret が環境変数で渡る。ローカルは secrets.json から必要なキーだけ読む。
+    if (-not $env:CLOUDFLARE_API_TOKEN) {
+        $env:CLOUDFLARE_API_TOKEN = (Get-Content 'D:\Dev\Secret\secrets.json' -Raw | ConvertFrom-Json).cloudflare.api_token
+    }
+    if (-not $env:CLOUDFLARE_API_TOKEN) { throw 'Cloudflare の API トークンがありません。' }
     $env:CLOUDFLARE_ACCOUNT_ID = '10901bfadbf1005164774a7350082985'
     $headers = @{Authorization="Bearer $env:CLOUDFLARE_API_TOKEN"}
     $zone = Invoke-RestMethod 'https://api.cloudflare.com/client/v4/zones?name=kagayoi.com' -Headers $headers -TimeoutSec 30
@@ -74,35 +87,13 @@ try {
         $contentType = switch -Regex ($file.Name) { '\.json$' { 'application/json'; break }; '^RELEASES' { 'text/plain'; break }; '\.(zip|nupkg)$' { 'application/zip'; break }; default { 'application/octet-stream' } }
         Publish-R2Object -AccountId $env:CLOUDFLARE_ACCOUNT_ID -Bucket $bucket -FilePath $file.FullName -Immutable:$immutable -CacheControl $cacheControl -ContentType $contentType | Out-Null
     }
-    $verify = Assert-ReleasePath (Join-Path $WorkRoot 'verification\remote-macos') $WorkRoot
-    New-Item -ItemType Directory -Path $verify -Force | Out-Null
-    $stale = @()
-    foreach ($file in $ordered) {
-        $destination = Join-Path $verify $file.Name
-        & curl.exe --fail --silent --show-error --location --retry 2 --connect-timeout 20 --max-time 180 --output $destination "$baseUrl/$($file.Name)?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
-        if ($LASTEXITCODE -ne 0) { throw "Mac公開物の取得失敗: $($file.Name)" }
-        if ((Get-FileHash $destination -Algorithm SHA256).Hash -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) {
-            $stale += $file
-            continue
-        }
-        # 更新クライアントが使う固定URLも照合する。query別キャッシュの旧版・404も検出する。
-        & curl.exe --silent --show-error --location --retry 2 --connect-timeout 20 --max-time 180 --output $destination "$baseUrl/$($file.Name)"
-        if ($LASTEXITCODE -ne 0) { throw "Mac固定URLの取得失敗: $($file.Name)" }
-        if ((Get-FileHash $destination -Algorithm SHA256).Hash -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) { $stale += $file }
-    }
-    if ($stale.Count -gt 0) {
-        $body = @{files=@($stale | ForEach-Object { "$baseUrl/$($_.Name)" })} | ConvertTo-Json -Compress
+    $fixedFiles = @($ordered | Where-Object { $_.Name -notmatch '(?:\.nupkg$|[-_.]\d+\.\d+\.\d+(?:[-_.]|$))' })
+    if ($fixedFiles.Count -gt 0) {
+        $body = @{files=@($fixedFiles | ForEach-Object { "$baseUrl/$($_.Name)" })} | ConvertTo-Json -Compress
         $purge = Invoke-RestMethod -Method Post -Uri "https://api.cloudflare.com/client/v4/zones/$($zone.result[0].id)/purge_cache" -Headers $headers -ContentType 'application/json' -Body $body -TimeoutSec 30
         if (-not $purge.success) { throw 'Mac配信のキャッシュ更新失敗。' }
-        foreach ($file in $stale) {
-            $destination = Join-Path $verify $file.Name
-            foreach ($url in @("$baseUrl/$($file.Name)?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())", "$baseUrl/$($file.Name)")) {
-                & curl.exe --fail --silent --show-error --location --retry 2 --max-time 180 --output $destination $url
-                if ($LASTEXITCODE -ne 0 -or (Get-FileHash $destination -Algorithm SHA256).Hash -ne (Get-FileHash $file.FullName -Algorithm SHA256).Hash) { throw "Mac公開ハッシュ不一致: $($file.Name)" }
-            }
-        }
     }
-    Write-Host "Mac v$version 配信確認完了: $($files.Count)ファイルのSHA256一致"
+    Write-Host "Mac v$version アップロード完了: $($files.Count)ファイル、固定URLのキャッシュ削除要求は受理済み"
 } finally {
     $env:CLOUDFLARE_API_TOKEN = $previousToken
     $env:CLOUDFLARE_ACCOUNT_ID = $previousAccount

@@ -7,7 +7,7 @@
 - `src/Fumilume/`: WindowsとApple Silicon macOS向けAvaloniaデスクトップアプリ
 - `tests/Fumilume.Tests/`: xUnit v3 と Avalonia.Headless による単体・統合テスト
 - `tests/Fumilume.MacE2E/`: Apple Silicon Macで実Avalonia・Core Graphicsと更新パッケージを検証するE2E実行アプリ
-- `scripts/release-local.ps1`: x64 / ARM64 の Native AOT、署名、Velopack パッケージ化、R2 配布、公開検証
+- `scripts/release-local.ps1`: x64 / ARM64 の Native AOT、署名、Velopack パッケージ化、R2 配布、固定URLのキャッシュパージ
 - `scripts/build-macos-arm64.sh`: Apple Silicon Mac上でNative AOT・Developer ID署名・公証済みPKG/ZIPと更新パッケージを作成
 - `../vps-web/lp/fumilume/`: `fumilume.kagayoi.com` のVPS配信のランディングページ
 - `Directory.Build.props`: 対象フレームワーク、版番号、対応プラットフォーム、警告・lock file 方針の正本
@@ -65,11 +65,12 @@ dotnet test --solution Fumilume.slnx -c Release --no-restore
 pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 ```
 
-- 署名付きローカル成果物までの確認には `-SkipUpload` を使う。完全なリリースは `scripts/release-all.ps1` を1回実行し、同じHEADのMac CI成功確認、Windows x64/ARM64とMac arm64の署名・公開ハッシュ検証を完走させる。事前確認と本実行には同じ外部の `-WorkRoot` と `-RecordRoot` を明示し、再開も同じ値を使う。
+- 署名付きローカル成果物までの確認には `-SkipUpload` を使う。完全なリリースは `scripts/release-all.ps1` を1回実行し、同じHEADのMac CI成功確認、Windows x64/ARM64とMac arm64の署名検証・アップロードを完走させる。事前確認と本実行には同じ外部の `-WorkRoot` と `-RecordRoot` を明示し、再開も同じ値を使う。
 - Windowsのpack・署名後は `release-local.ps1` が `scripts/verify-windows-package.ps1` を自動実行する。`-SkipUpload` でもこの検証を通し、失敗時は公開へ進めない。検証対象と記録は [DESIGN.md の配布物検証](DESIGN.md#更新と配布)を参照し、静的検証の成功を配布物の起動・画面操作の確認として扱わない。
-- 作業出力は`D:/Codex/Fumilume/<task-id>`、最小限の再開・清掃記録は`D:/Codex/TaskArtifacts/Fumilume/<task-id>` を使う。配布物は `WorkRoot/packages/`、ツールは `WorkRoot/tools/` に置き、今回の不要な配布物・検証環境・ツールは対象を確認してPrunlet CLIをCMDから直接呼び、ファイル単位で清掃する。`build-*` 内の `bin` / `obj` とその親ディレクトリは保持する。既存の旧出力・共有ツールは今回の清掃に含めない。
+- 作業出力は既定でOSの一時フォルダー配下の`Fumilume/<task-id>`、最小限の再開・清掃記録は`TaskArtifacts/Fumilume/<task-id>` を使う（`-WorkRoot` / `-RecordRoot` で変更でき、CIはランナーの一時領域を指定する）。配布物は `WorkRoot/packages/`、ツールは `WorkRoot/tools/` に置き、今回の不要な配布物・検証環境・ツールは対象を確認してPrunlet CLIをCMDから直接呼び、ファイル単位で清掃する。`build-*` 内の `bin` / `obj` とその親ディレクトリは保持する。既存の旧出力・共有ツールは今回の清掃に含めない。
 - リリーススクリプトが読む証明書・Cloudflare認証情報はリポジトリ外の正本を使う。秘密値をコード、ログ、fixture、Git差分へ出力しない。
-- Windowsはローカル検証と `scripts/release-local.ps1`、Macは `.github/workflows/macos-release.yml` のNative AOT・署名・公証・E2E成功と公開ハッシュ一致を出荷判定にする。
+- 通常の公開は GitHub Actions の `.github/workflows/release.yml`（手動起動・Environment `release`、承認待ちなし）が `scripts/release-all.ps1` を実行して行い、手元から重ねて配信しない。Windows の署名は Sigilune（`scripts/Sigilune.Common.ps1`）で、CI は `SIGILUNE_EMAIL` / `SIGILUNE_TOTP_URI` / `CLOUDFLARE_API_TOKEN` を Environment の Secrets から受け取る。ローカル実行は検証と再開に使う。
+- Windowsは `scripts/release-local.ps1` の署名・配布物検証、Macは `.github/workflows/macos-release.yml` のNative AOT・署名・公証・E2E成功とR2アップロード成功を出荷判定にする。
 
 ## 変更時の確認先
 
@@ -85,9 +86,15 @@ pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 
 R2 配布は PowerShell 7.2 以降と同梱の `scripts/R2Distribution.Common.ps1` を使う。配布に Node.js・pnpm・Wrangler は不要（製品の JS ビルド要件は別途維持）。署名・転送・検証の正本は同梱の `scripts/R2Transfer.Core.cs` とし、PS helper は公開関数の互換入口とする。更新時は中核と使用する入口を同じディレクトリへ同梱する。固定名は `no-cache, must-revalidate`、バージョン付き成果物は不変として 1 年キャッシュし、payload を先、assets・RELEASES・releases を最後に送信する。
 
-リポジトリルートで事前確認を行い、失敗時は「リリースの事前確認に失敗しました。SimplySign Desktop、ネットワーク、Cloudflare 認証、Wrangler の状態を確認してください」。公開依頼時に成功を確認してから実行する。
+公開依頼時は、`/vava` で main と `release/<version>` を同じコミットへ push した後、main を指定して CI の `release.yml` を起動し、完了を確認する（承認待ちはない）。
+
+```powershell
+gh workflow run release.yml --repo 1llum1n4t1s/Fumilume --ref main
+```
+
+ローカルで検証・再開するときは、リポジトリルートで事前確認（Sigilune のクラウドログインを含む）を行い、失敗時は「リリースの事前確認に失敗しました。Sigilune の登録（sigilune status）、ネットワーク、Cloudflare 認証の状態を確認してください」と案内し、ログインを自動再試行しない。
 
 ```powershell
 pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
-if ($LASTEXITCODE -eq 0) { pwsh -NoProfile -File scripts/release-all.ps1 } else { throw 'リリースの事前確認に失敗しました。SimplySign Desktop、ネットワーク、Cloudflare 認証、Wrangler の状態を確認してください' }
+if ($LASTEXITCODE -eq 0) { pwsh -NoProfile -File scripts/release-local.ps1 -SkipUpload } else { throw 'リリースの事前確認に失敗しました。Sigilune の登録（sigilune status）、ネットワーク、Cloudflare 認証の状態を確認してください' }
 ```

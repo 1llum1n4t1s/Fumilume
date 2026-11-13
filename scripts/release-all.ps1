@@ -6,12 +6,18 @@ Set-StrictMode -Version Latest
 $repoRoot = Split-Path -Parent $PSScriptRoot
 # 出力先は作成前に検証し、リンク経由のリポジトリ内保存も拒否する。
 function Assert-ReleasePath {
-    param([string]$Path, [string]$AllowedRoot)
+    # AllowedRoot を省略すると「配下にあること」の判定を行わない。
+    # 最上位の作業先・記録先は特定ドライブ・フォルダーへ固定しない方針のため省略して呼び、
+    # 作業先内部のパスだけ AllowedRoot に WorkRoot 等を渡して配下へ閉じ込める。
+    # リポジトリ・.codex 配下の禁止、artifacts 名の禁止、リンク拒否は場所と無関係に常に行う。
+    param([string]$Path, [string]$AllowedRoot = '')
     if (-not [IO.Path]::IsPathFullyQualified($Path)) { throw "絶対パスを指定してください: $Path" }
     $full = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
+    if ($AllowedRoot) {
+        $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
+        }
     }
     $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
     foreach ($forbidden in @($repoRoot, (Join-Path $env:USERPROFILE '.codex'), $codexRoot)) {
@@ -31,12 +37,15 @@ function Assert-ReleasePath {
     return $full
 }
 $releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
-$tempReleaseRoot = 'D:\Codex\Fumilume'
-$recordReleaseRoot = 'D:\Codex\TaskArtifacts\Fumilume'
+# 既定の作業先・記録先は OS の一時フォルダー（[IO.Path]::GetTempPath()）配下に置く。
+# C ドライブになっても構わない。明示指定の -WorkRoot / -RecordRoot は場所を問わず、
+# Assert-ReleasePath の場所に依存しない安全検査（リポジトリ外・リンク拒否など）だけを通す。
+$tempReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'Fumilume'
+$recordReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'TaskArtifacts\Fumilume'
 if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
-$WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
-$RecordRoot = Assert-ReleasePath $RecordRoot $recordReleaseRoot
+$WorkRoot = Assert-ReleasePath $WorkRoot
+$RecordRoot = Assert-ReleasePath $RecordRoot
 Write-Host "作業先: $WorkRoot"
 Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -RecordRoot を指定)"
 Set-Location $repoRoot

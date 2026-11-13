@@ -1,0 +1,94 @@
+name: Release
+
+# Windows と Apple Silicon Mac の署名付きリリースを GitHub Actions で行い、R2 (fumilume.kagayoi.com) へ配信する。
+# - 手順の本体は scripts/release-all.ps1 で、ローカル実行と同じ処理を通す:
+#   macos-release.yml (セルフホスト Mac での Native AOT・署名・公証・E2E) を起動して完了を待ち、
+#   Windows を release-local.ps1 で build・署名・配信してから、検証済みの Mac 成果物を publish-macos.ps1 で配信する。
+# - 署名: Windows は Sigilune (https://github.com/1llum1n4t1s/Sigilune) が Certum SimplySign のクラウド鍵で行う。
+#   本人の PC や SimplySign Desktop は不要。Mac の署名・公証は従来どおり macos-release.yml が行う。
+# - 起動: 手動 (workflow_dispatch)。/vava で版を上げ、main と release/<version> を同じコミットへ push した後に
+#   main を指定して実行する (release-all.ps1 が両者と HEAD の一致を確認する)。誤配信を避けるため push / tag では自動起動しない。
+# - 秘密情報: Environment "release" の Secrets だけを使う
+#   (SIGILUNE_EMAIL / SIGILUNE_TOTP_URI / CLOUDFLARE_API_TOKEN)。macos-release.yml の起動と監視には GITHUB_TOKEN を使う。
+on:
+  workflow_dispatch:
+    inputs:
+      skip_upload:
+        description: 'Windows のビルドと署名・検証だけ行い、Mac CI の起動と R2 への配信をしない (成果物は Actions に残る)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # 同じリポジトリのリリースは同時に走らせない (R2 の固定名ファイルと旧版清掃を取り合わないように)。
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Native AOT の win-arm64 リンクは VS 2026 (MSVC 14.5x) を前提にするため windows-2025 を使う。
+    runs-on: windows-2025
+    # Mac CI (最大 90 分) の完了待ちを含むため長めに取る。
+    timeout-minutes: 180
+    environment: release
+    permissions:
+      contents: read
+      # release-all.ps1 が macos-release.yml を起動 (gh workflow run) し、実行状態を監視するため。
+      actions: write
+      # gh run watch はジョブのチェック結果を読むため checks: read が要る。
+      checks: read
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: リポジトリをチェックアウト
+        # actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: .NET SDK をセットアップ
+        # actions/setup-dotnet@v6.1.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
+        with:
+          # SDK はリポジトリ直下の global.json (rollForward: disable) で固定し、ローカル・Mac CI と揃える。
+          global-json-file: global.json
+
+      - name: Sigilune を導入
+        uses: 1llum1n4t1s/Sigilune@v1
+
+      - name: ビルド・署名・配信
+        env:
+          SIGILUNE_EMAIL: ${{ secrets.SIGILUNE_EMAIL }}
+          SIGILUNE_TOTP_URI: ${{ secrets.SIGILUNE_TOTP_URI }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          SKIP_UPLOAD: ${{ inputs.skip_upload }}
+        run: |
+          # 作業先・記録先はランナーの一時領域に置く (リポジトリ配下と "artifacts" 名はスクリプトが拒否する)。
+          $root = Join-Path $env:RUNNER_TEMP "Fumilume\release-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $work = Join-Path $root 'work'
+          $record = Join-Path $root 'record'
+          "WORK_DIR=$work" >> $env:GITHUB_ENV
+          try {
+            if ($env:SKIP_UPLOAD -eq 'true') {
+              & ./scripts/release-local.ps1 -SkipUpload -WorkRoot $work -RecordRoot $record
+            } else {
+              & ./scripts/release-all.ps1 -WorkRoot $work -RecordRoot $record
+            }
+          } finally {
+            # ランナー上の Certum セッションを残さない。
+            sigilune logout | Out-Null
+          }
+
+      - name: 成果物をアップロード
+        if: always() && env.WORK_DIR != ''
+        # actions/upload-artifact@v7.0.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: fumilume-release-packages
+          path: ${{ env.WORK_DIR }}/packages/**
+          if-no-files-found: warn
+          retention-days: 7

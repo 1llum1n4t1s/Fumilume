@@ -1,12 +1,14 @@
-# release-local.ps1 — ローカル署名付き Velopack リリース
+# release-local.ps1 — 署名付き Velopack リリース (Windows)
 #
-# SimplySign (Certum クラウド署名) は Desktop 接続 + スマホトークンが必要で
-# GitHub Actions からは署名できないため、リリースは本スクリプトでローカル実行する。
+# 署名は Sigilune (Certum SimplySign のクラウド鍵を signtool /dlib で使う CLI) で行う。
+# 通常のリリースは GitHub Actions の .github/workflows/release.yml (手動起動・Environment "release") が
+# scripts/release-all.ps1 経由で本スクリプトを実行する。ローカル実行も同じ手順で動き、検証や再開に使う。
 #
 # 前提:
-#   - SimplySign Desktop が接続済み (証明書が CurrentUser\My に見えていること)
+#   - Sigilune を使えること (scripts/Sigilune.Common.ps1 参照)。
+#     ローカルは `sigilune setup` で Certum アカウントを登録済み、CI は SIGILUNE_EMAIL / SIGILUNE_TOTP_URI を渡す
 #   - Directory.Build.props の <Version> がリリースしたいバージョンになっていること (/vava 済み)
-#   - D:\Dev\Secret\secrets.json に cloudflare.api_token があること
+#   - 環境変数 CLOUDFLARE_API_TOKEN (CI)、なければ D:\Dev\Secret\secrets.json の cloudflare.api_token (ローカル)
 #
 # 使い方:
 #   pwsh scripts/release-local.ps1                # フルリリース (build + sign + upload + cleanup)
@@ -36,8 +38,8 @@ $BaseUrl = 'https://fumilume.kagayoi.com'
 $ZoneName = 'kagayoi.com'
 $AccountId = '10901bfadbf1005164774a7350082985'
 $SecretsPath = 'D:\Dev\Secret\secrets.json'
+# 署名者の CN。証明書の年次更新で thumbprint が変わっても同じ値で照合できる。
 $CertSubjectName = 'Open Source Developer Yuichiro Shinozaki'
-$SignParams = "/n `"$CertSubjectName`" /fd SHA256 /td SHA256 /tr http://time.certum.pl"
 $RuntimeMatrix = @{
     'win-x64'   = @{ PlatformTarget = 'x64';   Channel = 'win' }
     'win-arm64' = @{ PlatformTarget = 'ARM64'; Channel = 'win-arm64' }
@@ -47,12 +49,18 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $RepoRoot
 # 出力先は作成前に検証し、リンク経由のリポジトリ内保存も拒否する。
 function Assert-ReleasePath {
-    param([string]$Path, [string]$AllowedRoot)
+    # AllowedRoot を省略すると「配下にあること」の判定を行わない。
+    # 最上位の作業先・記録先は特定ドライブ・フォルダーへ固定しない方針のため省略して呼び、
+    # 作業先内部のパスだけ AllowedRoot に WorkRoot 等を渡して配下へ閉じ込める。
+    # リポジトリ・.codex 配下の禁止、artifacts 名の禁止、リンク拒否は場所と無関係に常に行う。
+    param([string]$Path, [string]$AllowedRoot = '')
     if (-not [IO.Path]::IsPathFullyQualified($Path)) { throw "絶対パスを指定してください: $Path" }
     $full = [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
-    if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
+    if ($AllowedRoot) {
+        $allowed = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        if (-not $full.StartsWith($allowed + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "許可された保存先の配下を指定してください: $full (保存先: $allowed)"
+        }
     }
     $codexRoot = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
     foreach ($forbidden in @($repoRoot, (Join-Path $env:USERPROFILE '.codex'), $codexRoot)) {
@@ -72,12 +80,15 @@ function Assert-ReleasePath {
     return $full
 }
 $releaseTaskId = 'release-' + [Guid]::NewGuid().ToString('N')
-$tempReleaseRoot = 'D:\Codex\Fumilume'
-$recordReleaseRoot = 'D:\Codex\TaskArtifacts\Fumilume'
+# 既定の作業先・記録先は OS の一時フォルダー（[IO.Path]::GetTempPath()）配下に置く。
+# C ドライブになっても構わない。明示指定の -WorkRoot / -RecordRoot は場所を問わず、
+# Assert-ReleasePath の場所に依存しない安全検査（リポジトリ外・リンク拒否など）だけを通す。
+$tempReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'Fumilume'
+$recordReleaseRoot = Join-Path ([IO.Path]::GetTempPath()) 'TaskArtifacts\Fumilume'
 if (-not $WorkRoot) { $WorkRoot = Join-Path $tempReleaseRoot $releaseTaskId }
 if (-not $RecordRoot) { $RecordRoot = Join-Path $recordReleaseRoot $releaseTaskId }
-$WorkRoot = Assert-ReleasePath $WorkRoot $tempReleaseRoot
-$RecordRoot = Assert-ReleasePath $RecordRoot $recordReleaseRoot
+$WorkRoot = Assert-ReleasePath $WorkRoot
+$RecordRoot = Assert-ReleasePath $RecordRoot
 Write-Host "作業先: $WorkRoot"
 Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -RecordRoot を指定)"
 $WorkDir = $WorkRoot
@@ -96,27 +107,9 @@ function Invoke-Native {
     }
 }
 
-function Invoke-Download {
-    param(
-        [Parameter(Mandatory)][string]$Uri,
-        [Parameter(Mandatory)][string]$Destination,
-        [int]$TimeoutSeconds = 180
-    )
-
-    Invoke-Native "配信物の取得 ($([IO.Path]::GetFileName($Destination)))" {
-        curl.exe --fail --silent --show-error --location --http1.1 `
-            --retry 2 --retry-delay 2 --connect-timeout 20 --max-time $TimeoutSeconds `
-            --header 'Cache-Control: no-cache' --output $Destination $Uri
-    }
-}
-
-
-
-
-
 function Assert-CleanWorkOutputs {
     # ファイル削除は実行担当がPrunlet CLIをCMDから直接行う。スクリプトは残存を拒否する。
-    foreach ($name in @('packages\windows', 'remote-verification', 'publish-win-x64', 'publish-win-arm64')) {
+    foreach ($name in @('packages\windows', 'publish-win-x64', 'publish-win-arm64')) {
         $outputPath = Assert-ReleasePath (Join-Path $WorkRoot $name) $WorkRoot
         if (-not (Test-Path -LiteralPath $outputPath)) { continue }
         $remaining = @(Get-ChildItem -LiteralPath $outputPath -Recurse -Force -ErrorAction Stop |
@@ -147,12 +140,15 @@ $version = if ($versionNode) { $versionNode.InnerText.Trim() } else { $null }
 if (-not $version) { throw 'Directory.Build.props からバージョンを取得できませんでした' }
 Write-Host "バージョン: $version"
 
-$cert = Get-ChildItem Cert:\CurrentUser\My |
-    Where-Object { $_.Subject -like "CN=$CertSubjectName*" -and $_.NotAfter -gt (Get-Date) }
-if (-not $cert) {
-    throw '署名証明書が見つかりません。SimplySign Desktop へログインしてください。'
-}
-Write-Host "署名証明書: $($cert.Subject) (期限 $($cert.NotAfter.ToString('yyyy-MM-dd')))"
+# 署名の準備 (Sigilune の場所とクラウドへのログインを、ビルド前に確認して早く落とす)。
+# -PreflightOnly でもログインまで確認し、署名できない状態を事前確認で検出する。
+. (Join-Path $PSScriptRoot 'Sigilune.Common.ps1')
+$Sigilune = Resolve-SigiluneExe
+Connect-Sigilune -SigiluneExe $Sigilune
+# Velopack はファイルごとに別プロセスで署名テンプレートを実行する。Sigilune はログインを共有し、
+# 署名後に有効性・署名者・タイムスタンプを検証して失敗なら非0で終わる。
+# --skip-signed: vpk が渡す署名済みのファイル（他社製の同梱 DLL など）は有効な署名ならそのまま残す（Sigilune 1.1.0 以降）。
+$SignTemplate = "`"$Sigilune`" sign --skip-signed {{file}}"
 
 # Velopack (vpk) は常に最新安定版を使う (ゆろ君ルール): NuGet から実行時に最新を解決して pin する
 $VpkVersion = (Invoke-RestMethod 'https://api.nuget.org/v3-flatcontainer/vpk/index.json' -TimeoutSec 30).versions |
@@ -169,19 +165,17 @@ if (-not (Test-Path -LiteralPath $VpkCommand)) {
 Invoke-Native 'vpk の起動確認' { & $VpkCommand --help | Out-Null }
 Write-Host "vpk: $VpkVersion"
 
-if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
-    throw '配信確認に必要な curl.exe が見つかりません'
-}
-Write-Host "curl: $(& curl.exe --version | Select-Object -First 1)"
-
 # Cloudflare トークン (アップロード時のみ必要)
 # zone 解決もここで行う: トークンに zone:read / cache purge 権限が無い場合に
 # R2 アップロード後の途中失敗 (新ファイルだけ R2 に乗ってパージ・クリーンアップが
 # 走らない半端なリリース) を避け、何もアップロードしていない時点で fail fast する
 if (-not $SkipUpload) {
-    $secrets = Get-Content $SecretsPath -Raw | ConvertFrom-Json
-    if (-not $secrets.cloudflare.api_token) { throw "secrets.json に cloudflare.api_token が見つかりません" }
-    $env:CLOUDFLARE_API_TOKEN = $secrets.cloudflare.api_token
+    # CI では Environment "release" の Secret が環境変数で渡る。ローカルは secrets.json から必要なキーだけ読む。
+    if (-not $env:CLOUDFLARE_API_TOKEN) {
+        $secrets = Get-Content $SecretsPath -Raw | ConvertFrom-Json
+        if (-not $secrets.cloudflare.api_token) { throw "secrets.json に cloudflare.api_token が見つかりません" }
+        $env:CLOUDFLARE_API_TOKEN = $secrets.cloudflare.api_token
+    }
     $env:CLOUDFLARE_ACCOUNT_ID = $AccountId
     $r2Headers = @{ Authorization = "Bearer $($env:CLOUDFLARE_API_TOKEN)" }
     $bucketResponse = Invoke-RestMethod -Uri "https://api.cloudflare.com/client/v4/accounts/$AccountId/r2/buckets/$Bucket" -Headers $r2Headers -TimeoutSec 30 -MaximumRedirection 0
@@ -278,7 +272,7 @@ foreach ($plan in $publishPlans) {
             --outputDir $ArtifactsDir `
             --channel $plan.Channel `
             --shortcuts 'StartMenuRoot,Desktop' `
-            --signParams $SignParams
+            --signTemplate $SignTemplate
     }
 }
 
@@ -352,48 +346,6 @@ if ($purgeUrls.Count -gt 0) {
 }
 $purgeTimer.Stop()
 Write-Host ("  ⏱️  キャッシュパージ: {0:N1} 秒" -f $purgeTimer.Elapsed.TotalSeconds)
-
-Write-Host '== 配信確認 ==' -ForegroundColor Cyan
-$verificationTimer = [System.Diagnostics.Stopwatch]::StartNew()
-$verifyDir = Assert-ReleasePath (Join-Path $WorkDir 'remote-verification') $WorkRoot
-New-Item -ItemType Directory -Path $verifyDir -Force | Out-Null
-foreach ($runtime in $Runtimes) {
-    $channel = $RuntimeMatrix[$runtime].Channel
-    $manifestName = "releases.$channel.json"
-    $localManifest = Join-Path $ArtifactsDir $manifestName
-    if (-not (Test-Path $localManifest)) { throw "$manifestName が生成されませんでした" }
-    $remoteManifest = Join-Path $verifyDir $manifestName
-    Invoke-Download -Uri "$BaseUrl/$manifestName`?verify=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())" `
-        -Destination $remoteManifest -TimeoutSeconds 30
-    $localManifestHash = (Get-FileHash $localManifest -Algorithm SHA256).Hash
-    $remoteManifestHash = (Get-FileHash $remoteManifest -Algorithm SHA256).Hash
-    if ($localManifestHash -ne $remoteManifestHash) { throw "$manifestName の配信内容がローカル成果物と一致しません" }
-
-    $manifest = Get-Content $remoteManifest -Raw | ConvertFrom-Json
-    foreach ($asset in $manifest.Assets) {
-        if ($asset.Version -ne $version) { throw "$manifestName のバージョンが不正です: $($asset.Version)" }
-        $remoteAsset = Join-Path $verifyDir $asset.FileName
-        Invoke-Download -Uri "$BaseUrl/$($asset.FileName)" -Destination $remoteAsset
-        if ((Get-Item $remoteAsset).Length -ne [long]$asset.Size) { throw "$($asset.FileName) のサイズが一致しません" }
-        if ((Get-FileHash $remoteAsset -Algorithm SHA256).Hash -ne $asset.SHA256) { throw "$($asset.FileName) のSHA256が一致しません" }
-    }
-    Write-Host "  ✅ ${manifestName}: version/hash/size"
-}
-
-foreach ($setup in Get-ChildItem $ArtifactsDir -Filter '*-Setup.exe') {
-    $remoteSetup = Join-Path $verifyDir $setup.Name
-    Invoke-Download -Uri "$BaseUrl/$($setup.Name)" -Destination $remoteSetup
-    if ((Get-FileHash $setup.FullName -Algorithm SHA256).Hash -ne (Get-FileHash $remoteSetup -Algorithm SHA256).Hash) {
-        throw "$($setup.Name) の配信内容がローカル成果物と一致しません"
-    }
-    $remoteSignature = Get-AuthenticodeSignature $remoteSetup
-    if ($remoteSignature.Status -ne 'Valid' -or $remoteSignature.SignerCertificate.Subject -notlike "CN=$CertSubjectName*") {
-        throw "$($setup.Name) の配信後署名検証に失敗しました"
-    }
-    Write-Host "  ✅ $($setup.Name): SHA256/署名"
-}
-$verificationTimer.Stop()
-Write-Host ("  ⏱️  配信確認全体: {0:N1} 秒" -f $verificationTimer.Elapsed.TotalSeconds)
 
 # ---- 旧バージョン nupkg のクリーンアップ (Aggressive 戦略) ----
 # ローカル配布物の manifest (= 今アップロードしたものと同一) から keep set を作り、

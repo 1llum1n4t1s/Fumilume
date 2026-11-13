@@ -11,11 +11,16 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-function Assert-SafePath([string]$Path, [string]$Root) {
+# Root を空にすると「配下にあること」の判定を省略する（最上位の WorkRoot / RecordRoot 用）。
+# 作業先は呼出元が場所を決め（既定は OS の一時フォルダー）、ここでは特定ドライブへ固定しない。
+# artifacts 名の禁止とリンク拒否は場所と無関係に常に行う。
+function Assert-SafePath([string]$Path, [string]$Root = '') {
     if (-not [IO.Path]::IsPathFullyQualified($Path)) { throw "絶対パスが必要です: $Path" }
     $full = [IO.Path]::GetFullPath($Path).TrimEnd('\')
-    $boundary = [IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
-    if (-not $full.StartsWith($boundary, [StringComparison]::OrdinalIgnoreCase)) { throw "保存先の範囲外です: $full" }
+    if ($Root) {
+        $boundary = [IO.Path]::GetFullPath($Root).TrimEnd('\') + '\'
+        if (-not $full.StartsWith($boundary, [StringComparison]::OrdinalIgnoreCase)) { throw "保存先の範囲外です: $full" }
+    }
     if (@($full -split '[\\/]' | Where-Object { $_ -ieq 'artifacts' }).Count) { throw "禁止されたフォルダー名です: $full" }
     $cursor = $full
     while ($cursor) {
@@ -93,8 +98,9 @@ function Expand-CheckedZip([string]$Path, [string]$Destination) {
     return $Destination
 }
 
-$WorkRoot = Assert-SafePath $WorkRoot 'D:\Codex\Fumilume'
-$RecordRoot = Assert-SafePath $RecordRoot 'D:\Codex\TaskArtifacts\Fumilume'
+# 最上位の作業先・記録先は場所を固定しない（呼出元 release-local.ps1 が検証済みの値を渡す）。
+$WorkRoot = Assert-SafePath $WorkRoot
+$RecordRoot = Assert-SafePath $RecordRoot
 $PackageRoot = Assert-SafePath $PackageRoot $WorkRoot
 $verificationRoot = Assert-SafePath (Join-Path $WorkRoot 'verification\windows-package') $WorkRoot
 $runId = [Guid]::NewGuid().ToString('N')

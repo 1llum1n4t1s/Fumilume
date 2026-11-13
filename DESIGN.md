@@ -4,7 +4,7 @@
 
 Fumilume は、複数のテキスト文書を垂直タブで扱うデスクトップエディタです。文字コードと改行コードを維持した編集、Markdownプレビュー、PDF閲覧、サクラエディタを参考にした編集操作、設定・更新・ファイル関連付けを提供します。WindowsとApple Silicon macOS向けに公開配布します。
 
-Windows の対象は `net10.0-windows10.0.26100.0`、最低対応OSは Windows 10 バージョン1809です。macOS の対象は `net10.0` / `osx-arm64`、最低対応OSは macOS 15 です。各 OS で自己完結型 Native AOT アプリを作ります。
+Windows の対象は `net11.0-windows10.0.26100.0`、最低対応OSは Windows 10 バージョン1809です。macOS の対象は `net11.0` / `osx-arm64`、最低対応OSは macOS 15 です。各 OS で自己完結型 Native AOT アプリを作ります。
 
 ## システム構成
 
@@ -174,21 +174,21 @@ Avalonia のドロップイベントは Bubble のため、`TextArea` のクラ�
 
 ### 更新と配布
 
-Windows・macOSの配布スクリプトは同梱の `scripts/R2Distribution.Common.ps1` を使い、PowerShell 7.2 以降と .NET 標準 API で R2 に配布します。配布に Node.js・pnpm・Wrangler は不要です。バージョン付き成果物は不変として条件付きで作成し、固定名は ETag を照合して更新します。ペイロードを先に、assets・RELEASES・releases メタデータを最後に送信し、R2 から再取得した SHA-256 と既存の公開 URL 検証を通して配布を確認します。
+Windows・macOSの配布スクリプトは同梱の `scripts/R2Distribution.Common.ps1` を使い、PowerShell 7.2 以降と .NET 標準 API で R2 に配布します。配布に Node.js・pnpm・Wrangler は不要です。バージョン付き成果物は不変として条件付きで作成し、固定名は ETag を照合して更新します。ペイロードを先に、assets・RELEASES・releases メタデータを最後に送信し、R2 から再取得した SHA-256 で転送内容を照合します。固定URLはCloudflareのキャッシュ削除を要求します。
 
 署名・転送・artifact manifest と path 検証の正本は同じディレクトリの `R2Transfer.Core.cs` です。2 本の PS helper は既存の関数名・引数・環境変数・戻り値を保つ入口として使い、PowerShell 同梱の Add-Type で中核をメモリ内に読み込みます。追加 SDK や外部 runtime、DLL キャッシュは不要です。同一 pwsh での再読込と別 repo の同梱コピーの再利用は source 全体の SHA-256 一致時だけ許可し、異版の同名型は認証前に停止します。ファイルの相対pathは FileSystem provider の現在位置の実体パス（PSDrive の ProviderPath）を基準に解決し、拒否する pattern は正規化前に検査します。非 FileSystem provider の現在地からの相対入力は通信前に拒否し、明示した通常の filesystem 絶対パスは引き続き扱います。
 
-アプリ側の `UpdateService` は `VelopackUpdateDialog.Avalonia` を介して更新確認・ダウンロード・適用・再起動を行います。配布側は `scripts/release-local.ps1` が x64 / ARM64 を順番にNative AOT発行し、コード署名、Velopackパッケージ化、Cloudflare R2へのアップロード、固定URLのキャッシュパージ、公開ファイルの版・ハッシュ・サイズ・署名照合を行います。
+アプリ側の `UpdateService` は `VelopackUpdateDialog.Avalonia` を介して更新確認・ダウンロード・適用・再起動を行います。配布側は `scripts/release-local.ps1` が x64 / ARM64 を順番にNative AOT発行し、コード署名、Velopackパッケージ化、Cloudflare R2へのアップロード、固定URLのキャッシュパージを行います。コード署名は Sigilune（Certum SimplySign のクラウド鍵を signtool `/dlib` で使う CLI）で行い、SimplySign Desktop は使いません。通常の公開は GitHub Actions の `.github/workflows/release.yml`（手動起動、windows-2025、Environment `release`、承認待ちなし）が `scripts/release-all.ps1` を実行し、Secrets は Environment の `SIGILUNE_EMAIL` / `SIGILUNE_TOTP_URI` / `CLOUDFLARE_API_TOKEN` だけを環境変数で渡します。ローカル実行は同じ手順で動き、検証と再開に使います。
 
 pack・署名後、アップロード前には `scripts/verify-windows-package.ps1` が配布実物を静的検証します。更新フィードとFull nupkgのサイズ・ハッシュ、nuspecのID・版、必須同梱ファイル、署名を照合します。Portable ZIPではルートの `Fumilume.exe` はVelopackランチャー、`current/Fumilume.exe` がアプリ本体であり、後者をnupkg内の本体とSHA256で照合し、RIDに対応するPE machine・版・CLRヘッダー不在を確認します。ランチャーと `Update.exe` はx86のPEとして別に署名等を検証し、アプリ本体のRIDを要求しません。Setupの署名・版も確認し、成功・失敗と各ファイルの証拠を `RecordRoot/windows-package-<run-id>.json` へ残します。このゲートは `-SkipUpload` でも動き、失敗は公開を止めますが、配布物の起動・実画面操作・終了は実行しません。
 
-Windowsの発行前には、導入済みVisual Studioの`vcvarsall.bat`でRIDに対応するC++環境を初期化し、Native AOTへ環境内のリンカー・ライブラリを渡します。配布スクリプトは共通の `WorkRoot`（`D:/Codex/Fumilume/<task-id>`）へツール・配布物・検証環境を出力し、`RecordRoot`（`D:/Codex/TaskArtifacts/Fumilume/<task-id>`）へ最小限の再開記録と清掃台帳を残します。事前確認、本実行、再開には同じ2つのパスを指定します。配布物は `packages/` に置き、リポジトリ、Codexユーザーディレクトリ、リンクを含む保存先と禁止名のフォルダーを作成前に拒否します。Mac CIもrunnerの外部Tempへ出力し、同じ場所から配布物と検証記録を収集します。公証受理後のチケット検証は `validate-notarization.sh` を通し、exit 68と明示的な接続切れ（-1005）またはタイムアウト（-1001）が揃う場合だけ最大5回まで再試行します。待機は2・4・8・16秒で、署名・公証提出を繰り返さず、チケットの不正などの別の失敗と再試行上限は非0終了を維持します。各試行のログをCIの検証記録へ残します。配布出力の清掃は検証済みの作業範囲に限定し、実行担当がPrunlet CLIをCMDから直接呼んでファイル単位で行います。リリーススクリプトは既存の配布・検証ファイルが残る場合に停止し、清掃してから同じ作業先で再開します。清掃に失敗した対象は残存と理由を記録します。
+Windowsの発行前には、導入済みVisual Studioの`vcvarsall.bat`でRIDに対応するC++環境を初期化し、Native AOTへ環境内のリンカー・ライブラリを渡します。配布スクリプトは共通の `WorkRoot`（既定はOSの一時フォルダー配下の `Fumilume/<task-id>`）へツール・配布物・検証環境を出力し、`RecordRoot`（既定は同じく `TaskArtifacts/Fumilume/<task-id>`）へ最小限の再開記録と清掃台帳を残します。事前確認、本実行、再開には同じ2つのパスを指定します。配布物は `packages/` に置き、リポジトリ、Codexユーザーディレクトリ、リンクを含む保存先と禁止名のフォルダーを作成前に拒否します。Mac CIもrunnerの外部Tempへ出力し、同じ場所から配布物と検証記録を収集します。公証受理後のチケット検証は `validate-notarization.sh` を通し、exit 68と明示的な接続切れ（-1005）またはタイムアウト（-1001）が揃う場合だけ最大5回まで再試行します。待機は2・4・8・16秒で、署名・公証提出を繰り返さず、チケットの不正などの別の失敗と再試行上限は非0終了を維持します。各試行のログをCIの検証記録へ残します。配布出力の清掃は検証済みの作業範囲に限定し、実行担当がPrunlet CLIをCMDから直接呼んでファイル単位で行います。リリーススクリプトは既存の配布・検証ファイルが残る場合に停止し、清掃してから同じ作業先で再開します。清掃に失敗した対象は残存と理由を記録します。
 
 更新適用では updater の起動前に未保存文書の確認とセッション保存を完了し、取消・保存失敗時は適用も終了も行いません。ダウンロード済み更新の起動時自動適用は無効にし、次回も更新UIから同じ保存境界を通します。
 
 macOS の通常終了では、Cocoa が管理コードの `finally` より先に終了を確定することがあります。セッション保存後の desktop lifetime の `Exit` と `Program.Main` の `finally` は共通の冪等な終了処理を呼び、終了ログの書き出しを完了します。
 
-Apple Silicon向けは `.github/workflows/macos-release.yml` のarm64 Macで `scripts/build-macos-arm64.sh` を実行し、locked restore、Native AOT発行、Developer ID署名、Apple公証、PKG・ZIP・更新パッケージ作成を行います。実AvaloniaとCore Graphicsを使う `tests/Fumilume.MacE2E`、配布物の署名・公証とNative AOT起動結果をCI成果物へ残します。主アプリは空entitlementsを使い、同梱ネイティブライブラリを同じTeam IDで個別署名します。`scripts/release-all.ps1` は現在のHEADと一致するMac CI成功結果を取得し、Windows版リリース後にMac成果物を `scripts/publish-macos.ps1` で同じR2 bucketへ公開・SHA256照合します。Mac専用チャンネルは `osx-arm64`、更新フィードは `releases.osx-arm64.json` です。Windows の `packages.lock.json` と macOS の lockfile は分離し、片方の restore が他方の依存グラフを消さないようにします。
+Apple Silicon向けは `.github/workflows/macos-release.yml` のarm64 Macで `scripts/build-macos-arm64.sh` を実行し、locked restore、Native AOT発行、Developer ID署名、Apple公証、PKG・ZIP・更新パッケージ作成を行います。実AvaloniaとCore Graphicsを使う `tests/Fumilume.MacE2E`、配布物の署名・公証とNative AOT起動結果をCI成果物へ残します。主アプリは空entitlementsを使い、同梱ネイティブライブラリを同じTeam IDで個別署名します。`scripts/release-all.ps1` は現在のHEADと一致するMac CI成功結果を取得し、Windows版リリース後にMac成果物を `scripts/publish-macos.ps1` で同じR2 bucketへアップロードし、固定URLのキャッシュ削除を要求します。Mac専用チャンネルは `osx-arm64`、更新フィードは `releases.osx-arm64.json` です。Windows の `packages.lock.json` と macOS の lockfile は分離し、片方の restore が他方の依存グラフを消さないようにします。
 
 ## 永続データと外部境界
 
@@ -202,7 +202,7 @@ Apple Silicon向けは `.github/workflows/macos-release.yml` のarm64 Macで `sc
 - `fumilume.kagayoi.com`: ランディングページ、固定セットアップURL、更新マニフェストとパッケージ
 - Cloudflare R2 `fumilume-updates`: 配布成果物の正本
 
-テストでは `AppStoragePaths` の保存先を一時ディレクトリへ差し替え、実利用者の設定を変更しません。署名証明書とCloudflare認証情報はリポジトリ外に置き、製品コードやテストデータへ取り込みません。
+テストでは `AppStoragePaths` の保存先を一時ディレクトリへ差し替え、実利用者の設定を変更しません。署名用のCertumアカウント（ローカルは資格情報マネージャー、CIはEnvironmentのSecrets）とCloudflare認証情報はリポジトリ外に置き、製品コードやテストデータへ取り込みません。
 
 ## 重要な不変条件
 
