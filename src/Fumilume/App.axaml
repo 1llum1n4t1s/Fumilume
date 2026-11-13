@@ -9,9 +9,28 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="TabStripBg" Color="#DEE1E6" />
-                    <SolidColorBrush x:Key="TabIdleBg" Color="#E8EBEF" />
-                    <SolidColorBrush x:Key="TabHoverBg" Color="#F1F3F5" />
-                    <SolidColorBrush x:Key="TabSelectedBg" Color="#FFFFFF" />
+                    <!-- 縦タブの 3 段階（待機→ホバー→選択で暗くなる）。姉妹アプリ Kiriha と同じ値で、
+                         アクティブが一番暗く沈み、非アクティブが地より浮く関係を保つ。
+                         ホバーは「押すとここまで沈む」予告なので、待機と選択の中間に置く。 -->
+                    <SolidColorBrush x:Key="TabIdleBg" Color="#F7F8FA" />
+                    <SolidColorBrush x:Key="TabHoverBg" Color="#D5D9E0" />
+                    <!-- 選択中の縦タブ専用。ライトは地の下に余地があるので一段暗い専用色を置く。 -->
+                    <SolidColorBrush x:Key="TabSelectedBg" Color="#C6CBD2" />
+                    <!-- 選択中タブの左 2px バー。固定タブのバー（TabPinnedBar）と同じ左端に並ぶので、
+                         そのテーマで一番強い明暗（ライトは最も暗い文字色）を当てて、一段控えめな
+                         固定バーと区別する。アクセント色ではなくテーマ内の明暗差で示す。 -->
+                    <SolidColorBrush x:Key="TabSelectedBar" Color="#202124" />
+                    <!-- 固定タブの目印。アクセント色ではなく、テーマ内の明暗差で示す。
+                         TabPinnedOverlay は行へ重ねる半透明のベールで、明るいライトでは黒を薄く敷いて
+                         一段沈ませる。半透明なので通常／ホバー／選択の色変化はそのまま透け、
+                         どの状態でも「固定は地より一段暗い」関係が保たれる。 -->
+                    <SolidColorBrush x:Key="TabPinnedOverlay" Color="#14000000" />
+                    <SolidColorBrush x:Key="TabPinnedBar" Color="#5F6368" />
+                    <!-- 閉じるボタンのホバー面。ホバー中の行（TabHoverBg）に埋もれない一段濃い色。 -->
+                    <SolidColorBrush x:Key="TabCloseHoverBg" Color="#D0D3D9" />
+                    <!-- 左パネル切り替えボタンの「今の面」を示す塗り。縦タブの選択色とは用途が違うので
+                         専用トークンにしてある（共用すると、タブの配色を変えるたびにこちらが崩れる）。 -->
+                    <SolidColorBrush x:Key="PanelSwitchActiveBg" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="ContentBg" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="EditorBg" Color="#FBFBFC" />
                     <!-- 白背景でも本文との差が分かり、WCAG AA の 4.5:1 を超えるリンク色。 -->
@@ -47,9 +66,21 @@
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="TabStripBg" Color="#202124" />
+                    <!-- 縦タブの配色はライトと同じ考え方（Kiriha と同値）。ダークは地から黒までの余地が
+                         小さく、「地より暗く」を守ると黒へ寄って重くなるため、選択中は地色そのものを
+                         終点にする。選択の目印は左 2px の TabSelectedBar（地に対する強い明るさ）が担う。 -->
                     <SolidColorBrush x:Key="TabIdleBg" Color="#3C4043" />
-                    <SolidColorBrush x:Key="TabHoverBg" Color="#343639" />
-                    <SolidColorBrush x:Key="TabSelectedBg" Color="#56595D" />
+                    <SolidColorBrush x:Key="TabHoverBg" Color="#2B2C2F" />
+                    <SolidColorBrush x:Key="TabSelectedBg" Color="#202124" />
+                    <!-- 固定バーより一段強い明るさにして、同じ左端に並んでも「選択」と「固定」が
+                         別の印だと分かるようにする。 -->
+                    <SolidColorBrush x:Key="TabSelectedBar" Color="#E8EAED" />
+                    <!-- 固定タブ（ライトの対（つい））。暗い地なので白を薄く重ねて一段持ち上げる。
+                         濃度 10% は「固定と通常の差」と「タブ名の読みやすさ」の折り合いで決めた値。 -->
+                    <SolidColorBrush x:Key="TabPinnedOverlay" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="TabPinnedBar" Color="#BDC1C6" />
+                    <SolidColorBrush x:Key="TabCloseHoverBg" Color="#3C4043" />
+                    <SolidColorBrush x:Key="PanelSwitchActiveBg" Color="#56595D" />
                     <SolidColorBrush x:Key="ContentBg" Color="#2B2C2F" />
                     <SolidColorBrush x:Key="EditorBg" Color="#242528" />
                     <!-- AvaloniaEdit 既定の濃い Blue は暗背景で沈むため、明度を上げる。 -->

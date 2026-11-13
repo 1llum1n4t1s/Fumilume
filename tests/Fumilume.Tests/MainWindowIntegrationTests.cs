@@ -333,27 +333,172 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.Equal(2, tabList.ItemCount);
     });
 
+    /// <summary>
+    /// 縦タブ 1 行の「ピン留め」「閉じる」の入口と、固定中の見た目。
+    ///
+    /// ピン留めは常時表示のボタンではなく、行の右クリックメニュー（姉妹アプリ Kiriha と同じ作り）から行う。
+    /// 固定タブは末尾が閉じるボタンの代わりにピンの目印（Path）になるので、
+    /// 「未固定は閉じるボタン、固定はピンの目印」の切り替えまで実ツリーで確かめる。
+    /// </summary>
     [Fact]
-    public void TabRowsShowAPinActionAndPinnedState() => fixture.Run(() =>
+    public void TabRowsOfferPinAndCloseInTheContextMenuAndShowPinnedState() => fixture.Run(() =>
     {
         using var scope = new WindowScope();
         Dispatcher.UIThread.RunJobs();
 
         var document = scope.ViewModel.SelectedDocument!;
-        var pin = scope.Window.GetVisualDescendants()
-            .OfType<Button>()
-            .Single(button => button.Classes.Contains("tabpin"));
+        var row = FindTabRow(scope.Window, document);
+        var menu = Assert.IsType<ContextMenu>(row.ContextMenu);
+        // ContextMenu は開くまで DataContext を受け取らないので、実際に開いてからバインド結果を見る。
+        menu.Open(row);
+        Dispatcher.UIThread.RunJobs();
+        var items = menu.Items.OfType<MenuItem>().ToList();
+        Assert.Equal(2, items.Count);
 
-        Assert.Same(document.TogglePinCommand, pin.Command);
-        Assert.True(pin.IsEffectivelyVisible);
-        Assert.Equal("タブをピン留め", ToolTip.GetTip(pin));
+        // 右クリックメニュー: 先頭がピン留め（状態で文言が変わる）、次が閉じる。
+        var pinItem = items[0];
+        var closeItem = items[1];
+        Assert.Same(document.TogglePinCommand, pinItem.Command);
+        Assert.Equal("タブをピン留め", pinItem.Header);
+        Assert.True(pinItem.IsVisible);
+        Assert.Same(document.CloseTabCommand, closeItem.Command);
+        Assert.Equal("タブを閉じる", closeItem.Header);
 
-        document.TogglePinCommand.Execute(null);
+        // 常時表示のピンボタンは持たない。未固定では閉じるボタンが出て、ピンの目印は出ない。
+        Assert.DoesNotContain(scope.Window.GetVisualDescendants().OfType<Button>(),
+            button => button.Classes.Contains("tabpin"));
+        var close = row.GetVisualDescendants().OfType<Button>().Single(button => button.Classes.Contains("tabclose"));
+        var mark = row.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>()
+            .Single(path => path.Classes.Contains("pinmark"));
+        Assert.Same(document.CloseTabCommand, close.Command);
+        Assert.True(close.IsEffectivelyVisible);
+        Assert.False(mark.IsEffectivelyVisible);
+
+        // メニューのコマンドで固定する。固定中は閉じるボタンが隠れ、ピンの目印が出る。
+        pinItem.Command!.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Contains("pinned", pin.Classes);
-        Assert.Equal("ピン留めを解除", ToolTip.GetTip(pin));
+        Assert.True(document.IsPinned);
+        Assert.Equal("ピン留めを解除", pinItem.Header);
+        Assert.False(close.IsEffectivelyVisible);
+        Assert.True(mark.IsEffectivelyVisible);
+        Assert.Equal("ピン留めを解除", ToolTip.GetTip(mark));
+        // 行全体のベールと左端のバー（どちらもクリックを行へ通す）が出ている。
+        Assert.Equal(2, row.Children.OfType<Border>().Count(
+            border => border is { IsHitTestVisible: false, IsVisible: true }));
+
+        // もう一度で解除。閉じるボタンが戻る。
+        pinItem.Command.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(document.IsPinned);
+        Assert.Equal("タブをピン留め", pinItem.Header);
+        Assert.True(close.IsEffectivelyVisible);
+        Assert.False(mark.IsEffectivelyVisible);
+        Assert.DoesNotContain(row.Children.OfType<Border>(), border => border.IsVisible);
     });
+
+    [Fact]
+    public void SettingsTabRowHasNoPinMenuItemAndStaysClosable() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        scope.ViewModel.OpenSettingsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var settings = scope.ViewModel.Tabs.Single(tab => tab.IsSettingsTab);
+        var row = FindTabRow(scope.Window, settings);
+        var menu = Assert.IsType<ContextMenu>(row.ContextMenu);
+        menu.Open(row);
+        Dispatcher.UIThread.RunJobs();
+        var items = menu.Items.OfType<MenuItem>().ToList();
+
+        // 設定タブはピン留めできない（CanPin=false）。項目は隠れ、閉じる手段は残る。
+        Assert.False(settings.CanPin);
+        Assert.False(items[0].IsVisible);
+        Assert.False(items[0].Command!.CanExecute(null));
+        Assert.Same(settings.CloseTabCommand, items[1].Command);
+        var close = row.GetVisualDescendants().OfType<Button>().Single(button => button.Classes.Contains("tabclose"));
+        Assert.True(close.IsEffectivelyVisible);
+    });
+
+    /// <summary>実描画で縦タブの配色（未固定・固定・選択・ホバー）を PNG に保存する目視用の E2E。</summary>
+    [Fact(Skip = "実描画E2E: FUMILUME_E2E_RENDER=1 で個別実行",
+        SkipType = typeof(HeadlessAppFixture), SkipUnless = nameof(HeadlessAppFixture.UsesSkia))]
+    public void VerticalTabsRenderForLightAndDark() => fixture.Run(() =>
+    {
+        var directory = Environment.GetEnvironmentVariable("FUMILUME_E2E_ARTIFACTS");
+        Assert.False(string.IsNullOrEmpty(directory), "FUMILUME_E2E_ARTIFACTS に保存先を指定してください。");
+        Directory.CreateDirectory(directory);
+
+        using var scope = new WindowScope(900, 560);
+        var names = new[] { "idle-plain.txt", "pinned-notes.md", "selected-document.txt", "hover-target.txt", "pinned-hover.txt" };
+        var paths = names.Select(name => Path.Combine(scope.StoragePath, name)).ToArray();
+        foreach (var path in paths)
+        {
+            File.WriteAllText(path, "表示確認");
+        }
+
+        var open = scope.ViewModel.OpenPathsAsync(paths);
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
+        while (!open.IsCompleted && timeout.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Yield();
+        }
+
+        Assert.True(open.IsCompleted);
+        scope.ViewModel.OpenSettingsCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        var byName = names.ToDictionary(
+            name => name,
+            name => scope.ViewModel.Documents.Single(doc => doc.FilePath is not null && Path.GetFileName(doc.FilePath) == name));
+        byName["pinned-notes.md"].IsPinned = true;
+        byName["pinned-hover.txt"].IsPinned = true;
+        Dispatcher.UIThread.RunJobs();
+
+        foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+        {
+            scope.Window.RequestedThemeVariant = theme;
+            // 「選択中（未固定）」と「選択中かつ固定」を別の画像にする（選択は 1 タブしか持てない）。
+            foreach (var (selected, label) in new[] { ("selected-document.txt", "selected"), ("pinned-notes.md", "selected-pinned") })
+            {
+                scope.ViewModel.SelectedTab = byName[selected];
+                Dispatcher.UIThread.RunJobs();
+                scope.Window.UpdateLayout();
+
+                // ホバー相当: 実ポインタは使えないので、擬似クラスを直接立てて Style を当てる。
+                var hoverRows = new[] { "hover-target.txt", "pinned-hover.txt" }
+                    .Select(name => FindTabRow(scope.Window, byName[name]).FindAncestorOfType<ListBoxItem>()!)
+                    .ToList();
+                foreach (var item in hoverRows)
+                {
+                    ((IPseudoClasses)item.Classes).Set(":pointerover", true);
+                }
+
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
+                using var frame = scope.Window.CaptureRenderedFrame();
+                Assert.NotNull(frame);
+                frame.Save(Path.Combine(directory, $"vertical-tabs-{theme.Key.ToString()!.ToLowerInvariant()}-{label}.png"),
+                    Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+
+                foreach (var item in hoverRows)
+                {
+                    ((IPseudoClasses)item.Classes).Set(":pointerover", false);
+                }
+            }
+        }
+    });
+
+    /// <summary>縦タブ一覧から、指定したタブの行（右クリックメニューを持つ Grid）を探す。</summary>
+    private static Grid FindTabRow(Window window, WorkspaceTabViewModel tab)
+        => window.GetVisualDescendants()
+            .OfType<ListBox>()
+            .Single(list => list.Classes.Contains("verticaltabs"))
+            .GetVisualDescendants()
+            .OfType<Grid>()
+            .Single(grid => grid.ContextMenu is not null && ReferenceEquals(grid.DataContext, tab));
 
     [Fact]
     public void EditorOptionsFollowTheSettings() => fixture.Run(() =>

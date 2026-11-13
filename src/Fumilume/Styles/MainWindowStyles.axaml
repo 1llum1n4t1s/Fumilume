@@ -10,41 +10,65 @@
              項目テンプレート側（MainWindow.axaml）の Grid.Height と、この ControlTheme の
              MinHeight の両方に効かせる必要があるため、値を 1 つのリソースへ寄せてある。 -->
         <x:Double x:Key="TabItemHeight">34</x:Double>
-
-        <!-- 縦タブ 1 行分の見た目。ListBoxItem の既定テンプレートは選択枠を自前で描くため、
-             角丸と塗り分けだけを持つテンプレートへ差し替える。 -->
-        <ControlTheme x:Key="VerticalTabItemTheme" TargetType="ListBoxItem">
-            <Setter Property="Margin" Value="4,2" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="MinHeight" Value="{DynamicResource TabItemHeight}" />
-            <Setter Property="Background" Value="{DynamicResource TabIdleBg}" />
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="VerticalContentAlignment" Value="Stretch" />
-            <Setter Property="Template">
-                <ControlTemplate>
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="10"
-                            ClipToBounds="True">
-                        <ContentPresenter Content="{TemplateBinding Content}"
-                                          ContentTemplate="{TemplateBinding ContentTemplate}"
-                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover">
-                <Setter Property="Background" Value="{DynamicResource TabHoverBg}" />
-            </Style>
-            <Style Selector="^:selected">
-                <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
-            </Style>
-        </ControlTheme>
     </Styles.Resources>
 
+    <!-- 縦タブの見た目。姉妹アプリ Kiriha と同じ作り（角丸 8・行間 1px・選択中だけ左 2px のバー）に
+         揃えてある。色は App.axaml の Tab 系トークンを使い、アクセント色ではなくテーマ内の明暗差で
+         選択・固定を示す。 -->
     <Style Selector="ListBox.verticaltabs">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8,4,8,0" />
+    </Style>
+    <Style Selector="ListBox.verticaltabs ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <!-- 行の高さは設定「タブの厚み」で決まる。MainWindow のコードビハインドが TabItemHeight を
+             書き換えるので、固定値ではなく動的リソースで追従させる（項目テンプレート側の
+             Grid.Height も同じリソースを見ている）。 -->
+        <Setter Property="MinHeight" Value="{DynamicResource TabItemHeight}" />
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="{DynamicResource TabIdleBg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <!-- 既定テンプレートの選択枠・押下色を使わず、塗りと左バーだけを描くテンプレートへ差し替える。
+             下の状態別スタイルは、この PART_ContentPresenter の Background / BorderBrush を直接書き換える。 -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ContentPresenter Name="PART_ContentPresenter"
+                                  Background="{TemplateBinding Background}"
+                                  BorderBrush="{TemplateBinding BorderBrush}"
+                                  BorderThickness="{TemplateBinding BorderThickness}"
+                                  CornerRadius="{TemplateBinding CornerRadius}"
+                                  Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  Padding="{TemplateBinding Padding}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.verticaltabs ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource TabHoverBg}" />
+    </Style>
+    <!-- 押している間も既定テンプレートの押下色へ戻さず、ホバーと同じ沈み方にとどめる。 -->
+    <Style Selector="ListBox.verticaltabs ListBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource TabHoverBg}" />
+    </Style>
+    <!-- 選択中は専用の一段暗い面と、左 2px のバー。選択の目印はアクセント色ではなく
+         TabSelectedBar（テーマ内で一番強い明暗）で示す。 -->
+    <Style Selector="ListBox.verticaltabs ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource TabSelectedBar}" />
+        <Setter Property="BorderThickness" Value="2,0,0,0" />
+    </Style>
+    <Style Selector="ListBox.verticaltabs ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
+    </Style>
+    <Style Selector="ListBox.verticaltabs ListBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
     </Style>
 
     <!-- 左サイドのパネル切り替え。今どの面を見ているかは塗りで示す（文言を入れる幅が無い）。 -->
@@ -65,7 +89,7 @@
         <Setter Property="Background" Value="{DynamicResource HoverBg}" />
     </Style>
     <Style Selector="Button.panelswitch.active">
-        <Setter Property="Background" Value="{DynamicResource TabSelectedBg}" />
+        <Setter Property="Background" Value="{DynamicResource PanelSwitchActiveBg}" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
     </Style>
 
@@ -103,44 +127,24 @@
         <Setter Property="MinHeight" Value="0" />
     </Style>
 
-    <!-- タブの閉じるボタンと、タブ一覧下の丸いアイコンボタン。 -->
+    <!-- タブの閉じるボタン（Kiriha と同じ 18px の丸）。ホバー面は Fluent の既定テンプレートが
+         ContentPresenter へ直接塗るため、Button 本体ではなくテンプレート内を狙って上書きする。
+         固定タブは末尾が閉じるボタンではなくピンの目印になるので、ここでは未固定タブの分だけを持つ。 -->
     <Style Selector="Button.tabclose">
-        <Setter Property="Width" Value="26" />
-        <Setter Property="Height" Value="26" />
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="MinWidth" Value="0" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="13" />
-        <Setter Property="FontFamily" Value="fonts:Fumilume#FluentSystemIcons-Regular" />
-        <Setter Property="FontSize" Value="10" />
-        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
-        <Setter Property="HorizontalContentAlignment" Value="Center" />
-        <Setter Property="VerticalContentAlignment" Value="Center" />
-    </Style>
-    <Style Selector="Button.tabclose:pointerover">
-        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
-    </Style>
-
-    <!-- ピン操作は未固定時も入口を残し、固定中はアクセント色で状態を示す。 -->
-    <Style Selector="Button.tabpin">
-        <Setter Property="Width" Value="26" />
-        <Setter Property="Height" Value="26" />
-        <Setter Property="Padding" Value="0" />
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="13" />
-        <Setter Property="FontFamily" Value="fonts:Fumilume#FluentSystemIcons-Regular" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="CornerRadius" Value="9" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.tabpin:pointerover">
-        <Setter Property="Background" Value="{DynamicResource HoverBg}" />
-        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
-    </Style>
-    <Style Selector="Button.tabpin.pinned">
-        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    <Style Selector="Button.tabclose:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource TabCloseHoverBg}" />
     </Style>
 
     <!-- コマンドバーのボタン。アイコンのみ・アイコン＋文言のどちらでも高さが揃うようにする。 -->

@@ -52,14 +52,10 @@ public abstract partial class WorkspaceTabViewModel : ObservableObject
 
     /// <summary>タブ一覧の先頭グループへ固定されているか。</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PinGlyph))]
     [NotifyPropertyChangedFor(nameof(PinTooltip))]
     private bool _isPinned;
 
-    /// <summary>現在の状態が一目で分かるピン操作のグリフ。</summary>
-    public string PinGlyph => IsPinned ? "\uF603" : "\uF601";
-
-    /// <summary>現在の状態に対応するピン操作の説明。</summary>
+    /// <summary>現在の状態に対応するピン操作の説明。右クリックメニューの項目名と、固定中の目印のツールチップに使う。</summary>
     public string PinTooltip => IsPinned ? "ピン留めを解除" : "タブをピン留め";
 
     /// <summary>ピン状態が変わったことを、一覧を所有する ViewModel へ知らせる。</summary>

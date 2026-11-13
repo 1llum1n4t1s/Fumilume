@@ -156,7 +156,6 @@
                              WorkspaceTabViewModel で、表示に要る 3 つ（表題・アイコン・ツールチップ）
                              だけを基底が公開している。 -->
                         <ListBox Classes="verticaltabs" IsVisible="{Binding SidePanel.IsTabsPanel}"
-                                 ItemContainerTheme="{StaticResource VerticalTabItemTheme}"
                                  ItemsSource="{Binding Tabs}"
                                  SelectedItem="{Binding SelectedTab}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -164,25 +163,64 @@
                                  AutomationProperties.Name="タブ一覧">
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vm:WorkspaceTabViewModel">
+                                    <!-- 列は Kiriha と同じ（アイコン 36・題名・末尾 Auto）。高さは設定「タブの厚み」
+                                         （TabItemHeight）に追従させる。
+                                         ピン留めの操作入口は常時表示のボタンではなく、行の右クリックメニュー。
+                                         固定タブは末尾が閉じるボタンではなくピンの目印になるため、閉じる手段は
+                                         このメニューと Ctrl+W（Macでは ⌘W）・コマンドパレットで残している。 -->
                                     <Grid Height="{DynamicResource TabItemHeight}"
-                                          ColumnDefinitions="26,*,26,26" Background="Transparent">
+                                          ColumnDefinitions="36,*,Auto" Background="Transparent">
+                                        <Grid.ContextMenu>
+                                            <ContextMenu>
+                                                <!-- 文言は現在の状態に合わせて「タブをピン留め」「ピン留めを解除」に切り替わる。
+                                                     設定タブはピン留めできない（CanPin=false）ので項目ごと出さない。 -->
+                                                <MenuItem Header="{Binding PinTooltip}"
+                                                          Command="{Binding TogglePinCommand}"
+                                                          IsVisible="{Binding CanPin}" />
+                                                <MenuItem Header="タブを閉じる" Command="{Binding CloseTabCommand}" />
+                                            </ContextMenu>
+                                        </Grid.ContextMenu>
+
+                                        <!-- 固定タブの目印。アクセント色ではなく、テーマ内の明暗差で示す。
+                                             行全体へ半透明のベール（TabPinnedOverlay）を重ね、左端に太め（3px）のバーを
+                                             出す。ベールが半透明なので、下の通常／ホバー／選択の背景色は透けて残る。
+                                             選択中の印（ListBoxItem 側の左 2px 枠 = TabSelectedBar）とは幅も色も違うので、
+                                             同じ左端に並んでも 2 本の帯として見分けがつく。どちらもクリックは行へ通す。 -->
+                                        <Border Grid.Column="0" Grid.ColumnSpan="3"
+                                                IsVisible="{Binding IsPinned}"
+                                                Background="{DynamicResource TabPinnedOverlay}"
+                                                CornerRadius="8" IsHitTestVisible="False" />
+                                        <Border Grid.Column="0" Grid.ColumnSpan="3"
+                                                IsVisible="{Binding IsPinned}"
+                                                Width="3" HorizontalAlignment="Left"
+                                                Background="{DynamicResource TabPinnedBar}"
+                                                CornerRadius="8,0,0,8" IsHitTestVisible="False" />
+
                                         <TextBlock Grid.Column="0" Classes="icon" Text="{Binding TabGlyph}"
                                                    HorizontalAlignment="Center" Foreground="{DynamicResource TextSecondary}" />
                                         <TextBlock Grid.Column="1" Text="{Binding TabTitle}" FontSize="12.5"
+                                                   Margin="0,0,8,0"
                                                    FontStyle="{Binding PreviewFontStyle}"
                                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                                    Foreground="{DynamicResource TextPrimary}"
                                                    ToolTip.Tip="{Binding TabTooltip}" />
-                                        <Button Grid.Column="2" Classes="tabpin" Classes.pinned="{Binding IsPinned}"
-                                                Command="{Binding TogglePinCommand}" IsVisible="{Binding CanPin}"
-                                                Content="{Binding PinGlyph}"
-                                                HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                AutomationProperties.Name="{Binding PinTooltip}"
-                                                ToolTip.Tip="{Binding PinTooltip}" />
-                                        <Button Grid.Column="3" Classes="tabclose" Command="{Binding CloseTabCommand}"
-                                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        <!-- 固定中の目印。輪郭だけのアイコンフォントでは小さいと読み取りにくいので、
+                                             塗りつぶしのベクターパスを斜め（-35 度）に傾けて、閉じるボタンの位置へ出す。 -->
+                                        <Path Grid.Column="2" Classes="pinmark" Width="14" Height="14"
+                                              Margin="0,0,10,0" VerticalAlignment="Center"
+                                              Data="M16 9V4L17 3V2H7V3L8 4V9C8 10.66 6.66 12 5 12V14H10.97V21L12 22L13.03 21V14H19V12C17.34 12 16 10.66 16 9Z"
+                                              Fill="{DynamicResource TabPinnedBar}"
+                                              Stretch="Uniform"
+                                              RenderTransform="rotate(-35deg)"
+                                              RenderTransformOrigin="50%,50%"
+                                              IsVisible="{Binding IsPinned}"
+                                              ToolTip.Tip="{Binding PinTooltip}" />
+                                        <!-- 閉じるボタンは固定されていないタブだけに出す（固定タブは誤って閉じにくくする）。 -->
+                                        <Button Grid.Column="2" Classes="tabclose" Command="{Binding CloseTabCommand}"
+                                                IsVisible="{Binding !IsPinned}"
+                                                Margin="0,0,8,0" VerticalAlignment="Center"
                                                 AutomationProperties.Name="タブを閉じる">
-                                            <PathIcon Width="10" Height="10" Data="{StaticResource CloseIconGeometry}" />
+                                            <PathIcon Width="8" Height="8" Data="{StaticResource CloseIconGeometry}" />
                                         </Button>
                                     </Grid>
                                 </DataTemplate>
