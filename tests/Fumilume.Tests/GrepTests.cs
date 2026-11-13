@@ -89,6 +89,27 @@ public sealed class GrepTests
         Assert.Equal(1, match.Column);
     }
 
+    /// <summary>
+    /// 行は文字列にせず範囲で照合するが、桁・行番号・行頭や後読みの解釈は行単位のまま変わらない。
+    /// CRLF・LF・CR の混在でも、区切り文字は行本文に含めない。
+    /// </summary>
+    [Fact]
+    public async Task RegularExpressionColumnsAndAnchorsStayPerLineAcrossMixedNewLines()
+    {
+        using var storage = new TemporaryStorage();
+        Write(storage, "mixed.txt", "id=1 key=alpha\r\nkey=beta\nprefix key=gamma\rlast");
+
+        var keys = (await Search(storage, @"(?<=key=)\w+", useRegex: true)).Matches;
+        Assert.Equal(new[] { 1, 2, 3 }, keys.Select(match => match.LineNumber));
+        Assert.Equal(new[] { 10, 5, 12 }, keys.Select(match => match.Column));
+        Assert.Equal(new[] { "id=1 key=alpha", "key=beta", "prefix key=gamma" }, keys.Select(match => match.LineText));
+
+        // 行頭（^）は各行の先頭にだけ一致し、前の行の区切りを引きずらない。
+        var anchored = Assert.Single((await Search(storage, "^key", useRegex: true)).Matches);
+        Assert.Equal(2, anchored.LineNumber);
+        Assert.Equal(1, anchored.Column);
+    }
+
     /// <summary>実行ファイルや画像まで開くと結果が汚れるので、中身を見て弾く。</summary>
     [Fact]
     public async Task BinaryFilesAreSkipped()

@@ -107,8 +107,11 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
         return new GrepResult(matches, searched, skipped, reachedLimit);
     }
 
-    /// <summary>一致した位置を返す。見つからない行は <see langword="null"/>。</summary>
-    private static Func<string, int?> CreateMatcher(GrepQuery query)
+    /// <summary>
+    /// 一致した位置（1 始まりの桁）を返す。見つからない行は <see langword="null"/>。
+    /// 行は文字列にせず範囲（span）で受け取り、一致しない大半の行で割り当てを生まない。
+    /// </summary>
+    private static Func<ReadOnlySpan<char>, int?> CreateMatcher(GrepQuery query)
     {
         if (query.UseRegex)
         {
@@ -123,8 +126,10 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
             {
                 try
                 {
-                    var match = regex.Match(line);
-                    return match.Success ? match.Index + 1 : null;
+                    // 先頭の一致だけを見る。Match(string) と同じく行の先頭から探すので、
+                    // ^ や後読みの解釈も行単位のまま変わらない。
+                    var found = regex.EnumerateMatches(line);
+                    return found.MoveNext() ? found.Current.Index + 1 : null;
                 }
                 catch (RegexMatchTimeoutException)
                 {
@@ -137,7 +142,7 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
         var comparison = query.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         return line =>
         {
-            var index = line.IndexOf(query.Pattern, comparison);
+            var index = line.IndexOf(query.Pattern.AsSpan(), comparison);
             return index < 0 ? null : index + 1;
         };
     }
@@ -146,22 +151,23 @@ public sealed class GrepService(IDocumentFileService files) : IGrepService
     private static bool CollectMatches(
         string path,
         string text,
-        Func<string, int?> matcher,
+        Func<ReadOnlySpan<char>, int?> matcher,
         List<GrepMatch> matches,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var lineNumber = 0;
-        foreach (var line in DocumentNewLines.EnumerateLines(text, cancellationToken))
+        foreach (var range in DocumentNewLines.EnumerateLineRanges(text, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             lineNumber++;
-            if (matcher(line) is not { } column)
+            if (matcher(text.AsSpan(range)) is not { } column)
             {
                 continue;
             }
 
-            matches.Add(new GrepMatch(path, lineNumber, column, line));
+            // 結果に表示する行だけを文字列にする。
+            matches.Add(new GrepMatch(path, lineNumber, column, text[range]));
             if (matches.Count >= MaximumMatches)
             {
                 return true;

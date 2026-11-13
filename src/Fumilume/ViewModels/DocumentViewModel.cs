@@ -487,7 +487,9 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
     private void UpdateTextStatistics()
     {
-        CharacterCount = Text.Length;
+        // Text は AvaloniaEdit が全文を新しい文字列へ組み立てるため、打鍵ごとに読むと
+        // 文書の長さに比例した複製が走る。文字数（UTF-16 の長さ）は TextLength で同じ値を得る。
+        CharacterCount = EditorDocument.TextLength;
         // AvaloniaEdit は LF / CRLF / CR のどれも改行として扱う。文字だけを数えると
         // 古い Mac 形式（CR）の文書で、表示中の行数とステータスバーが食い違う。
         LineCount = EditorDocument.LineCount;
