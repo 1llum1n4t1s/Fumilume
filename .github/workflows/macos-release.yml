@@ -42,6 +42,23 @@ jobs:
         run: ./tests/R2Transfer/Run.ps1 -WorkRoot (Join-Path $env:RUNNER_TEMP 'fumilume-r2-transfer')
       - name: Apple Silicon runner を確認
         run: test "$(uname -m)" = arm64
+      - name: 画面を起こしたまま保つ
+        # 実アプリ経路の E2E と起動検証は、Avalonia.Native の描画タイマー（CVDisplayLink）が有効なディスプレイを必要とする。
+        # この Mac は無操作が続くと画面がスリープし、RenderTimer が -6661（kCVReturnInvalidDisplay）で起動できず、
+        # その後の終了処理で CLR アサーション（ebr.cpp）により異常終了していた（2026-11-13 の v1.0.27 リリース）。
+        # ジョブの間だけユーザー操作中として扱って画面のスリープを止める。上限はジョブの timeout と同じ 90 分で、
+        # caffeinate はジョブ終了時に runner が残存プロセスとして片付ける。画面を起こせなければ原因を示して止める。
+        run: |
+          nohup caffeinate -d -u -t 5400 >/dev/null 2>&1 &
+          for _ in $(seq 1 20); do
+            if osascript -l JavaScript -e 'ObjC.import("CoreGraphics"); var id = $.CGMainDisplayID(); $.CGDisplayIsActive(id) && !$.CGDisplayIsAsleep(id)' | grep -qx true; then
+              echo "ディスプレイは有効です"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::有効なディスプレイがありません。蓋を閉じた MacBook などでは GUI の E2E と起動検証を実行できません。"
+          exit 1
       - name: 固定 .NET SDK を導入
         shell: pwsh
         run: |
