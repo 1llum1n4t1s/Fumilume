@@ -6,11 +6,16 @@ name: Release
 #   Windows を release-local.ps1 で build・署名・配信してから、検証済みの Mac 成果物を publish-macos.ps1 で配信する。
 # - 署名: Windows は Sigilune (https://github.com/1llum1n4t1s/Sigilune) が Certum SimplySign のクラウド鍵で行う。
 #   本人の PC や SimplySign Desktop は不要。Mac の署名・公証は従来どおり macos-release.yml が行う。
-# - 起動: 手動 (workflow_dispatch)。/vava で版を上げ、main と release/<version> を同じコミットへ push した後に
-#   main を指定して実行する (release-all.ps1 が両者と HEAD の一致を確認する)。誤配信を避けるため push / tag では自動起動しない。
+# - 起動: release/<版> ブランチへの push で自動起動する。/vava が main と release/<版> を push すると始まる。
+#   workflow_dispatch は同じ release/<版> を --ref に指定した再実行にだけ使う (main 指定は Environment に拒否される)。
+#   push 起動では inputs.skip_upload が空になるため、常に完全リリース (配信まで行う) になる。
+#   タグと GitHub Release は使わない。Environment "release" は release/* だけを許可する。
+#   Mac CI (macos-release.yml) は release-all.ps1 が起動して完了を待つ。
 # - 秘密情報: Environment "release" の Secrets だけを使う
 #   (SIGILUNE_EMAIL / SIGILUNE_TOTP_URI / CLOUDFLARE_API_TOKEN)。macos-release.yml の起動と監視には GITHUB_TOKEN を使う。
 on:
+  push:
+    branches: ['release/**']
   workflow_dispatch:
     inputs:
       skip_upload:
@@ -48,6 +53,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+
+      - name: release ブランチと版の一致を確認
+        # Directory.Build.props の版と実行中の ref (release/<版>) が違う誤配信を、Secrets を使う step より前に止める。
+        # 版の読み方は scripts/release-all.ps1 と同じ式にする。
+        run: |
+          $version = ([xml](Get-Content ./Directory.Build.props -Raw)).Project.PropertyGroup.Version
+          if ($env:GITHUB_REF -cne "refs/heads/release/$version") {
+            throw "release/$version ブランチ以外ではリリースできません: $env:GITHUB_REF"
+          }
 
       - name: .NET SDK をセットアップ
         # actions/setup-dotnet@v6.1.0
