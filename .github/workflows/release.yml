@@ -2,7 +2,7 @@ name: Release
 
 # Windows と Apple Silicon Mac の署名付きリリースを GitHub Actions で行い、R2 (fumilume.kagayoi.com) へ配信する。
 # - 手順の本体は scripts/release-all.ps1 で、ローカル実行と同じ処理を通す:
-#   macos-release.yml (セルフホスト Mac での Native AOT・署名・公証・E2E) を起動して完了を待ち、
+#   先に単体テストを実行し (失敗したら配信しない)、macos-release.yml (GitHub 提供 Mac ランナーでの Native AOT・署名・公証・E2E) を起動して完了を待ち、
 #   Windows を release-local.ps1 で build・署名・配信してから、検証済みの Mac 成果物を publish-macos.ps1 で配信する。
 # - 署名: Windows は Sigilune (https://github.com/1llum1n4t1s/Sigilune) が Certum SimplySign のクラウド鍵で行う。
 #   本人の PC や SimplySign Desktop は不要。Mac の署名・公証は従来どおり macos-release.yml が行う。
@@ -69,6 +69,19 @@ jobs:
         with:
           # SDK はリポジトリ直下の global.json (rollForward: disable) で固定し、ローカル・Mac CI と揃える。
           global-json-file: global.json
+
+      - name: R2 転送の mock 検証
+        # 署名・アップロードより前に、既存の検証をリリースの流れに入れる。失敗したら配信しない。
+        run: ./tests/R2Transfer/Run.ps1 -WorkRoot (Join-Path $env:RUNNER_TEMP 'fumilume-r2-transfer')
+
+      - name: ビルドと単体テスト
+        # dependency-validation.yml の windows ジョブと同じ検証。Secrets を使う step より前に置き、
+        # テストが失敗したら Mac CI の起動・署名・配信へ進まない。
+        run: |
+          dotnet build Fumilume.slnx -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet test --solution Fumilume.slnx -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Sigilune を導入
         uses: 1llum1n4t1s/Sigilune@05006dcad019e5e863a08985b9208d72004f1b5f # v1.1.3

@@ -14,13 +14,11 @@ jobs:
   package:
     outputs:
       artifact-attempt: ${{ steps.artifact-attempt.outputs['attempt'] }}
-    runs-on: [self-hosted, macOS, ARM64, m3mb14]
+    # 公開リポジトリなので GitHub 提供の Apple Silicon ランナーを使う（使用料なし）。
+    # 署名・公証の証明書とパスワードは、すでに Secrets から一時キーチェーンへ取り込む方式
+    # （scripts/build-macos-arm64.sh）なので、ランナーの種類に依存しない。
+    runs-on: macos-latest
     timeout-minutes: 90
-    env:
-      # この Mac は IPv6 のデフォルト経路だけが残り、グローバル IPv6 アドレスを持たない。
-      # .NET は IPv6 を先に試すため、nuget.org への接続が約10分待ってタイムアウトし、
-      # restore が NU1900 で失敗した（2026-11-13 の v1.0.27 リリース）。.NET の通信を IPv4 に限定する。
-      DOTNET_SYSTEM_NET_DISABLEIPV6: '1'
     steps:
       - name: 外部作業先を設定
         run: echo "FUMILUME_WORK_ROOT=$RUNNER_TEMP/Codex/Fumilume/release-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
@@ -44,9 +42,10 @@ jobs:
         run: test "$(uname -m)" = arm64
       - name: 画面を起こしたまま保つ
         # 実アプリ経路の E2E と起動検証は、Avalonia.Native の描画タイマー（CVDisplayLink）が有効なディスプレイを必要とする。
-        # この Mac は無操作が続くと画面がスリープし、RenderTimer が -6661（kCVReturnInvalidDisplay）で起動できず、
+        # 以前の自宅 Mac は無操作が続くと画面がスリープし、RenderTimer が -6661（kCVReturnInvalidDisplay）で起動できず、
         # その後の終了処理で CLR アサーション（ebr.cpp）により異常終了していた（2026-11-13 の v1.0.27 リリース）。
-        # ジョブの間だけユーザー操作中として扱って画面のスリープを止める。上限はジョブの timeout と同じ 90 分で、
+        # GitHub 提供ランナーでも同じ前提を確認するため、ジョブの間だけユーザー操作中として扱って画面のスリープを止め、
+        # 有効なディスプレイを検証する。上限はジョブの timeout と同じ 90 分で、
         # caffeinate はジョブ終了時に runner が残存プロセスとして片付ける。画面を起こせなければ原因を示して止める。
         run: |
           nohup caffeinate -d -u -t 5400 >/dev/null 2>&1 &

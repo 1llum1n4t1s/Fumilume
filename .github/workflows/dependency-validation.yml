@@ -1,5 +1,13 @@
 name: Dependency validation
+# 通常の変更（main への push と全 PR）と Dependabot・手動実行で、Windows の単体テストと
+# macOS 向け E2E プロジェクトのビルドを走らせる。ファイル名は従来のまま（呼び出し・参照を壊さないため）。
+# 対象外: 実アプリ経路の Mac E2E（有効なディスプレイが要る）と Native AOT 発行・署名・公証は
+# macos-release.yml が配信時に行う。ここで走らせるのは軽い検証だけにする。
+# 全ジョブが GitHub 提供ランナー（公開リポジトリなので使用料なし）で動く。
 'on':
+  push:
+    branches:
+    - main
   pull_request:
     types:
     - opened
@@ -15,7 +23,6 @@ concurrency:
 
 jobs:
   windows:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
@@ -36,8 +43,7 @@ jobs:
 
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
   macos:
-    if: (github.event_name == 'workflow_dispatch' || github.event.pull_request.user.login == 'dependabot[bot]') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, macOS, ARM64, m3mb14]
+    runs-on: macos-latest
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

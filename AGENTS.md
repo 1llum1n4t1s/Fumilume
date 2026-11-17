@@ -70,6 +70,7 @@ pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
 - 作業出力は既定でOSの一時フォルダー配下の`Fumilume/<task-id>`、最小限の再開・清掃記録は`TaskArtifacts/Fumilume/<task-id>` を使う（`-WorkRoot` / `-RecordRoot` で変更でき、CIはランナーの一時領域を指定する）。配布物は `WorkRoot/packages/`、ツールは `WorkRoot/tools/` に置き、今回の不要な配布物・検証環境・ツールは対象を確認してPrunlet CLIをCMDから直接呼び、ファイル単位で清掃する。`build-*` 内の `bin` / `obj` とその親ディレクトリは保持する。既存の旧出力・共有ツールは今回の清掃に含めない。
 - リリーススクリプトが読む証明書・Cloudflare認証情報はリポジトリ外の正本を使う。秘密値をコード、ログ、fixture、Git差分へ出力しない。
 - 通常の公開は GitHub Actions の `.github/workflows/release.yml`（`release/**` への push で起動・Environment `release`、承認待ちなし）が `scripts/release-all.ps1` を実行して行い、手元から重ねて配信しない。Windows の署名は Sigilune（`scripts/Sigilune.Common.ps1`）で、CI は `SIGILUNE_EMAIL` / `SIGILUNE_TOTP_URI` / `CLOUDFLARE_API_TOKEN` を Environment の Secrets から受け取る。ローカル実行は検証と再開に使う。
+- 通常の検証は `.github/workflows/dependency-validation.yml`（main への push・全 PR・Dependabot・手動）が GitHub 提供ランナーで行い、Windows の単体テスト（`dotnet test --solution Fumilume.slnx`）とmacOS向けE2Eプロジェクトのビルドを走らせる。配信の `release.yml` も、署名・配信より前に同じ単体テストを実行し、失敗したら配信しない。実アプリ経路のMac E2E（有効なディスプレイが必要）と署名・公証は `macos-release.yml` が配信時に行う。macOS の job も GitHub 提供の `macos-latest`（Apple Silicon）で動き、署名・公証の証明書は Secrets から一時キーチェーンへ取り込む。
 - Windowsは `scripts/release-local.ps1` の署名・配布物検証、Macは `.github/workflows/macos-release.yml` のNative AOT・署名・公証・E2E成功とR2アップロード成功を出荷判定にする。
 
 ## 変更時の確認先
