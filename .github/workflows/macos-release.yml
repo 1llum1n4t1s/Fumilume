@@ -1,5 +1,8 @@
 name: macOS release
 
+# 起動は workflow_dispatch だけ。配信では release-all.ps1 が、リリースタグを指定して
+# `gh workflow run macos-release.yml --ref v<版>` で起動し、完了を待つ。
+# 結果は同じタグの commit (head_sha) に紐づく run として照合される。
 on:
   workflow_dispatch:
 

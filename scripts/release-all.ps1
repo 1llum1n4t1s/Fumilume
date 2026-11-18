@@ -21,24 +21,24 @@ Write-Host "再開・清掃記録: $RecordRoot (再開時も同じ -WorkRoot / -
 Set-Location $repoRoot
 $repository = '1llum1n4t1s/Fumilume'
 $version = ([xml](Get-Content (Join-Path $repoRoot 'Directory.Build.props') -Raw)).Project.PropertyGroup.Version
-$releaseBranch = "release/$version"
+$releaseTag = "v$version"
 $head = (& git rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Git HEADを取得できません。' }
 $dirty = @(& git status --porcelain --untracked-files=all)
 if ($dirty.Count -gt 0) { throw '検証済みソースをcommit/pushしてからリリースしてください。' }
-# release ref 以外で起動した Mac run の成果物を、同じ SHA というだけで使わないよう branch でも絞る。
+# リリースタグ以外で起動した Mac run の成果物を、同じ SHA というだけで使わないよう、タグ名 (head_branch) でも絞る。
 function Get-MacRun {
-    $response = (& gh api "repos/$repository/actions/workflows/macos-release.yml/runs?head_sha=$head&branch=$releaseBranch&per_page=100" | ConvertFrom-Json)
+    $response = (& gh api "repos/$repository/actions/workflows/macos-release.yml/runs?head_sha=$head&branch=$releaseTag&per_page=100" | ConvertFrom-Json)
     if ($LASTEXITCODE -ne 0) { throw 'Mac CIの状態を取得できません。' }
     return $response.workflow_runs | Sort-Object created_at -Descending | Select-Object -First 1
 }
-# 正本は release/<版> ブランチ。main とは照合しない (main が先へ進んでいても、release ブランチの HEAD が
-# 検証済みソースならそれを配信する)。Mac run の有無に関わらず毎回、release ブランチと HEAD の一致を確認する。
-$releaseHead = (& gh api "repos/$repository/git/ref/heads/$releaseBranch" | ConvertFrom-Json).object.sha
-if ($LASTEXITCODE -ne 0 -or $releaseHead -ne $head) { throw 'リリースブランチと検証対象HEADが一致しません。' }
+# 正本は main の commit に付けた軽量タグ v<版>。Mac run の有無に関わらず毎回、タグが軽量タグ (commit を直接指す) で、
+# HEAD と一致することを確認する (注釈付きタグは object.type が tag になるため拒否される)。
+$tagRef = (& gh api "repos/$repository/git/ref/tags/$releaseTag" | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0 -or $tagRef.object.type -ne 'commit' -or $tagRef.object.sha -ne $head) { throw 'リリースタグが軽量タグでない、または検証対象HEADと一致しません。' }
 $run = Get-MacRun
 if (-not $run) {
-    & gh workflow run macos-release.yml --repo $repository --ref $releaseBranch
+    & gh workflow run macos-release.yml --repo $repository --ref $releaseTag
     if ($LASTEXITCODE -ne 0) { throw 'Mac CIの開始に失敗しました。' }
     Start-Sleep -Seconds 5
     $run = Get-MacRun
