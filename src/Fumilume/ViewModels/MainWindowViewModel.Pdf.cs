@@ -13,6 +13,15 @@ public sealed partial class MainWindowViewModel
             CopyPdfSelectionCommand.NotifyCanExecuteChanged();
     }
 
+    private async Task GoToPdfPageAsync(PdfDocumentViewModel pdf)
+    {
+        var page = await _dialogs.PickPageNumberAsync(pdf.CurrentPage, pdf.PageCount);
+        if (page is { } target)
+        {
+            await pdf.NavigateAsync(target);
+        }
+    }
+
     [RelayCommand(CanExecute = nameof(CanCopyPdfSelection))]
     private async Task CopyPdfSelectionAsync()
     {

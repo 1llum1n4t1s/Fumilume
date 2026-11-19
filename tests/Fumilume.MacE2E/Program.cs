@@ -294,7 +294,7 @@ internal static class Program
                 Require(vm.Tabs.OfType<PdfDocumentViewModel>().Count(p => p.FilePath == path) == 1, "Duplicate PDF tab");
                 Require(!vm.SaveCommand.CanExecute(null), "PDF enabled text save command");
                 await pdf.NextPageCommand.ExecuteAsync(null);
-                Require(pdf.CurrentPage == 2 && pdf.PageImage is not null && pdf.ErrorMessage is null, "PDF UI navigation failed");
+                Require(pdf.CurrentPage == 2 && pdf.GetPage(2)?.Image is not null && pdf.GetPage(2)?.ErrorMessage is null, "PDF UI navigation failed");
                 await CaptureAsync(window, "pdf-rotated-window.png");
                 var broken = Path.Combine(_output, "壊れた.pdf");
                 await File.WriteAllTextAsync(broken, "%PDF-1.7\ninvalid document\n");
@@ -608,7 +608,7 @@ internal static class Program
             var closeMilliseconds = watch.Elapsed.TotalMilliseconds;
             Require(!vm.Tabs.Contains(pdf) && !ReferenceEquals(vm.SelectedTab, pdf), "PDF close retained its tab");
             await Task.WhenAll(firstResize, secondResize).WaitAsync(TimeSpan.FromSeconds(15));
-            Require(pdf.PageImage is null && !vm.Tabs.Contains(pdf), "Closed PDF was revived by an old render");
+            Require(Enumerable.Range(1, pdf.PageCount).All(number => pdf.GetPage(number)?.Image is null) && pdf.VisiblePages.Count == 0 && !vm.Tabs.Contains(pdf), "Closed PDF was revived by an old render");
             Results.Add(new { name = "native-pdf-resize-close-observations", passed = true,
                 resizeRequestMilliseconds, closeMilliseconds, pendingBeforeClose,
                 renderTaskOverlapObserved = pendingBeforeClose > 0 });

@@ -210,6 +210,23 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.Same(scope.ViewModel.OpenSettingsCommand, settings.Command);
     });
 
+    /// <summary>連続表示の中の、指定ページの画像（そのページを描く Image）。</summary>
+    private static Image? PageImage(MainWindow window, PdfDocumentViewModel pdf, int number)
+        => window.GetVisualDescendants().OfType<Image>().FirstOrDefault(image =>
+            image.DataContext is PdfPageViewModel page && ReferenceEquals(page.Owner, pdf) && page.Number == number);
+
+    /// <summary>
+    /// ビューポートの通知・位置の要求・描画の連鎖が落ち着くまで、レイアウトとジョブを繰り返す。
+    /// </summary>
+    private static void SettleLayout(MainWindow window)
+    {
+        for (var round = 0; round < 8; round++)
+        {
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     [Fact]
     public void PdfFitsTheViewportAndExposesFitButtonsBesideZoom() => fixture.Run(() =>
     {
@@ -218,10 +235,11 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
             new PdfDocumentViewModelTests.StubPdfRenderer(2), _ => Task.CompletedTask);
         scope.ViewModel.Tabs.Add(pdf);
         scope.ViewModel.SelectedTab = pdf;
-        Dispatcher.UIThread.RunJobs();
+        SettleLayout(scope.Window);
 
         var viewer = scope.Window.FindControl<ScrollViewer>("PdfScrollViewer")!;
-        var image = scope.Window.FindControl<Image>("PdfPageImage")!;
+        // 全ページ共通の倍率なので、最も幅の広いページ（2 ページ目）が表示幅に収まる。
+        var image = PageImage(scope.Window, pdf, 2)!;
         var zoom = scope.Window.FindControl<Button>("PdfZoomButton")!;
         var height = scope.Window.FindControl<Button>("PdfFitHeightButton")!;
         var width = scope.Window.FindControl<Button>("PdfFitWidthButton")!;
@@ -235,28 +253,37 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.Equal(PdfZoomMode.FitWidth, pdf.ZoomMode);
         Assert.InRange(Math.Abs(image.Bounds.Width + 48 - viewer.Viewport.Width), 0, 1);
         Assert.InRange(viewer.Extent.Width - viewer.Viewport.Width, 0, 1);
+        // 縦のスクロールバーは常に表示し、フィットの表示幅が出入りで振動しないようにする。
+        Assert.Equal(Avalonia.Controls.Primitives.ScrollBarVisibility.Visible, viewer.VerticalScrollBarVisibility);
 
         var originalWidth = image.Bounds.Width;
         scope.Window.Width = 950;
-        Dispatcher.UIThread.RunJobs();
+        SettleLayout(scope.Window);
         Assert.True(image.Bounds.Width < originalWidth);
         Assert.InRange(Math.Abs(image.Bounds.Width + 48 - viewer.Viewport.Width), 0, 1);
 
         height.Command!.Execute(null);
-        Dispatcher.UIThread.RunJobs();
+        SettleLayout(scope.Window);
         Assert.Equal(PdfZoomMode.FitHeight, pdf.ZoomMode);
-        Assert.InRange(Math.Abs(image.Bounds.Height + 48 - viewer.Viewport.Height), 0, 1);
+        // 高さに合わせると、最も高いページ（1 ページ目）が表示高さに収まる。
+        var tallest = PageImage(scope.Window, pdf, 1)!;
+        Assert.InRange(Math.Abs(tallest.Bounds.Height + 48 - viewer.Viewport.Height), 0, 1);
         scope.Window.Height = 650;
-        Dispatcher.UIThread.RunJobs();
-        Assert.InRange(Math.Abs(image.Bounds.Height + 48 - viewer.Viewport.Height), 0, 1);
+        SettleLayout(scope.Window);
+        Assert.InRange(Math.Abs(tallest.Bounds.Height + 48 - viewer.Viewport.Height), 0, 1);
 
         var state = scope.ViewModel.CaptureSession().Tabs.Single(tab => tab.Kind == SessionTabKinds.Pdf);
         Assert.Equal("FitHeight", state.PdfZoomMode);
-        Assert.True(SessionStateService.Save(new SessionState { Tabs = [state] }));
-        Assert.Equal("FitHeight", Assert.Single(SessionStateService.Load().Tabs).PdfZoomMode);
+        Assert.Equal(1, state.PdfPage);
+        Assert.True(SessionStateService.Save(new SessionState { Tabs = [new SessionTabState { Kind = state.Kind, FilePath = state.FilePath, PdfZoomMode = state.PdfZoomMode, PdfZoom = state.PdfZoom, PdfPage = 2, PdfPageOffset = 0.25 }] }));
+        var saved = Assert.Single(SessionStateService.Load().Tabs);
+        Assert.Equal("FitHeight", saved.PdfZoomMode);
+        Assert.Equal(2, saved.PdfPage);
+        Assert.Equal(0.25, saved.PdfPageOffset);
         scope.ViewModel.OpenCommandPaletteCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
         Assert.Contains(scope.ViewModel.CommandPaletteResults, entry => entry.Title == "PDF を幅に合わせる");
+        Assert.Contains(scope.ViewModel.CommandPaletteResults, entry => entry.Title == "PDF の指定ページへ移動");
     });
 
     [Fact]
@@ -267,19 +294,146 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
             new PdfDocumentViewModelTests.StubPdfRenderer(2), _ => Task.CompletedTask);
         using var second = new PdfDocumentViewModel(@"C:\tmp\second.pdf",
             new PdfDocumentViewModelTests.StubPdfRenderer(2), _ => Task.CompletedTask);
-        second.CurrentPage = 2;
+        MainWindowE2ETestHelper.Pump(second.RestoreViewAsync(PdfZoomMode.FitWidth, null, 1, 0));
         scope.ViewModel.Tabs.Add(first);
         scope.ViewModel.Tabs.Add(second);
         scope.ViewModel.SelectedTab = first;
-        Dispatcher.UIThread.RunJobs();
+        SettleLayout(scope.Window);
         scope.ViewModel.SelectedTab = second;
-        Dispatcher.UIThread.RunJobs();
+        SettleLayout(scope.Window);
 
         var viewer = scope.Window.FindControl<ScrollViewer>("PdfScrollViewer")!;
-        var image = scope.Window.FindControl<Image>("PdfPageImage")!;
-        Assert.Same(second.PageImage, image.Source);
+        var image = PageImage(scope.Window, second, 2)!;
+        Assert.Same(second.GetPage(2)!.Image, image.Source);
         Assert.InRange(Math.Abs(image.Bounds.Width + 48 - viewer.Viewport.Width), 0, 1);
-        Assert.Equal(0.75, second.PageHeight / second.PageWidth, precision: 10);
+        Assert.Equal(0.75, second.GetPage(2)!.Height / second.GetPage(2)!.Width, precision: 10);
+        Assert.Equal(2, second.CurrentPage);
+    });
+
+    /// <summary>ScrollViewer は全 PDF タブで共有する。タブを往復しても、それぞれの位置を ViewModel の位置から戻す。</summary>
+    [Fact]
+    public void EachPdfTabKeepsItsOwnScrollPositionOnTheSharedScrollViewer() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        // 短い PDF と長い PDF。長い方の位置は、短い方の限界より先へ送る。
+        using var first = new PdfDocumentViewModel(@"C:\tmp\first.pdf",
+            new PdfDocumentViewModelTests.StubPdfRenderer(3), _ => Task.CompletedTask);
+        using var second = new PdfDocumentViewModel(@"C:\tmp\second.pdf",
+            new PdfDocumentViewModelTests.StubPdfRenderer(30), _ => Task.CompletedTask);
+        scope.ViewModel.Tabs.Add(first);
+        scope.ViewModel.Tabs.Add(second);
+        scope.ViewModel.SelectedTab = first;
+        SettleLayout(scope.Window);
+        var viewer = scope.Window.FindControl<ScrollViewer>("PdfScrollViewer")!;
+        viewer.Offset = new Vector(0, 120);
+        SettleLayout(scope.Window);
+        var firstPage = first.CurrentPage;
+        Assert.Equal(120, viewer.Offset.Y, precision: 3);
+        var shortExtent = viewer.Extent.Height;
+
+        scope.ViewModel.SelectedTab = second;
+        SettleLayout(scope.Window);
+        Assert.Equal(0, viewer.Offset.Y, precision: 3);
+        Assert.True(viewer.Extent.Height > shortExtent);
+        viewer.Offset = new Vector(0, shortExtent + 600);
+        SettleLayout(scope.Window);
+        var secondOffset = viewer.Offset.Y;
+        var secondPage = second.CurrentPage;
+        Assert.True(secondOffset > shortExtent);
+
+        scope.ViewModel.SelectedTab = first;
+        SettleLayout(scope.Window);
+        Assert.Equal(120, viewer.Offset.Y, precision: 3);
+        Assert.Equal(firstPage, first.CurrentPage);
+        scope.ViewModel.SelectedTab = second;
+        SettleLayout(scope.Window);
+        Assert.Equal(secondOffset, viewer.Offset.Y, precision: 3);
+        Assert.Equal(secondPage, second.CurrentPage);
+    });
+
+    [Fact]
+    public void PdfKeysPageInputAndToolbarMoveThroughThePages() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        using var pdf = new PdfDocumentViewModel(@"C:\tmp\keys.pdf",
+            new PdfDocumentViewModelTests.StubPdfRenderer(10), _ => Task.CompletedTask);
+        scope.ViewModel.Tabs.Add(pdf);
+        scope.ViewModel.SelectedTab = pdf;
+        SettleLayout(scope.Window);
+        var viewer = scope.Window.FindControl<ScrollViewer>("PdfScrollViewer")!;
+        var input = scope.Window.FindControl<TextBox>("PdfPageInput")!;
+        Assert.Equal("1", input.Text);
+        // PDF タブを選ぶと表示部分へフォーカスが移り、キー操作をそのまま受けられる。
+        Assert.True(viewer.Focusable);
+        Assert.True(viewer.IsFocused);
+
+        scope.Window.KeyPress(Key.PageDown, RawInputModifiers.None, default, null);
+        SettleLayout(scope.Window);
+        Assert.InRange(viewer.Offset.Y, viewer.Viewport.Height * 0.85, viewer.Viewport.Height * 0.95);
+        scope.Window.KeyPress(Key.PageUp, RawInputModifiers.None, default, null);
+        SettleLayout(scope.Window);
+        Assert.Equal(0, viewer.Offset.Y, precision: 3);
+
+        scope.Window.KeyPress(Key.End, RawInputModifiers.None, default, null);
+        SettleLayout(scope.Window);
+        Assert.Equal(10, pdf.CurrentPage);
+        Assert.Equal("10", input.Text);
+        scope.Window.KeyPress(Key.Home, RawInputModifiers.None, default, null);
+        SettleLayout(scope.Window);
+        Assert.Equal(1, pdf.CurrentPage);
+
+        input.Focus();
+        input.Text = "5";
+        scope.Window.KeyPress(Key.Enter, RawInputModifiers.None, default, null);
+        SettleLayout(scope.Window);
+        Assert.Equal(5, pdf.CurrentPage);
+        Assert.Equal("5", input.Text);
+        Assert.True(viewer.Offset.Y > 0);
+        // Enter の後は入力欄からフォーカスを戻す（次の Space が番号欄へ入らないように）。
+        Assert.False(input.IsFocused);
+        Assert.True(viewer.IsFocused);
+
+        // 範囲外は端へ丸める。数字でない入力は、現在のページへ戻す。
+        input.Focus();
+        input.Text = "99";
+        scope.Window.KeyPress(Key.Enter, RawInputModifiers.None, default, null);
+        SettleLayout(scope.Window);
+        Assert.Equal(10, pdf.CurrentPage);
+        input.Focus();
+        input.Text = "abc";
+        scope.Window.KeyPress(Key.Enter, RawInputModifiers.None, default, null);
+        SettleLayout(scope.Window);
+        Assert.Equal(10, pdf.CurrentPage);
+        Assert.Equal("10", input.Text);
+
+        // 入力欄にフォーカスがあるあいだは、Home などをスクロールに使わない。
+        input.Focus();
+        var before = viewer.Offset.Y;
+        scope.Window.KeyPress(Key.Home, RawInputModifiers.None, default, null);
+        SettleLayout(scope.Window);
+        Assert.Equal(before, viewer.Offset.Y, precision: 3);
+
+        // 前後のボタンは、そのページの先頭へスクロールする。
+        pdf.PreviousPageCommand.Execute(null);
+        SettleLayout(scope.Window);
+        Assert.Equal(9, pdf.CurrentPage);
+    });
+
+    [Fact]
+    public void PdfSelectionKeepsTextEditingAndSavingCommandsDisabled() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        using var pdf = new PdfDocumentViewModel(@"C:\tmp\readonly.pdf",
+            new PdfDocumentViewModelTests.StubPdfRenderer(2), _ => Task.CompletedTask);
+        scope.ViewModel.Tabs.Add(pdf);
+        scope.ViewModel.SelectedTab = pdf;
+        SettleLayout(scope.Window);
+
+        Assert.True(scope.ViewModel.IsPdfSelected);
+        Assert.Null(scope.ViewModel.SelectedDocument);
+        Assert.False(scope.ViewModel.SaveCommand.CanExecute(null));
+        Assert.False(scope.ViewModel.GoToLineCommand.CanExecute(null));
+        Assert.False(scope.ViewModel.CopyPdfSelectionCommand.CanExecute(null));
     });
 
     [Fact]

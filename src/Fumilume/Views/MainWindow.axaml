@@ -531,21 +531,31 @@
                         </Border>
                     </Grid>
 
-                    <!-- PDF は OS 標準レンダラーで 1 ページずつ表示する。全ページを画像化しないため、
-                         ページ数の多い文書でもメモリ使用量がページ数に比例しない。 -->
+                    <!-- PDF は OS 標準レンダラーで全ページを縦につなげて表示する。配置は全ページの寸法だけで計算し、
+                         画像化と View への載せ込みは表示範囲の近くのページだけに限る。
+                         そのため、ページ数の多い文書でもメモリ使用量がページ数に比例しない。 -->
                     <Grid RowDefinitions="48,*,36" IsVisible="{Binding IsPdfSelected}">
                         <Border Grid.Row="0" BorderBrush="{DynamicResource Divider}" BorderThickness="0,0,0,1">
                             <Grid ColumnDefinitions="Auto,*,Auto" Margin="10,4">
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
                                     <Button Classes="command" Command="{Binding SelectedPdf.PreviousPageCommand}"
-                                            AutomationProperties.Name="前のページ" ToolTip.Tip="前のページ">
+                                            AutomationProperties.Name="前のページ" ToolTip.Tip="前のページの先頭へ">
                                         <TextBlock Classes="icon" Text="&#xF2AA;" />
                                     </Button>
-                                    <TextBlock Margin="10,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource TextPrimary}"
-                                               Text="{Binding SelectedPdf.PageStatus}" />
+                                    <StackPanel Margin="6,0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <TextBox x:Name="PdfPageInput" Width="56" MinHeight="0" Padding="4,3"
+                                                 HorizontalContentAlignment="Right" VerticalContentAlignment="Center"
+                                                 AutomationProperties.Name="ページ番号"
+                                                 ToolTip.Tip="ページ番号を入力して Enter で移動"
+                                                 Text="{Binding SelectedPdf.PageInputText}"
+                                                 LostFocus="OnPdfPageInputLostFocus"
+                                                 KeyDown="OnPdfPageInputKeyDown" />
+                                        <TextBlock x:Name="PdfPageCount" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextPrimary}"
+                                                   Text="{Binding SelectedPdf.PageCountText}" />
+                                    </StackPanel>
                                     <Button Classes="command" Command="{Binding SelectedPdf.NextPageCommand}"
-                                            AutomationProperties.Name="次のページ" ToolTip.Tip="次のページ">
+                                            AutomationProperties.Name="次のページ" ToolTip.Tip="次のページの先頭へ">
                                         <TextBlock Classes="icon" Text="&#xF2B0;" />
                                     </Button>
                                 </StackPanel>
@@ -581,28 +591,47 @@
                                 </StackPanel>
                             </Grid>
                         </Border>
-                        <ScrollViewer x:Name="PdfScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                        <!-- 縦スクロールは常に表示する。フィット表示でスクロールバーの出入りが
+                             表示幅を変え、倍率が振動するのを避けるため。 -->
+                        <ScrollViewer x:Name="PdfScrollViewer" Grid.Row="1" HorizontalScrollBarVisibility="Auto" Focusable="True"
                                       ScrollChanged="OnPdfScrollChanged"
-                                      VerticalScrollBarVisibility="Auto" Background="{DynamicResource SettingsPageBg}">
-                            <Grid x:Name="PdfPageContainer" Margin="24">
-                                <Border HorizontalAlignment="Center" VerticalAlignment="Top"
-                                        Background="White" BoxShadow="0 4 18 0 #40000000">
-                                    <Grid Width="{Binding SelectedPdf.PageWidth}" Height="{Binding SelectedPdf.PageHeight}">
-                                        <Image x:Name="PdfPageImage" Source="{Binding SelectedPdf.PageImage}" Stretch="Fill"
-                                               Width="{Binding SelectedPdf.PageWidth}" Height="{Binding SelectedPdf.PageHeight}" />
-                                        <v:PdfTextSelectionLayer x:Name="PdfTextSelectionLayer" Document="{Binding SelectedPdf}"
-                                                                CopyCommand="{Binding CopyPdfSelectionCommand}"
-                                                                AutomationProperties.Name="PDF の文字選択" />
-                                    </Grid>
-                                </Border>
-                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           IsVisible="{Binding SelectedPdf.IsLoading}"
-                                           Foreground="{DynamicResource TextSecondary}" Text="PDF を描画しています…" />
-                                <TextBlock MaxWidth="520" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           IsVisible="{Binding SelectedPdf.ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                           Foreground="IndianRed" TextWrapping="Wrap"
-                                           Text="{Binding SelectedPdf.ErrorMessage}" />
-                            </Grid>
+                                      VerticalScrollBarVisibility="Visible" Background="{DynamicResource SettingsPageBg}">
+                            <ItemsControl x:Name="PdfPages" ItemsSource="{Binding SelectedPdf.VisiblePages}"
+                                          Width="{Binding SelectedPdf.ContentWidth}"
+                                          Height="{Binding SelectedPdf.ContentHeight}"
+                                          HorizontalAlignment="Left" VerticalAlignment="Top">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Canvas />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.Styles>
+                                    <Style Selector="ContentPresenter" x:DataType="vm:PdfPageViewModel">
+                                        <Setter Property="(Canvas.Left)" Value="{Binding Left}" />
+                                        <Setter Property="(Canvas.Top)" Value="{Binding Top}" />
+                                        <Setter Property="Width" Value="{Binding Width}" />
+                                        <Setter Property="Height" Value="{Binding Height}" />
+                                    </Style>
+                                </ItemsControl.Styles>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PdfPageViewModel">
+                                        <Border Background="White" BoxShadow="0 4 18 0 #40000000">
+                                            <Grid>
+                                                <Image Source="{Binding Image}" Stretch="Fill" />
+                                                <v:PdfTextSelectionLayer Page="{Binding}"
+                                                                        AutomationProperties.Name="PDF の文字選択" />
+                                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           IsVisible="{Binding ShowLoadingText}"
+                                                           Foreground="{DynamicResource TextSecondary}" Text="PDF を描画しています…" />
+                                                <TextBlock Margin="12" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                           Foreground="IndianRed" TextWrapping="Wrap"
+                                                           Text="{Binding ErrorMessage}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </ScrollViewer>
                         <Border Grid.Row="2" Background="{DynamicResource ContentBg}"
                                 BorderBrush="{DynamicResource Divider}" BorderThickness="0,1,0,0">

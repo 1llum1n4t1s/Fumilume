@@ -241,30 +241,23 @@ public sealed partial class MainWindowViewModel
     }
 
     /// <summary>
-    /// 開いた PDF を控えの見え方（ページ・拡大率）へ合わせる。
+    /// 開いた PDF を控えの見え方（表示上端のページと位置・拡大率）へ合わせる。
     ///
-    /// <see cref="PdfDocumentViewModel.OpenAsync"/> が描いたのは 1 ページ目・等倍で、ページ送りと
-    /// 拡大のコマンドは「今と同じ値」なら早期に戻る。値を入れるだけでは画像が終了時の見え方に
-    /// 追従しないので、最後に必ず描き直す。
+    /// <see cref="PdfDocumentViewModel.OpenAsync"/> が描いたのは 1 ページ目・等倍なので、
+    /// 倍率と位置を戻して、その位置のページを描き直す。範囲外のページは 1 ページ目のままにする。
     /// </summary>
     internal static async Task ApplyPdfViewStateAsync(PdfDocumentViewModel pdf, SessionTabState state)
     {
-        pdf.ZoomMode = Enum.TryParse<PdfZoomMode>(state.PdfZoomMode, out var mode) && Enum.IsDefined(mode)
-            ? mode
+        var mode = Enum.TryParse<PdfZoomMode>(state.PdfZoomMode, out var parsed) && Enum.IsDefined(parsed)
+            ? parsed
             : state.PdfZoomMode is null && state.PdfZoom > 0
                 ? PdfZoomMode.Manual
                 : PdfZoomMode.FitWidth;
-        if (state.PdfZoom > 0)
-        {
-            pdf.Zoom = Math.Clamp(state.PdfZoom, 0.25, 4.0);
-        }
-
-        if (state.PdfPage >= 1 && state.PdfPage <= pdf.PageCount)
-        {
-            pdf.CurrentPage = state.PdfPage;
-        }
-
-        await pdf.RenderCurrentPageAsync();
+        var pageIndex = state.PdfPage >= 1 && state.PdfPage <= pdf.PageCount ? state.PdfPage - 1 : 0;
+        var offset = double.IsFinite(state.PdfPageOffset) && state.PdfPageOffset is >= 0 and <= 1
+            ? state.PdfPageOffset
+            : 0;
+        await pdf.RestoreViewAsync(mode, state.PdfZoom > 0 ? state.PdfZoom : null, pageIndex, offset);
     }
 
     /// <summary>カーソル・選択・印・プレビュー状態を戻す。控えた位置は本文より長いことがあるので必ず丸める。</summary>
@@ -386,6 +379,7 @@ public sealed partial class MainWindowViewModel
         IsCsvPreview = tab.IsCsvPreview,
         Bookmarks = tab.Bookmarks is null ? [] : [.. tab.Bookmarks],
         PdfPage = tab.PdfPage,
+        PdfPageOffset = tab.PdfPageOffset,
         PdfZoom = tab.PdfZoom,
         PdfZoomMode = tab.PdfZoomMode,
         IsPinned = tab.IsPinned,
@@ -426,7 +420,8 @@ public sealed partial class MainWindowViewModel
     {
         Kind = SessionTabKinds.Pdf,
         FilePath = pdf.FilePath,
-        PdfPage = pdf.CurrentPage,
+        PdfPage = pdf.CaptureTopPosition().PageIndex + 1,
+        PdfPageOffset = pdf.CaptureTopPosition().Fraction,
         PdfZoom = pdf.Zoom,
         PdfZoomMode = pdf.ZoomMode.ToString(),
         IsPinned = pdf.IsPinned,

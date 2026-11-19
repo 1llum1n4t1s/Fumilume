@@ -113,8 +113,16 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
     public Task CheckForUpdatesAsync(bool manually)
         => UpdateService.CheckAsync(owner, manually);
 
-    public async Task<int?> PickLineNumberAsync(int currentLine, int maximumLine)
+    public Task<int?> PickLineNumberAsync(int currentLine, int maximumLine)
+        => PickNumberAsync("指定行へ移動", "行番号", currentLine, maximumLine);
+
+    public Task<int?> PickPageNumberAsync(int currentPage, int maximumPage)
+        => PickNumberAsync("指定ページへ移動", "ページ番号", currentPage, maximumPage);
+
+    private async Task<int?> PickNumberAsync(string title, string label, int current, int maximum)
     {
+        var currentLine = current;
+        var maximumLine = maximum;
         var input = new TextBox
         {
             Text = currentLine.ToString(System.Globalization.CultureInfo.CurrentCulture),
@@ -124,14 +132,14 @@ public sealed class EditorDialogService(Window owner) : IEditorDialogService
         var move = new Button { Content = "移動", IsDefault = true, MinWidth = 88 };
         var cancel = new Button { Content = "キャンセル", IsCancel = true, MinWidth = 88 };
         var dialog = new AppDialogWindow(
-            "指定行へ移動",
+            title,
             UseAcrylic,
             new StackPanel
             {
                 Spacing = 14,
                 Children =
                 {
-                    new TextBlock { Text = $"行番号を入力してください（1～{maximumLine:N0}）" },
+                    new TextBlock { Text = $"{label}を入力してください（1～{maximumLine:N0}）" },
                     input,
                 },
             },

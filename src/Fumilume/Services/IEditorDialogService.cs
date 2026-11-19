@@ -21,6 +21,10 @@ public interface IEditorDialogService
 
     Task<int?> PickLineNumberAsync(int currentLine, int maximumLine);
 
+    /// <summary>PDF のページ番号を尋ねる。既定では行番号の入力と同じ。</summary>
+    Task<int?> PickPageNumberAsync(int currentPage, int maximumPage)
+        => PickLineNumberAsync(currentPage, maximumPage);
+
     /// <summary>1 行ぶんの文字列を尋ねる。取り消したときは <see langword="null"/>。</summary>
     Task<string?> PromptTextAsync(string title, string message, string initialText);
 

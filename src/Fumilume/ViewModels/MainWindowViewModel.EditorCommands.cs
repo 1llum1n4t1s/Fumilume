@@ -153,8 +153,9 @@ public sealed partial class MainWindowViewModel
         {
             foreach (var definition in EditorCommandCatalog.PdfCommands)
             {
-                if (pdf.TextPage is not { Characters.Count: > 0 }
-                    || (definition.Id == "CopyPdfSelection" && !pdf.HasTextSelection)) continue;
+                if (definition.Id == "CopyPdfSelection"
+                        ? !pdf.HasTextSelection
+                        : pdf.CurrentTextPage is not { Characters.Count: > 0 }) continue;
                 var gesture = OperatingSystem.IsMacOS()
                     ? definition.Gesture?.Replace("Ctrl+", "⌘", StringComparison.Ordinal)
                     : definition.Gesture;
@@ -166,6 +167,7 @@ public sealed partial class MainWindowViewModel
                         return Task.CompletedTask;
                     });
             }
+            yield return Entry(EditorCommandCatalog.JumpCategory, "PDF の指定ページへ移動", null, () => GoToPdfPageAsync(pdf));
             yield return Entry(ViewCategory, "PDF を高さに合わせる", null, () => pdf.FitHeightCommand.ExecuteAsync(null));
             yield return Entry(ViewCategory, "PDF を幅に合わせる", null, () => pdf.FitWidthCommand.ExecuteAsync(null));
         }

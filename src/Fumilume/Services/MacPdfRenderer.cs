@@ -15,7 +15,7 @@ public interface IPdfRenderer : IDisposable
     Task<Bitmap> RenderAsync(int pageIndex, double zoom, CancellationToken cancellationToken = default);
 }
 
-/// <summary>macOS 標準の Core Graphics を使い、表示中の 1 ページだけを画像化する。</summary>
+/// <summary>macOS 標準の Core Graphics を使い、要求されたページを 1 枚ずつ画像化する。ページ寸法は開くときに読む。</summary>
 public sealed partial class MacPdfRenderer : IPdfRenderer
 {
     private const string CoreGraphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";

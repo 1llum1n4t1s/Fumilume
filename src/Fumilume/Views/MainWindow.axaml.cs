@@ -45,6 +45,7 @@ public sealed partial class MainWindow : Window
     private readonly BracketHighlighter _bracketHighlighter;
     private readonly ColumnDefinition _sidePanelColumn;
     private DocumentViewModel? _boundDocument;
+    private PdfDocumentViewModel? _boundPdf;
     private SettingsView? _settingsView;
     private bool _closeConfirmed;
     private bool _closeCheckInProgress;
@@ -581,14 +582,153 @@ public sealed partial class MainWindow : Window
         {
             _editor.Focus();
         }
+        BindSelectedPdf();
         if (_viewModel.IsPdfSelected)
         {
             // タブ切り替えだけでは Viewport が変わらない場合もあるため、選択時にも渡す。
-            Dispatcher.UIThread.Post(UpdatePdfViewport, DispatcherPriority.Loaded);
+            // 表示が切り替わってから、キー操作を受ける表示部分へフォーカスを移す。
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    SyncPdfScroll();
+                    if (!_openingFolderNode && _viewModel.IsPdfSelected)
+                    {
+                        this.FindControl<ScrollViewer>("PdfScrollViewer")?.Focus();
+                    }
+                },
+                DispatcherPriority.Loaded);
         }
     }
 
-    private void OnPdfScrollChanged(object? sender, ScrollChangedEventArgs args) => UpdatePdfViewport();
+    /// <summary>選択中の PDF のスクロール要求を受けられるようにする。要求は ViewModel が位置の正本として出す。</summary>
+    private void BindSelectedPdf()
+    {
+        var pdf = _viewModel.SelectedPdf;
+        if (!ReferenceEquals(pdf, _boundPdf))
+        {
+            if (_boundPdf is not null) _boundPdf.PropertyChanged -= OnBoundPdfPropertyChanged;
+            _boundPdf = pdf;
+            if (pdf is not null) pdf.PropertyChanged += OnBoundPdfPropertyChanged;
+        }
+
+        // タブ選択の通知より前に、ViewModel が要求を出していることがある。
+        if (pdf?.ScrollRequest is not null)
+        {
+            Dispatcher.UIThread.Post(ApplyPdfScrollRequest, DispatcherPriority.Loaded);
+        }
+    }
+
+    private void OnBoundPdfPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(PdfDocumentViewModel.ScrollRequest)
+            && sender is PdfDocumentViewModel { ScrollRequest: not null })
+        {
+            Dispatcher.UIThread.Post(ApplyPdfScrollRequest, DispatcherPriority.Loaded);
+        }
+    }
+
+    private void OnPdfScrollChanged(object? sender, ScrollChangedEventArgs args) => SyncPdfScroll();
+
+    /// <summary>表示領域の大きさとスクロール位置を ViewModel へ渡す。適用待ちの要求があれば、位置の報告より先に適用する。</summary>
+    private void SyncPdfScroll()
+    {
+        if (_viewModel.SelectedPdf is not { } pdf
+            || this.FindControl<ScrollViewer>("PdfScrollViewer") is not { } viewer)
+        {
+            return;
+        }
+
+        UpdatePdfViewport();
+        if (pdf.ScrollRequest is not null)
+        {
+            ApplyPdfScrollRequest();
+            return;
+        }
+
+        pdf.ReportScroll(viewer.Offset.X, viewer.Offset.Y);
+    }
+
+    private void ApplyPdfScrollRequest()
+    {
+        if (_viewModel.SelectedPdf is not { ScrollRequest: { } request } pdf
+            || this.FindControl<ScrollViewer>("PdfScrollViewer") is not { } viewer)
+        {
+            return;
+        }
+
+        // 共有の ScrollViewer が、この PDF の内容寸法へ追従してから位置を当てる。
+        // 追従前に当てると、前のタブの寸法で位置が丸められる。
+        if (viewer.Extent.Height + 1 < pdf.ContentHeight)
+        {
+            return;
+        }
+
+        viewer.Offset = new Vector(request.OffsetX, request.OffsetY);
+        pdf.CompleteScrollRequest(request.Id, viewer.Offset.X, viewer.Offset.Y);
+    }
+
+    private void OnPdfPageInputKeyDown(object? sender, KeyEventArgs args)
+    {
+        if (_viewModel.SelectedPdf is not { } pdf) return;
+        if (args.Key == Key.Enter)
+        {
+            _ = pdf.CommitPageInputCommand.ExecuteAsync(null);
+        }
+        else if (args.Key == Key.Escape)
+        {
+            pdf.ResetPageInput();
+        }
+        else
+        {
+            return;
+        }
+
+        this.FindControl<ScrollViewer>("PdfScrollViewer")?.Focus();
+        args.Handled = true;
+    }
+
+    private void OnPdfPageInputLostFocus(object? sender, RoutedEventArgs args)
+        => _viewModel.SelectedPdf?.ResetPageInput();
+
+    /// <summary>PDF の表示領域を操作するキー。入力欄・一覧・メニューにフォーカスがあるときは何もしない。</summary>
+    private bool HandlePdfNavigationKey(PdfDocumentViewModel pdf, KeyEventArgs args, object? focused)
+    {
+        if (this.FindControl<ScrollViewer>("PdfScrollViewer") is not { } viewer) return false;
+        var inViewer = focused is null or Window || ReferenceEquals(focused, viewer)
+            || (focused is Visual visual && viewer.IsVisualAncestorOf(visual));
+        // ボタンにフォーカスがあるときの Space は、ボタンの押下を優先する。
+        if (!inViewer && !(focused is Button && args.Key != Key.Space)) return false;
+        var page = Math.Max(viewer.Viewport.Height * 0.9, 1);
+        double delta;
+        switch (args.Key)
+        {
+            case Key.PageDown when args.KeyModifiers == KeyModifiers.None:
+            case Key.Space when args.KeyModifiers == KeyModifiers.None:
+                delta = page;
+                break;
+            case Key.PageUp when args.KeyModifiers == KeyModifiers.None:
+            case Key.Space when args.KeyModifiers == KeyModifiers.Shift:
+                delta = -page;
+                break;
+            case Key.Down when args.KeyModifiers == KeyModifiers.None:
+                delta = 48;
+                break;
+            case Key.Up when args.KeyModifiers == KeyModifiers.None:
+                delta = -48;
+                break;
+            case Key.Home when args.KeyModifiers == KeyModifiers.None:
+                _ = pdf.NavigateAsync(1);
+                return true;
+            case Key.End when args.KeyModifiers == KeyModifiers.None:
+                _ = pdf.NavigateAsync(pdf.PageCount);
+                return true;
+            default:
+                return false;
+        }
+
+        viewer.Offset = new Vector(viewer.Offset.X, Math.Max(0, viewer.Offset.Y + delta));
+        return true;
+    }
 
     private void UpdateSettingsView()
     {
@@ -607,15 +747,15 @@ public sealed partial class MainWindow : Window
     private void UpdatePdfViewport()
     {
         if (_viewModel.SelectedPdf is not { } pdf
-            || this.FindControl<ScrollViewer>("PdfScrollViewer") is not { } viewer
-            || this.FindControl<Grid>("PdfPageContainer") is not { } container)
+            || this.FindControl<ScrollViewer>("PdfScrollViewer") is not { } viewer)
         {
             return;
         }
 
+        // ページを囲む余白を除いた大きさを渡す。余白の幅は配置計算と同じ定数を使う。
         _ = pdf.UpdateViewportAsync(new Size(
-            viewer.Viewport.Width - container.Margin.Left - container.Margin.Right,
-            viewer.Viewport.Height - container.Margin.Top - container.Margin.Bottom));
+            viewer.Viewport.Width - 2 * Models.PdfPageLayout.Margin,
+            viewer.Viewport.Height - 2 * Models.PdfPageLayout.Margin));
     }
 
     private void OnEditorCaretPositionChanged(object? sender, EventArgs args)
@@ -931,6 +1071,11 @@ public sealed partial class MainWindow : Window
             if (primaryOnly && args.Key == Key.A)
             {
                 pdf.SelectAllTextCommand.Execute(null);
+                args.Handled = true;
+                return;
+            }
+            if (HandlePdfNavigationKey(pdf, args, FocusManager?.GetFocusedElement()))
+            {
                 args.Handled = true;
                 return;
             }

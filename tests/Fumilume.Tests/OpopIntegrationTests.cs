@@ -154,6 +154,9 @@ public sealed class OpopIntegrationTests(HeadlessAppFixture fixture)
         Dispatcher.UIThread.RunJobs();
         try
         {
+            // 開いた直後の描画を終わらせてから、フィット切り替えを重ねる。
+            CompleteUntil(renderer, () => !pdf.IsLoading);
+
             // ネイティブ描画が取消に応答せず、古い処理が後から失敗する順序を再現する。
             for (var order = 0; order < 2; order++)
             {
@@ -162,39 +165,47 @@ public sealed class OpopIntegrationTests(HeadlessAppFixture fixture)
                 var current = pdf.FitHeightCommand.ExecuteAsync(null);
                 var currentRequest = renderer.Requests[^1];
                 Assert.True(oldRequest.Token.IsCancellationRequested);
+                Assert.NotSame(oldRequest.Completion, currentRequest.Completion);
                 if (order == 0)
                 {
                     oldRequest.Completion.SetException(new IOException("古い描画"));
-                    Pump(old);
-                    Assert.Null(pdf.ErrorMessage);
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.All(pdf.VisiblePages, page => Assert.Null(page.ErrorMessage));
                     Assert.True(pdf.IsLoading);
                 }
-                currentRequest.Completion.SetResult(NewBitmap());
-                Pump(current);
+                CompleteUntil(renderer, () => current.IsCompleted, oldRequest.Completion);
                 if (order == 1)
                 {
                     oldRequest.Completion.SetException(new IOException("古い描画"));
-                    Pump(old);
+                    Dispatcher.UIThread.RunJobs();
                 }
-                Assert.Null(pdf.ErrorMessage);
+                CompleteUntil(renderer, () => old.IsCompleted);
+                Assert.All(pdf.VisiblePages, page => Assert.Null(page.ErrorMessage));
                 Assert.False(pdf.IsLoading);
-                Assert.Same(pdf.PageImage, window.FindControl<Image>("PdfPageImage")!.Source);
+                foreach (var page in pdf.VisiblePages)
+                {
+                    Assert.NotNull(page.Image);
+                    Assert.Same(page.Image, PageImage(window, pdf, page.Number)!.Source);
+                }
                 Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(),
                     block => block.IsEffectivelyVisible && block.Text == "古い描画");
             }
             var failed = pdf.FitWidthCommand.ExecuteAsync(null);
             renderer.Requests[^1].Completion.SetException(new IOException("現在の描画"));
-            Pump(failed);
-            Assert.Equal("現在の描画", pdf.ErrorMessage);
+            CompleteUntil(renderer, () => failed.IsCompleted);
+            Assert.Equal("現在の描画", pdf.GetPage(1)!.ErrorMessage);
+            Assert.Null(pdf.GetPage(1)!.Image);
+            // 他のページの画像は残り、失敗したページだけにエラーを出す。
+            Assert.NotNull(pdf.GetPage(2)!.Image);
             Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(),
                 block => block.IsEffectivelyVisible && block.Text == "現在の描画");
-            var closing = pdf.FitWidthCommand.ExecuteAsync(null);
+            var closing = pdf.FitHeightCommand.ExecuteAsync(null);
             var closingRequest = renderer.Requests[^1];
             pdf.Dispose();
             closingRequest.Completion.SetException(new IOException("閉じた描画"));
-            Pump(closing);
-            Assert.Null(pdf.ErrorMessage);
-            Assert.Null(pdf.PageImage);
+            CompleteUntil(renderer, () => closing.IsCompleted);
+            Assert.Empty(pdf.VisiblePages);
+            Assert.Null(pdf.GetPage(1));
             WriteArtifact("pdf-render-order.json", new
             {
                 OldFailureBeforeCurrentSuccess = true, OldFailureAfterCurrentSuccess = true,
@@ -209,6 +220,26 @@ public sealed class OpopIntegrationTests(HeadlessAppFixture fixture)
             Dispatcher.UIThread.RunJobs();
         }
     });
+
+    private static Image? PageImage(MainWindow window, PdfDocumentViewModel pdf, int number)
+        => window.GetVisualDescendants().OfType<Image>().FirstOrDefault(image =>
+            image.DataContext is PdfPageViewModel page && ReferenceEquals(page.Owner, pdf) && page.Number == number);
+
+    /// <summary>条件が満たされるまで、除外した要求以外の描画を成功させながらジョブを進める。</summary>
+    private static void CompleteUntil(PausedRenderer renderer, Func<bool> done, params TaskCompletionSource<Bitmap>[] except)
+    {
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        while (!done() && timer.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            foreach (var request in renderer.Requests.ToArray())
+            {
+                if (!except.Contains(request.Completion)) request.Completion.TrySetResult(NewBitmap());
+            }
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(1);
+        }
+        Assert.True(done(), "描画が30秒以内に終わりませんでした。");
+    }
 
     [Fact]
     public void FormattingFromEditorPreservesChosenNewLineAndUndo() => fixture.Run(() =>

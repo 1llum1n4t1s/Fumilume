@@ -38,12 +38,13 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
         using var scope = new Scope();
         Pump(scope.ViewModel.OpenPathsAsync([scope.WritePdf("selection.pdf")]));
         var pdf = Assert.IsType<PdfDocumentViewModel>(scope.ViewModel.SelectedTab);
-        Pump(pdf.NavigateAsync(pageNumber));
         Pump(pdf.ActualSizeCommand.ExecuteAsync(null));
-        Layout(scope.Window);
-        Assert.Null(pdf.ErrorMessage);
-        Assert.NotNull(pdf.PageImage);
-        var page = Assert.IsType<PdfTextPage>(pdf.TextPage);
+        Pump(pdf.NavigateAsync(pageNumber));
+        Layout(scope.Window, pageNumber);
+        var view = pdf.GetPage(pageNumber)!;
+        Assert.Null(view.ErrorMessage);
+        Assert.NotNull(view.Image);
+        var page = Assert.IsType<PdfTextPage>(view.TextPage);
         Assert.NotEmpty(page.Characters);
         Assert.All(page.Characters, character =>
         {
@@ -52,23 +53,24 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
             Assert.True(character.Bounds.Right <= page.Size.Width + 1);
             Assert.True(character.Bounds.Bottom <= page.Size.Height + 1);
         });
-        var layer = scope.Layer;
-        Assert.InRange(Math.Abs(pdf.PageWidth - layer.Bounds.Width), 0, 1);
-        Assert.InRange(Math.Abs(pdf.PageHeight - layer.Bounds.Height), 0, 1);
-        DragAll(scope, reverse: false);
+        var layer = scope.LayerFor(pageNumber);
+        Assert.InRange(Math.Abs(view.Width - layer.Bounds.Width), 0, 1);
+        Assert.InRange(Math.Abs(view.Height - layer.Bounds.Height), 0, 1);
+        DragAll(scope, pageNumber, reverse: false);
         var forward = pdf.SelectedText;
         Record(scope, $"page-{pageNumber}-forward", new { pageNumber, rotation, Expected, Actual = forward, pdf.Zoom,
             page.Size, Characters = page.Characters.Select(c => new { c.Text, c.Bounds, c.SeparatorBefore }) });
         Assert.Equal(Expected, Normalize(forward));
+        Assert.Equal(pageNumber - 1, pdf.SelectionPageIndex);
         scope.Window.KeyPress(Key.C, RawInputModifiers.Control, default, null);
         DrainCommand(scope.ViewModel.CopyPdfSelectionCommand.ExecutionTask);
         Assert.Equal(forward, ReadClipboard(scope.Window));
-        DragAll(scope, reverse: true);
+        DragAll(scope, pageNumber, reverse: true);
         Assert.Equal(forward, pdf.SelectedText);
         var point = layer.TranslatePoint(new Point(layer.Bounds.Width / 2, layer.Bounds.Height / 2), scope.Window)!.Value;
         scope.Window.MouseDown(point, MouseButton.Right);
         scope.Window.MouseUp(point, MouseButton.Right);
-        Layout(scope.Window);
+        Layout(scope.Window, pageNumber);
         var menu = Assert.IsType<ContextMenu>(layer.ContextMenu);
         Assert.True(menu.IsOpen);
         var copy = Assert.Single(menu.Items.OfType<MenuItem>(), item => item.Name == "PdfCopyMenuItem");
@@ -84,10 +86,10 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
         Assert.Equal("keep clipboard", ReadClipboard(scope.Window));
         layer.Focus();
         scope.Window.KeyPress(Key.A, RawInputModifiers.Control, default, null);
-        Layout(scope.Window);
+        Layout(scope.Window, pageNumber);
         Assert.Equal(Expected, Normalize(pdf.SelectedText));
         Record(scope, $"page-{pageNumber}-copied", new { Expected, Actual = pdf.SelectedText,
-            Clipboard = ReadClipboard(scope.Window), pdf.SelectionStart, pdf.SelectionEnd, pdf.HasTextSelection });
+            Clipboard = ReadClipboard(scope.Window), pdf.SelectionPageIndex, pdf.SelectionStart, pdf.SelectionEnd, pdf.HasTextSelection });
     });
 
     [Fact(SkipUnless = nameof(IsRealRendering), Skip = "実ポインタ検証にはFUMILUME_E2E_RENDER=1を指定してください。")]
@@ -96,17 +98,17 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
         using var scope = new Scope();
         Pump(scope.ViewModel.OpenPathsAsync([scope.WritePdf("navigation.pdf")]));
         var pdf = scope.ViewModel.SelectedPdf!;
-        Layout(scope.Window);
-        DragAll(scope, reverse: false);
+        Layout(scope.Window, 1);
+        DragAll(scope, 1, reverse: false);
         Assert.Equal(Expected, Normalize(pdf.SelectedText));
         var selected = pdf.SelectedText;
         Pump(pdf.ZoomInCommand.ExecuteAsync(null));
-        Layout(scope.Window);
+        Layout(scope.Window, 1);
         Assert.Equal(selected, pdf.SelectedText);
-        var scroll = scope.Layer.GetVisualAncestors().OfType<ScrollViewer>().First();
+        var scroll = scope.LayerFor(1).GetVisualAncestors().OfType<ScrollViewer>().First();
         scroll.Offset = new Vector(0, 15);
-        Layout(scope.Window);
-        DragAll(scope, reverse: true);
+        Layout(scope.Window, 1);
+        DragAll(scope, 1, reverse: true);
         Assert.Equal(selected, pdf.SelectedText);
         var documentPath = Path.Combine(scope.StoragePath, "other.txt");
         File.WriteAllText(documentPath, "other tab");
@@ -114,13 +116,21 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
         Assert.Null(scope.ViewModel.SelectedPdf);
         Assert.False(scope.ViewModel.CopyPdfSelectionCommand.CanExecute(null));
         scope.ViewModel.SelectedTab = pdf;
-        Layout(scope.Window);
+        Layout(scope.Window, 1);
         Assert.Equal(selected, pdf.SelectedText);
+
+        // ページ移動・スクロール・倍率の変更では選択を解除しない。見えなくなったページの選択もコピーできる。
         Pump(pdf.NextPageCommand.ExecuteAsync(null));
-        Layout(scope.Window);
+        Layout(scope.Window, pdf.CurrentPage);
+        Assert.True(pdf.HasTextSelection);
+        Assert.Equal(selected, pdf.SelectedText);
+        Assert.True(scope.ViewModel.CopyPdfSelectionCommand.CanExecute(null));
+        Record(scope, "navigation", new { pdf.CurrentPage, pdf.Zoom, pdf.SelectedText, pdf.HasTextSelection, scroll.Offset });
+
+        // 別のページの文字以外をクリックすると解除される。
+        ClickBlank(scope, pdf.CurrentPage);
         Assert.False(pdf.HasTextSelection);
         Assert.Equal(string.Empty, pdf.SelectedText);
-        Record(scope, "navigation", new { pdf.CurrentPage, pdf.Zoom, pdf.SelectedText, pdf.HasTextSelection, scroll.Offset });
     });
 
     [Fact(SkipUnless = nameof(IsRealRendering), Skip = "実ポインタ検証にはFUMILUME_E2E_RENDER=1を指定してください。")]
@@ -129,35 +139,74 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
         using var scope = new Scope();
         Pump(scope.ViewModel.OpenPathsAsync([scope.WritePdf("image-only.pdf")]));
         var pdf = scope.ViewModel.SelectedPdf!;
-        Layout(scope.Window);
-        DragAll(scope, reverse: false);
+        Layout(scope.Window, 1);
+        DragAll(scope, 1, reverse: false);
         Pump(scope.Window.Clipboard!.SetTextAsync("unchanged"));
         Pump(pdf.NavigateAsync(6));
-        Layout(scope.Window);
-        Assert.NotNull(pdf.PageImage);
-        Assert.False(pdf.HasTextSelection);
-        Assert.True(pdf.TextPage is null || pdf.TextPage.Characters.Count == 0);
-        Assert.False(scope.ViewModel.CopyPdfSelectionCommand.CanExecute(null));
-        scope.Layer.Focus();
+        Layout(scope.Window, 6);
+        var view = pdf.GetPage(6)!;
+        Assert.NotNull(view.Image);
+        Assert.True(view.TextPage is null || view.TextPage.Characters.Count == 0);
+        var layer = scope.LayerFor(6);
+        layer.Focus();
+        // 文字のないページの全選択は、前のページの選択を引き継がず解除する。
         scope.Window.KeyPress(Key.A, RawInputModifiers.Control, default, null);
+        Assert.False(pdf.HasTextSelection);
+        Assert.False(scope.ViewModel.CopyPdfSelectionCommand.CanExecute(null));
         scope.Window.KeyPress(Key.C, RawInputModifiers.Control, default, null);
         DrainCommand(scope.ViewModel.CopyPdfSelectionCommand.ExecutionTask);
         Assert.Equal("unchanged", ReadClipboard(scope.Window));
         Record(scope, "image-only", new { pdf.CurrentPage, pdf.SelectedText, pdf.HasTextSelection, Clipboard = ReadClipboard(scope.Window) });
     });
 
+    [Fact(SkipUnless = nameof(IsRealRendering), Skip = "実ポインタ検証にはFUMILUME_E2E_RENDER=1を指定してください。")]
+    public void DragSelectionSurvivesRenderingOfAnotherPage() => fixture.Run(() =>
+    {
+        using var scope = new Scope();
+        Pump(scope.ViewModel.OpenPathsAsync([scope.WritePdf("drag.pdf")]));
+        var pdf = scope.ViewModel.SelectedPdf!;
+        Pump(pdf.ActualSizeCommand.ExecuteAsync(null));
+        Layout(scope.Window, 1);
+        var layer = scope.LayerFor(1);
+        var (start, end) = DragPoints(scope, 1, reverse: false);
+        scope.Window.MouseDown(start, MouseButton.Left);
+        // ドラッグ中に隣のページの描画が始まって終わっても、このページの捕捉は保たれる。
+        var neighbor = pdf.GetPage(2)!;
+        neighbor.IsLoading = true;
+        neighbor.ErrorMessage = "一時的";
+        neighbor.ErrorMessage = null;
+        neighbor.IsLoading = false;
+        Dispatcher.UIThread.RunJobs();
+        scope.Window.MouseMove(end);
+        scope.Window.MouseUp(end, MouseButton.Left);
+        Layout(scope.Window, 1);
+        Assert.Equal(Expected, Normalize(pdf.SelectedText));
+        Assert.Equal(0, pdf.SelectionPageIndex);
+        Record(scope, "drag-neighbor-render", new { pdf.SelectedText, pdf.SelectionPageIndex });
+        Assert.NotNull(layer);
+    });
+
     private static string Normalize(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\r', '\n');
 
-    private static void DragAll(Scope scope, bool reverse)
+    private static void ClickBlank(Scope scope, int pageNumber)
     {
-        Layout(scope.Window);
-        var pdf = scope.ViewModel.SelectedPdf!;
-        var layer = scope.Layer;
+        var layer = scope.LayerFor(pageNumber);
+        // 文字がない左上の隅（余白）をクリックする。
+        var point = layer.TranslatePoint(new Point(2, 2), scope.Window)!.Value;
+        scope.Window.MouseDown(point, MouseButton.Left);
+        scope.Window.MouseUp(point, MouseButton.Left);
+        Layout(scope.Window, pageNumber);
+    }
+
+    private static (Point Start, Point End) DragPoints(Scope scope, int pageNumber, bool reverse)
+    {
+        Layout(scope.Window, pageNumber);
+        var layer = scope.LayerFor(pageNumber);
         // fixtureの本文行列から決めたglyph内の点。抽出結果のBoundsには依存させない。
         // HelveticaのAは(40,220)から幅約10.67、最後の日本語glyphは(72,150)から幅16。
         // PDF座標は左下原点。CropBoxで原点を移し、Rotateで時計回りに表示座標へ変換する。
-        var crop = pdf.CurrentPage == 5 ? new Rect(20, 20, 280, 240) : new Rect(0, 0, 320, 280);
-        var rotation = pdf.CurrentPage <= 4 ? (pdf.CurrentPage - 1) * 90 : 0;
+        var crop = pageNumber == 5 ? new Rect(20, 20, 280, 240) : new Rect(0, 0, 320, 280);
+        var rotation = pageNumber <= 4 ? (pageNumber - 1) * 90 : 0;
         var displaySize = rotation is 90 or 270
             ? new Size(crop.Height, crop.Width)
             : crop.Size;
@@ -178,12 +227,17 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
         }
         var first = new Point(45, 225);
         var last = new Point(80, 155);
-        var start = ToWindow(reverse ? last : first);
-        var end = ToWindow(reverse ? first : last);
+        return (ToWindow(reverse ? last : first), ToWindow(reverse ? first : last));
+    }
+
+    private static void DragAll(Scope scope, int pageNumber, bool reverse)
+    {
+        var pdf = scope.ViewModel.SelectedPdf!;
+        var (start, end) = DragPoints(scope, pageNumber, reverse);
         scope.Window.MouseDown(start, MouseButton.Left);
         scope.Window.MouseMove(end);
         scope.Window.MouseUp(end, MouseButton.Left);
-        Layout(scope.Window);
+        Layout(scope.Window, pageNumber);
         Assert.True(pdf.HasTextSelection);
     }
 
@@ -200,7 +254,7 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
         Dispatcher.UIThread.RunJobs();
     }
 
-    private static void Layout(MainWindow window)
+    private static void Layout(MainWindow window, int? pageNumber = null)
     {
         var timer = Stopwatch.StartNew();
         Size? previousSize = null;
@@ -211,16 +265,28 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
             AvaloniaHeadlessPlatform.ForceRenderTimerTick(3);
             Dispatcher.UIThread.RunJobs();
             if (window.DataContext is not MainWindowViewModel { SelectedPdf: { } pdf }) return;
-            var size = new Size(pdf.PageWidth, pdf.PageHeight);
-            var layer = window.FindControl<PdfTextSelectionLayer>("PdfTextSelectionLayer")!;
+            if (pdf.GetPage(pageNumber ?? pdf.CurrentPage) is not { } page)
+            {
+                Thread.Yield();
+                continue;
+            }
+
+            var layer = window.GetVisualDescendants().OfType<PdfTextSelectionLayer>()
+                .FirstOrDefault(candidate => ReferenceEquals(candidate.Page, page));
+            if (layer is null)
+            {
+                Thread.Yield();
+                continue;
+            }
+
+            var size = new Size(page.Width, page.Height);
             var pixel = 1 / window.RenderScaling;
-            // 初期フィットの描画中は読み込み状態の変化でポインター捕捉が解放される。
-            // 非同期描画と次のレイアウトを終え、同じ表示寸法が続いてから入力する。
-            if (!pdf.IsLoading && pdf.PageImage is not null
+            // 初期フィットの描画とスクロール要求の適用が終わり、同じ表示寸法が続いてから入力する。
+            if (!pdf.IsLoading && pdf.ScrollRequest is null && page.Image is not null && page.TextPage is not null
                 && Math.Abs(layer.Bounds.Width - size.Width) <= pixel
                 && Math.Abs(layer.Bounds.Height - size.Height) <= pixel
-                && previousSize == size) return;
-            previousSize = !pdf.IsLoading ? size : null;
+                && previousSize == size && pdf.WhenIdleAsync().IsCompleted) return;
+            previousSize = !pdf.IsLoading && pdf.ScrollRequest is null ? size : null;
             Thread.Yield();
         }
         Assert.Fail("PDFの描画と表示寸法が30秒以内に安定しませんでした。");
@@ -247,7 +313,10 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
             "pdf-selection-20261014-01", $"e2e-{Guid.NewGuid():N}");
         public MainWindow Window { get; }
         public MainWindowViewModel ViewModel { get; }
-        public Control Layer => Window.FindControl<Control>("PdfTextSelectionLayer")!;
+        public PdfTextSelectionLayer LayerFor(int pageNumber)
+            => Window.GetVisualDescendants().OfType<PdfTextSelectionLayer>()
+                .First(layer => layer.Page is { } page && page.Number == pageNumber
+                    && ReferenceEquals(page.Owner, ViewModel.SelectedPdf));
 
         public Scope()
         {
@@ -283,6 +352,8 @@ public sealed class PdfTextSelectionE2ETests(HeadlessAppFixture fixture)
             // 清掃は実行担当が対象を確認してPrunletで行う。
         }
     }
+
+    internal static byte[] CreateFixturePdf() => CreatePdf();
 
     private static byte[] CreatePdf()
     {

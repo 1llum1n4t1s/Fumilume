@@ -69,8 +69,14 @@ public sealed class SessionTabState
     /// <summary>印の付いていた行番号。</summary>
     public List<int> Bookmarks { get; set; } = [];
 
-    /// <summary>PDF タブで表示していたページ（1 始まり）。</summary>
+    /// <summary>PDF タブで、表示上端にあったページ（1 始まり）。旧形式では表示していたページ。</summary>
     public int PdfPage { get; set; } = 1;
+
+    /// <summary>
+    /// 表示上端が <see cref="PdfPage"/> の何割の位置にあったか（0～1）。任意項目で、旧形式では 0
+    /// （そのページの先頭）。範囲外・非数は 0 として扱う。
+    /// </summary>
+    public double PdfPageOffset { get; set; }
 
     /// <summary>PDF タブの拡大率。0 以下なら既定へ落とす。</summary>
     public double PdfZoom { get; set; }
