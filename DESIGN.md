@@ -68,7 +68,7 @@ Avalonia のドロップイベントは Bubble のため、`TextArea` のクラ�
 
 ### Markdown
 
-`.md` の `DocumentViewModel` では、`MarkdownDocumentParser` が編集元テキストを表示用ブロックへ変換し、`MarkdownPreview` がAvaloniaコントロールとして描画します。プレビューは派生表示であり、保存される正本は常にエディタ内のMarkdown文字列です。
+`.md` の `DocumentViewModel` では、`MarkdownDocumentParser` が編集元テキストを表示用ブロックへ変換し、`MarkdownPreview` がAvaloniaコントロールとして描画します。プレビューは派生表示であり、保存される正本は常にエディタ内のMarkdown文字列です。表は、見出し行と区切り行（`---`・`:--:` など）が揃ったGFMのパイプ表だけを表ブロックとして扱い、行頭・行末の区切りが作る空セルを除き、区切り行の指定で列ごとの左・中央・右寄せを描画します。揃わない行は表にせず通常の段落として残し、表でないものを表として拾わないことを優先します。
 
 ### CSV
 
