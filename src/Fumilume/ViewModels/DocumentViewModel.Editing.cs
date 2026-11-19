@@ -154,8 +154,8 @@ public sealed partial class DocumentViewModel
         => TransformSelectedLines(text => MapLines(text, line => indent + line));
 
     /// <summary>各行の先頭から字下げを 1 段はがす（逆インデント）。</summary>
-    public void UnindentLines(string indent)
-        => TransformSelectedLines(text => MapLines(text, line => Unindent(line, indent)));
+    public void UnindentLines(string indent, int tabWidth = 4)
+        => TransformSelectedLines(text => MapLines(text, line => Unindent(line, indent, tabWidth)));
 
     /// <summary>カーソルから行頭までを消す（sakura の F_LineDeleteToStart 相当）。</summary>
     public void DeleteToLineStart()
@@ -620,7 +620,7 @@ public sealed partial class DocumentViewModel
     private static string MapLines(string text, Func<string, string> transform)
         => DocumentNewLines.TransformLines(text, transform);
 
-    private static string Unindent(string line, string indent)
+    private static string Unindent(string line, string indent, int tabWidth)
     {
         if (line.StartsWith(indent, StringComparison.Ordinal))
         {
@@ -628,9 +628,16 @@ public sealed partial class DocumentViewModel
         }
 
         // TAB 1 個ぶんの字下げが空白で書かれている行も 1 段はがせるようにする。
+        // 全部の空白を落とさず、TAB 幅（字下げ幅）を上限にその行頭の空白だけを削る。
         if (indent == "\t" && line.StartsWith(' '))
         {
-            return line.TrimStart(' ');
+            var spaces = 0;
+            while (spaces < line.Length && spaces < Math.Max(1, tabWidth) && line[spaces] == ' ')
+            {
+                spaces++;
+            }
+
+            return line[spaces..];
         }
 
         return line.StartsWith(' ') || line.StartsWith('\t') ? line[1..] : line;

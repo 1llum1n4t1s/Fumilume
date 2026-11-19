@@ -82,6 +82,15 @@ public sealed class SessionTabState
     public bool IsPinned { get; set; }
 
     /// <summary>
+    /// 未保存の本文を控えた時点の、保存先ファイルの最終更新時刻（UTC、Ticks）。任意項目で、
+    /// 旧形式のセッションや読めなかったファイルでは null（復元後の初回監視通知は基準を記録するだけ）。
+    /// </summary>
+    public long? DiskLastWriteUtcTicks { get; set; }
+
+    /// <summary>未保存の本文を控えた時点の、保存先ファイルのサイズ。<see cref="DiskLastWriteUtcTicks"/> と対で使う。</summary>
+    public long? DiskLength { get; set; }
+
+    /// <summary>
     /// 未保存の本文。JSON へは書かず、<see cref="SessionStateService"/> が
     /// <see cref="BufferFile"/> の指す別ファイルへ出し入れする。
     ///

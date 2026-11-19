@@ -267,6 +267,23 @@ public sealed partial class MainWindowViewModel
                 document.SelectionLength = 0;
                 document.CaretIndex = caret;
                 break;
+            case MacroStepKind.InsertTab:
+                document.InsertText(GetIndentationString(document));
+                break;
+            case MacroStepKind.Indent:
+                // AvaloniaEdit の Tab と同じく、複数行の選択は各行の字下げ、1 行内は選択の置き換え。
+                if (IsMultilineSelection(document))
+                {
+                    document.IndentLines(CreateEditorOptions().GetIndentationString(1));
+                }
+                else
+                {
+                    document.InsertText(GetIndentationString(document));
+                }
+                break;
+            case MacroStepKind.Unindent:
+                document.UnindentLines("\t", Options.IndentationSize);
+                break;
             case MacroStepKind.MoveCaret:
                 document.MoveCaret(step.Motion, step.ExtendSelection);
                 break;
@@ -282,6 +299,27 @@ public sealed partial class MainWindowViewModel
         }
 
         return Task.CompletedTask;
+    }
+
+    private TextEditorOptions CreateEditorOptions() => new()
+    {
+        IndentationSize = Options.IndentationSize,
+        ConvertTabsToSpaces = Options.ConvertTabsToSpaces,
+    };
+
+    /// <summary>カーソル（キャレット）位置から次のタブ位置までの字下げ文字。再生時点の設定に従う。</summary>
+    private string GetIndentationString(DocumentViewModel document)
+    {
+        var caret = Math.Clamp(document.CaretIndex, 0, document.EditorDocument.TextLength);
+        return CreateEditorOptions().GetIndentationString(document.EditorDocument.GetLocation(caret).Column);
+    }
+
+    private static bool IsMultilineSelection(DocumentViewModel document)
+    {
+        var start = Math.Min(document.SelectionStart, document.EditorDocument.TextLength);
+        var end = Math.Min(start + document.SelectionLength, document.EditorDocument.TextLength);
+        return document.EditorDocument.GetLineByOffset(start).LineNumber
+            != document.EditorDocument.GetLineByOffset(end).LineNumber;
     }
 
     private static MacroStep Copy(MacroStep step) => new()

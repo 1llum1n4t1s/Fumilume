@@ -964,12 +964,178 @@ public sealed class SessionRestoreTests(HeadlessAppFixture fixture)
         SelectedTabIndex = 0,
     };
 
+    /// <summary>未保存編集を持つファイル付き文書を終了時のセッションとして保存し、控えたディスク状態を返す。</summary>
+    private static async Task<string> PersistUnsavedFileTabAsync(TemporaryStorage storage, string diskText)
+    {
+        var path = Path.Combine(storage.Path, "closed.txt");
+        File.WriteAllText(path, diskText);
+        var first = CreateViewModel(diskText);
+        await first.InitializeAsync([]);
+        first.SelectedDocument!.MarkSaved(path);
+        first.SelectedDocument.Text = "local unsaved edits";
+        Assert.True(await first.PersistSessionStateAsync());
+        return path;
+    }
+
+    private static async Task<(MainWindowViewModel ViewModel, StubDialogService Dialogs)> RestoreWithDiskAsync(
+        string diskText,
+        bool confirmResult)
+    {
+        var dialogs = new StubDialogService { ConfirmResult = confirmResult };
+        var viewModel = new MainWindowViewModel(new FakeFileService { ReadText = diskText }, dialogs, new AppSettings());
+        await viewModel.InitializeAsync([]);
+        return (viewModel, dialogs);
+    }
+
+    private static void TouchOnDisk(string path, string text)
+    {
+        File.WriteAllText(path, text);
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(5));
+    }
+
+    [Fact]
+    public async Task SessionRecordsTheDiskStateOfUnsavedFileTabs()
+    {
+        using var storage = new TemporaryStorage();
+        var path = await PersistUnsavedFileTabAsync(storage, "disk v1");
+
+        var tab = Assert.Single(SessionStateService.Load().Tabs);
+        var info = new FileInfo(path);
+        Assert.Equal(info.LastWriteTimeUtc.Ticks, tab.DiskLastWriteUtcTicks);
+        Assert.Equal(info.Length, tab.DiskLength);
+    }
+
+    [Fact]
+    public async Task UnsavedTabAskedAboutDiskUpdatedWhileClosedAndDiskLoadReplacesTheBuffer()
+    {
+        using var storage = new TemporaryStorage();
+        var path = await PersistUnsavedFileTabAsync(storage, "disk v1");
+        TouchOnDisk(path, "disk v2 updated elsewhere");
+
+        var (viewModel, dialogs) = await RestoreWithDiskAsync("disk v2 updated elsewhere", confirmResult: true);
+        Assert.Equal("local unsaved edits", viewModel.SelectedDocument!.Text);
+
+        await viewModel.ProcessExternalFileChangeAsync(path);
+
+        Assert.Equal(1, dialogs.Confirmations);
+        Assert.Equal("disk v2 updated elsewhere", viewModel.SelectedDocument.Text);
+        Assert.False(viewModel.SelectedDocument.IsModified);
+    }
+
+    [Fact]
+    public async Task KeepingTheBufferAfterTheClosedWhileUpdateIsAnExplicitChoiceAndAsksOnlyOnce()
+    {
+        using var storage = new TemporaryStorage();
+        var path = await PersistUnsavedFileTabAsync(storage, "disk v1");
+        TouchOnDisk(path, "disk v2 updated elsewhere");
+
+        var (viewModel, dialogs) = await RestoreWithDiskAsync("disk v2 updated elsewhere", confirmResult: false);
+
+        await viewModel.ProcessExternalFileChangeAsync(path);
+        await viewModel.ProcessExternalFileChangeAsync(path);
+
+        Assert.Equal(1, dialogs.Confirmations);
+        Assert.Equal("local unsaved edits", viewModel.SelectedDocument!.Text);
+        Assert.True(viewModel.SelectedDocument.IsModified);
+        Assert.True(viewModel.SelectedDocument.HasSavedContentBaseline);
+    }
+
+    [Fact]
+    public async Task UnresolvedClosedWhileUpdateSurvivesAnotherSessionSave()
+    {
+        using var storage = new TemporaryStorage();
+        var path = await PersistUnsavedFileTabAsync(storage, "disk v1");
+        var recorded = Assert.Single(SessionStateService.Load().Tabs);
+        TouchOnDisk(path, "disk v2 updated elsewhere");
+
+        var (viewModel, _) = await RestoreWithDiskAsync("disk v2 updated elsewhere", confirmResult: false);
+        Assert.True(await viewModel.PersistSessionStateAsync());
+
+        var again = Assert.Single(SessionStateService.Load().Tabs);
+        Assert.Equal(recorded.DiskLastWriteUtcTicks, again.DiskLastWriteUtcTicks);
+        Assert.Equal(recorded.DiskLength, again.DiskLength);
+    }
+
+    [Fact]
+    public async Task UnchangedDiskOnlyRecordsTheBaselineThenLaterChangesAsk()
+    {
+        using var storage = new TemporaryStorage();
+        var path = await PersistUnsavedFileTabAsync(storage, "disk v1");
+
+        var files = new FakeFileService { ReadText = "disk v1" };
+        var dialogs = new StubDialogService { ConfirmResult = false };
+        var viewModel = new MainWindowViewModel(files, dialogs, new AppSettings());
+        await viewModel.InitializeAsync([]);
+        await viewModel.ProcessExternalFileChangeAsync(path);
+
+        Assert.Equal(0, dialogs.Confirmations);
+        Assert.Equal("local unsaved edits", viewModel.SelectedDocument!.Text);
+        Assert.True(viewModel.SelectedDocument.HasSavedContentBaseline);
+
+        // 以降の外部変更は通常どおり確認される。
+        files.ReadText = "disk v3 changed while running";
+        await viewModel.ProcessExternalFileChangeAsync(path);
+        Assert.Equal(1, dialogs.Confirmations);
+    }
+
+    [Fact]
+    public async Task SessionWithoutDiskStateKeepsTheBaselineOnlyBehaviour()
+    {
+        using var storage = new TemporaryStorage();
+        var path = Path.Combine(storage.Path, "legacy.txt");
+        File.WriteAllText(path, "disk v1");
+        Assert.True(SessionStateService.Save(new SessionState
+        {
+            Tabs = [new SessionTabState { FilePath = path, IsModified = true, Text = "legacy buffer" }],
+            SelectedTabIndex = 0,
+        }));
+        TouchOnDisk(path, "disk v2 updated elsewhere");
+
+        var (viewModel, dialogs) = await RestoreWithDiskAsync("disk v2 updated elsewhere", confirmResult: true);
+        await viewModel.ProcessExternalFileChangeAsync(path);
+
+        Assert.Equal(0, dialogs.Confirmations);
+        Assert.Equal("legacy buffer", viewModel.SelectedDocument!.Text);
+        Assert.True(viewModel.SelectedDocument.IsModified);
+    }
+
+    [Fact]
+    public void DiskStateRoundTripsThroughSessionJsonAndInvalidValuesAreIgnored()
+    {
+        using var storage = new TemporaryStorage();
+        Assert.True(SessionStateService.Save(new SessionState
+        {
+            Tabs = [new SessionTabState
+            {
+                FilePath = Path.Combine(storage.Path, "x.txt"),
+                IsModified = true,
+                Text = "b",
+                DiskLastWriteUtcTicks = 638_000_000_000_000_000,
+                DiskLength = 42,
+            }],
+        }));
+
+        var tab = Assert.Single(SessionStateService.Load().Tabs);
+        Assert.Equal(638_000_000_000_000_000, tab.DiskLastWriteUtcTicks);
+        Assert.Equal(42, tab.DiskLength);
+        Assert.Equal(
+            new DiskStamp(638_000_000_000_000_000, 42),
+            DiskStamp.FromSession(tab.DiskLastWriteUtcTicks, tab.DiskLength));
+
+        Assert.Null(DiskStamp.FromSession(null, null));
+        Assert.Null(DiskStamp.FromSession(1, null));
+        Assert.Null(DiskStamp.FromSession(null, 1));
+        Assert.Null(DiskStamp.FromSession(-1, 1));
+        Assert.Null(DiskStamp.FromSession(1, -1));
+        Assert.Null(DiskStamp.FromSession(long.MaxValue, 1));
+    }
+
     private static MainWindowViewModel CreateViewModel(string diskText = "")
         => new(new FakeFileService { ReadText = diskText }, new StubDialogService(), new AppSettings());
 
     private sealed class FakeFileService : IDocumentFileService
     {
-        public string ReadText { get; init; } = string.Empty;
+        public string ReadText { get; set; } = string.Empty;
 
         public int Reads { get; private set; }
 

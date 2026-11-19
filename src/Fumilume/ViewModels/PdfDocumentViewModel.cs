@@ -186,7 +186,8 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
         _viewport = viewport;
         return ZoomMode != PdfZoomMode.Manual
-            && ((PageImage is null && !IsLoading) || Math.Abs(GetFitZoom() - Zoom) > 0.000000001)
+            // 描画に失敗して画像を空にしている間は、表示領域の変化だけで失敗を繰り返し再試行しない。
+            && ((PageImage is null && !IsLoading && ErrorMessage is null) ||Math.Abs(GetFitZoom() - Zoom) > 0.000000001)
             ? RenderCurrentPageAsync()
             : Task.CompletedTask;
     }
@@ -288,6 +289,10 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         {
             if (!token.IsCancellationRequested)
             {
+                // 失敗したページに前のページの画像を残すと、エラー文と重なって別ページに見える。
+                var stale = PageImage;
+                PageImage = null;
+                stale?.Dispose();
                 ErrorMessage = ex.Message;
             }
             AppLogger.For<PdfDocumentViewModel>().Error($"PDF ページを描画できませんでした: {FilePath}", ex);

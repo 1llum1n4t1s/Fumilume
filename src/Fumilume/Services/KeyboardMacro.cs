@@ -26,6 +26,15 @@ public enum MacroStepKind
 
     /// <summary>文書形式に合うインデントを伴って改行する。</summary>
     InsertNewLine,
+
+    /// <summary>選択なしの Tab。再生時の設定（TAB か空白か、字下げ幅）に従って次のタブ位置まで入れる。</summary>
+    InsertTab,
+
+    /// <summary>選択ありの Tab。複数行なら各行を字下げし、1 行内なら選択を字下げ文字で置き換える。</summary>
+    Indent,
+
+    /// <summary>Shift+Tab。選択行（選択なしならカーソル行）の字下げを 1 段はがす。</summary>
+    Unindent,
 }
 
 /// <summary>カーソルの動かし方。キーの向きと単位をそのまま持つ。</summary>
@@ -75,6 +84,9 @@ public sealed class MacroStep
             .FirstOrDefault(command => command.Id == Command)?.Title ?? Command.ToString(),
         MacroStepKind.InsertText => $"入力 {DescribeText()}",
         MacroStepKind.InsertNewLine => "改行",
+        MacroStepKind.InsertTab => "TAB",
+        MacroStepKind.Indent => "字下げ",
+        MacroStepKind.Unindent => "字下げを戻す",
         MacroStepKind.MoveCaret => ExtendSelection ? $"{DescribeMotion()}へ選択" : $"{DescribeMotion()}へ移動",
         MacroStepKind.DeleteBack => "前を削除",
         MacroStepKind.DeleteForward => "後ろを削除",

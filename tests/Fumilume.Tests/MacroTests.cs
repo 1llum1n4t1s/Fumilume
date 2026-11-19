@@ -81,6 +81,54 @@ public sealed class MacroTests
     }
 
     [Fact]
+    public async Task ReplayedTabFollowsTheSettingsAtReplayTimeNotRecordingTime()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.Options.ConvertTabsToSpaces = false;
+        var document = viewModel.Documents.Single();
+        document.Text = "a";
+        document.CaretIndex = 0;
+
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+        viewModel.RecordMacroStep(new MacroStep { Kind = MacroStepKind.InsertTab });
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+        Assert.Equal("TAB", viewModel.RecordedSteps.Single().Describe());
+
+        viewModel.Options.ConvertTabsToSpaces = true;
+        viewModel.Options.IndentationSize = 2;
+        document.Text = "a";
+        document.CaretIndex = 0;
+        await viewModel.RunMacroCommand.ExecuteAsync(null);
+
+        Assert.Equal("  a", document.Text);
+    }
+
+    [Fact]
+    public async Task ReplayedIndentAndUnindentApplyToSelectedLinesWithCurrentSettings()
+    {
+        var viewModel = CreateViewModel();
+        viewModel.Options.ConvertTabsToSpaces = true;
+        viewModel.Options.IndentationSize = 4;
+        var document = viewModel.Documents.Single();
+        document.Text = "a\nb";
+        document.SelectionStart = 0;
+        document.SelectionLength = document.Text.Length;
+
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+        viewModel.RecordMacroStep(new MacroStep { Kind = MacroStepKind.Indent });
+        viewModel.RecordMacroStep(new MacroStep { Kind = MacroStepKind.Indent });
+        viewModel.RecordMacroStep(new MacroStep { Kind = MacroStepKind.Unindent });
+        viewModel.ToggleMacroRecordingCommand.Execute(null);
+
+        document.Text = "a\nb";
+        document.SelectionStart = 0;
+        document.SelectionLength = document.Text.Length;
+        await viewModel.RunMacroCommand.ExecuteAsync(null);
+
+        Assert.Equal("    a\n    b", document.Text);
+    }
+
+    [Fact]
     public async Task CsvAppendCommandsReplayWithoutDependingOnThePreview()
     {
         var viewModel = CreateViewModel();

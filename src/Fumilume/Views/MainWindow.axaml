@@ -22,7 +22,7 @@
 
     <Window.KeyBindings>
         <KeyBinding Gesture="Ctrl+N" Command="{Binding NewDocumentCommand}" />
-        <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenCommand}" />
+        <!-- Ctrl+O（ファイルを開く）は Ctrl+K, Ctrl+O の二打目と衝突するため、MainWindow.OnGlobalKeyDown で受ける。 -->
         <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveAsCommand}" />
         <KeyBinding Gesture="Ctrl+Alt+S" Command="{Binding SaveAllCommand}" />
@@ -444,10 +444,10 @@
                                                VerticalScrollBarVisibility="Auto"
                                                Padding="14,12"
                                                AutomationProperties.Name="テキスト編集領域" />
-                                <v:MarkdownPreview Markdown="{Binding SelectedDocument.Text}"
+                                <v:MarkdownPreview Markdown="{Binding SelectedDocument.MarkdownPreviewText}"
                                                    IsVisible="{Binding SelectedDocument.IsMarkdownPreview}"
                                                    AutomationProperties.Name="Markdown プレビュー" />
-                                <v:CsvPreview Csv="{Binding SelectedDocument.Text}"
+                                <v:CsvPreview Csv="{Binding SelectedDocument.CsvPreviewText}"
                                               Document="{Binding SelectedDocument}"
                                               IsVisible="{Binding SelectedDocument.IsCsvPreview}"
                                               AutomationProperties.Name="CSV プレビュー" />

@@ -85,10 +85,15 @@
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.panelswitch:pointerover">
+    <Style Selector="Button.panelswitch:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
     </Style>
     <Style Selector="Button.panelswitch.active">
+        <Setter Property="Background" Value="{DynamicResource PanelSwitchActiveBg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
+    </Style>
+    <Style Selector="Button.panelswitch.active:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource PanelSwitchActiveBg}" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
     </Style>
@@ -156,8 +161,9 @@
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
     </Style>
-    <Style Selector="Button.command:pointerover">
+    <Style Selector="Button.command:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
     </Style>
     <Style Selector="Button.command:disabled">
         <Setter Property="Opacity" Value="0.4" />
@@ -174,7 +180,7 @@
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
     </Style>
-    <Style Selector="Button.statusitem:pointerover">
+    <Style Selector="Button.statusitem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource HoverBg}" />
         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
     </Style>
@@ -189,6 +195,13 @@
     </Style>
     <Style Selector="v|MarkdownPreview Border.markdowncode">
         <Setter Property="Background" Value="{DynamicResource SettingsPageBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+    </Style>
+    <Style Selector="v|MarkdownPreview Border.markdowntableheader">
+        <Setter Property="Background" Value="{DynamicResource SettingsPageBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+    </Style>
+    <Style Selector="v|MarkdownPreview Border.markdowntablecell">
         <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
     </Style>
     <Style Selector="v|MarkdownPreview Border.markdownrule">
@@ -211,8 +224,9 @@
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="14" />
     </Style>
-    <Style Selector="Button.palette:pointerover">
+    <Style Selector="Button.palette:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Divider}" />
     </Style>
 
     <Style Selector="ae|TextEditor.editor">

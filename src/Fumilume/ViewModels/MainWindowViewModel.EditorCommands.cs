@@ -408,7 +408,7 @@ public sealed partial class MainWindowViewModel
                 StatusMessage = "TAB で字下げしました";
                 break;
             case EditorCommandId.UnindentTab:
-                document.UnindentLines("\t");
+                document.UnindentLines("\t", tabWidth);
                 StatusMessage = "TAB の字下げを 1 段はがしました";
                 break;
             case EditorCommandId.IndentSpace:

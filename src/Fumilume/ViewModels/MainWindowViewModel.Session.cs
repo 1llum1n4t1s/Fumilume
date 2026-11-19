@@ -186,6 +186,12 @@ public sealed partial class MainWindowViewModel
             document.RestoreUnsaved(
                 state.FilePath,
                 new TextDocumentContent(unsaved, ParseEncoding(state.Encoding), state.NewLine));
+            // 控えた時点のディスク状態。初回の監視通知で現在と比べ、閉じている間の外部更新を見分ける。
+            if (state.FilePath is not null)
+            {
+                document.SetRestoredDiskStamp(
+                    DiskStamp.FromSession(state.DiskLastWriteUtcTicks, state.DiskLength));
+            }
         }
         else if (state.IsModified)
         {
@@ -383,10 +389,21 @@ public sealed partial class MainWindowViewModel
         PdfZoom = tab.PdfZoom,
         PdfZoomMode = tab.PdfZoomMode,
         IsPinned = tab.IsPinned,
+        DiskLastWriteUtcTicks = tab.DiskLastWriteUtcTicks,
+        DiskLength = tab.DiskLength,
         Text = tab.Text,
     };
 
-    private static SessionTabState CaptureDocument(DocumentViewModel document) => new()
+    private static SessionTabState CaptureDocument(DocumentViewModel document)
+    {
+        var stamp = document.CaptureDiskStamp();
+        var state = CaptureDocumentCore(document);
+        state.DiskLastWriteUtcTicks = stamp?.LastWriteUtcTicks;
+        state.DiskLength = stamp?.Length;
+        return state;
+    }
+
+    private static SessionTabState CaptureDocumentCore(DocumentViewModel document) => new()
     {
         Kind = SessionTabKinds.Document,
         FilePath = document.FilePath,

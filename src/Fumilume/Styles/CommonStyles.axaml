@@ -25,10 +25,13 @@
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.caption:pointerover">
+    <!-- Fluent の既定テンプレートはホバー面を Button 本体ではなく ContentPresenter へ直接塗るため、
+         ホバー色はテンプレート内を狙って上書きする。 -->
+    <Style Selector="Button.caption:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource HoverBg}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
     </Style>
-    <Style Selector="Button.caption.close:pointerover">
+    <Style Selector="Button.caption.close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="#C42B1C" />
         <Setter Property="Foreground" Value="White" />
     </Style>

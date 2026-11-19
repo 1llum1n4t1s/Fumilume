@@ -657,10 +657,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 return CompleteExternalFileChange(fullPath);
             }
 
+            // 未保存バッファを復元した文書の初回通知。控えた時点のディスク状態と食い違うときだけ、
+            // 閉じている間の外部更新として通常の確認へ進める（基準を黙って置き換えない）。
+            var closedWhileChanged = false;
             if (!document.HasSavedContentBaseline)
             {
-                document.RememberSavedContentBaseline(content);
-                return CompleteExternalFileChange(fullPath);
+                if (document.RestoredDiskStamp is not { } recorded
+                    || DiskStamp.TryRead(fullPath) is not { } current
+                    || recorded == current)
+                {
+                    document.RememberSavedContentBaseline(content);
+                    return CompleteExternalFileChange(fullPath);
+                }
+
+                closedWhileChanged = true;
             }
 
             // FileSystemWatcher はアプリ自身の原子的な保存にも反応する。保存時の基準値と同じなら何もしない。
@@ -673,9 +683,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
             var reloadState = DocumentEditState.Capture(document);
             if (document.IsModified && !await _dialogs.ConfirmAsync(
                     "ファイルが外部で変更されました",
-                    $"{document.DisplayName} は別のプログラムで変更されました。\n\n"
-                    + "未保存の編集を破棄して、ディスクの内容を読み込みますか？"))
+                    closedWhileChanged
+                        ? $"{document.DisplayName} は前回の終了後に別のプログラムで変更されました。\n\n"
+                            + "復元した未保存の編集を破棄して、ディスクの内容を読み込みますか？\n"
+                            + "「いいえ」を選ぶと復元した編集を維持し、保存するとディスクの内容を上書きします。"
+                        : $"{document.DisplayName} は別のプログラムで変更されました。\n\n"
+                            + "未保存の編集を破棄して、ディスクの内容を読み込みますか？"))
             {
+                // 維持の選択は、保存でディスクの内容を上書きする明示の承認とする。以後の外部変更は通常どおり確認する。
+                if (closedWhileChanged && !document.HasSavedContentBaseline
+                    && Tabs.Contains(document) && document.FilePath == fullPath)
+                {
+                    document.RememberSavedContentBaseline(content);
+                }
+
                 StatusMessage = $"{document.DisplayName} の外部変更は保留しました（編集中の内容を保持しています）";
                 return CompleteExternalFileChange(fullPath);
             }

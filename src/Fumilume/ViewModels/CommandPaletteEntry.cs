@@ -14,8 +14,42 @@ public sealed class CommandPaletteEntry(string category, string title, string? g
 
     public string Title { get; } = title;
 
-    /// <summary>割り当てられているキー。無いときは <see langword="null"/>。</summary>
-    public string? Gesture { get; } = gesture;
+    /// <summary>割り当てられているキーの表示。無いときは <see langword="null"/>。</summary>
+    public string? Gesture { get; } = ToDisplayGesture(gesture);
+
+    private static readonly (string Name, string Symbol)[] OemKeyNames =
+    [
+        ("OemOpenBrackets", "["),
+        ("OemCloseBrackets", "]"),
+        ("OemComma", ","),
+        ("OemPeriod", "."),
+        ("OemMinus", "-"),
+        ("OemSemicolon", ";"),
+        ("OemQuestion", "/"),
+        ("OemTilde", "`"),
+        ("OemPipe", "\\"),
+        ("OemQuotes", "'"),
+    ];
+
+    /// <summary>
+    /// キー定義の内部名（<c>OemCloseBrackets</c> など）を、画面に出す記号へ直す。
+    /// 表示だけを整え、割り当て自体（KeyBinding の Gesture）は変えない。
+    /// </summary>
+    internal static string? ToDisplayGesture(string? gesture)
+    {
+        if (string.IsNullOrEmpty(gesture))
+        {
+            return gesture;
+        }
+
+        var display = gesture;
+        foreach (var (name, symbol) in OemKeyNames)
+        {
+            display = display.Replace(name, symbol, StringComparison.Ordinal);
+        }
+
+        return display;
+    }
 
     public Task RunAsync() => run();
 }

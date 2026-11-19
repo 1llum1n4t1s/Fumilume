@@ -106,6 +106,23 @@ public sealed class EditorCommandTests
         Assert.Equal("a\nb", document.Text);
     }
 
+    [Theory]
+    [InlineData("        x", 4, "    x")]
+    [InlineData("        x", 2, "      x")]
+    [InlineData("  x", 4, "x")]
+    [InlineData("\t\tx", 4, "\tx")]
+    [InlineData("    \tx", 4, "\tx")]
+    public void UnindentTabRemovesOnlyOneLevelOfSpaces(string line, int tabWidth, string expected)
+    {
+        var document = CreateDocument(line);
+        document.SelectionStart = 0;
+        document.SelectionLength = document.Text.Length;
+
+        document.UnindentLines("\t", tabWidth);
+
+        Assert.Equal(expected, document.Text);
+    }
+
     [Fact]
     public void LineTransformsPreserveCrOnlyNewLines()
     {

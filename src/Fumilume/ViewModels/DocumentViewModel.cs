@@ -65,6 +65,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEditorVisible))]
     [NotifyPropertyChangedFor(nameof(PreviewToggleLabel))]
+    [NotifyPropertyChangedFor(nameof(MarkdownPreviewText))]
     private bool _isMarkdownPreview;
 
     [ObservableProperty]
@@ -104,7 +105,44 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEditorVisible))]
     [NotifyPropertyChangedFor(nameof(PreviewToggleLabel))]
+    [NotifyPropertyChangedFor(nameof(CsvPreviewText))]
     private bool _isCsvPreview;
+
+    private string _markdownPreviewSnapshot = string.Empty;
+    private string _csvPreviewSnapshot = string.Empty;
+
+    /// <summary>
+    /// Markdown プレビューへ渡す本文。プレビューを開いている間だけ全文を組み立てて返し、閉じている間は
+    /// 最後に表示した本文をそのまま返す。全文を組み立てる <see cref="Text"/> を、非表示のプレビューが
+    /// 打鍵ごとに読まないための入口。閉じて開き直しても同じ値なら、プレビューの再描画も表示状態の
+    /// 巻き戻りも起きない。
+    /// </summary>
+    public string MarkdownPreviewText
+    {
+        get
+        {
+            if (IsMarkdownPreview)
+            {
+                _markdownPreviewSnapshot = EditorDocument.Text;
+            }
+
+            return _markdownPreviewSnapshot;
+        }
+    }
+
+    /// <summary>CSV プレビューへ渡す本文。<see cref="MarkdownPreviewText"/> と同じく表示中だけ全文を読む。</summary>
+    public string CsvPreviewText
+    {
+        get
+        {
+            if (IsCsvPreview)
+            {
+                _csvPreviewSnapshot = EditorDocument.Text;
+            }
+
+            return _csvPreviewSnapshot;
+        }
+    }
 
     public bool IsEditorVisible => !IsMarkdownPreview && !IsCsvPreview;
 
@@ -189,6 +227,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             _savedEncoding = Encoding;
             _savedNewLine = NewLine;
             _savedText = content.Text;
+            RestoredDiskStamp = null;
             Text = content.Text;
             CaretIndex = 0;
             _restoredUnsaved = false;
@@ -228,6 +267,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             EditorDocument.UndoStack.ClearAll();
             UpdateTextStatistics();
             _savedText = null;
+            RestoredDiskStamp = null;
             _pendingSavedEditorText = null;
             _restoredUnsaved = true;
             IsModified = true;
@@ -245,6 +285,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         _savedEncoding = savedContent.Encoding;
         _savedNewLine = savedContent.NewLine;
         _savedText = DocumentFileService.NormalizeNewLines(savedContent.Text, savedContent.NewLine);
+        RestoredDiskStamp = null;
         _isMissingOnDisk = false;
         _restoredUnsaved = false;
         _pendingSavedEditorText = textUnchangedDuringSave ? null : savedContent.Text;
@@ -262,6 +303,21 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
 
     /// <summary>監視通知が自分自身の保存に由来する場合、ディスク内容は保存時の基準値と一致する。</summary>
     internal bool HasSavedContentBaseline => _savedText is not null;
+
+    /// <summary>
+    /// セッション復元時に控えられていた、保存先ファイルの前回終了時点の状態。保存基準がまだ無い間だけ持ち、
+    /// 初回の監視通知で現在のディスクと比べて、閉じている間の外部更新を見分ける。null なら比べない。
+    /// </summary>
+    internal DiskStamp? RestoredDiskStamp { get; private set; }
+
+    internal void SetRestoredDiskStamp(DiskStamp? stamp)
+        => RestoredDiskStamp = _savedText is null ? stamp : null;
+
+    /// <summary>セッションへ控えるディスク側の状態。復元後まだ照合していなければ控えた値をそのまま引き継ぐ。</summary>
+    internal DiskStamp? CaptureDiskStamp()
+        => !IsModified || FilePath is null
+            ? null
+            : RestoredDiskStamp ?? DiskStamp.TryRead(FilePath);
 
     internal bool MatchesSavedContent(TextDocumentContent content)
         => _savedText is not null
@@ -288,6 +344,7 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         _savedText = content.Text;
         _savedEncoding = content.Encoding;
         _savedNewLine = content.NewLine;
+        RestoredDiskStamp = null;
         _isMissingOnDisk = false;
         UpdateModifiedState();
     }
@@ -426,6 +483,16 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
         _csvPreviewSource = null;
         _csvPreview = null;
         OnPropertyChanged(nameof(Text));
+        if (IsMarkdownPreview)
+        {
+            OnPropertyChanged(nameof(MarkdownPreviewText));
+        }
+
+        if (IsCsvPreview)
+        {
+            OnPropertyChanged(nameof(CsvPreviewText));
+        }
+
         UpdateTextStatistics();
         OnPropertyChanged(nameof(LineColumnText));
         OnPropertyChanged(nameof(CurrentLine));

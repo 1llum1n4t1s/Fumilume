@@ -979,7 +979,15 @@ public sealed partial class MainWindow : Window
         {
             _formatDocumentChordPending = true;
             _workspaceChordStarted = DateTime.UtcNow;
-            _viewModel.StatusMessage = "Ctrl+K が押されました。Ctrl+O でフォルダを開く、Ctrl+D で書式整形します";
+            _viewModel.StatusMessage = ControlKChordMessage(UsesMacPlatformConventions);
+            args.Handled = true;
+            return;
+        }
+
+        // Ctrl+O 単独は二打目として使われる Ctrl+K, Ctrl+O より後に判定する（XAML の KeyBinding だと先に奪う）。
+        if (controlOnly && args.Key == Key.O)
+        {
+            _viewModel.OpenCommand.Execute(null);
             args.Handled = true;
             return;
         }
@@ -1037,6 +1045,19 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>macOS では二打目のフォルダを開く操作が ⌘O なので、実際に効くキーだけを案内する。</summary>
+    internal static string ControlKChordMessage(bool macOS)
+        => macOS
+            ? "Ctrl+K が押されました。⌘O でフォルダを開く、Ctrl+D で書式整形します"
+            : "Ctrl+K が押されました。Ctrl+O でフォルダを開く、Ctrl+D で書式整形します";
+
+    /// <summary>
+    /// 本文向けの編集ショートカットを受けてよいか。検索・置換パネルは本文エディタの子なので
+    /// <c>IsKeyboardFocusWithin</c> だけでは真になるため、入力欄（TextBox）にいるときは除く。
+    /// </summary>
+    internal bool EditorBodyHasFocus()
+        => _editor.IsKeyboardFocusWithin && FocusManager?.GetFocusedElement() is not TextBox;
+
     private bool TryHandleMacShortcut(KeyEventArgs args)
     {
         if (!UsesMacPlatformConventions)
@@ -1051,7 +1072,7 @@ public sealed partial class MainWindow : Window
         {
             switch (args.Key)
             {
-                case Key.Z when _editor.IsKeyboardFocusWithin:
+                case Key.Z when EditorBodyHasFocus():
                     _viewModel.RedoCommand.Execute(null);
                     break;
                 case Key.S:
@@ -1093,19 +1114,19 @@ public sealed partial class MainWindow : Window
                 case Key.OemComma:
                     _viewModel.OpenSettingsCommand.Execute(null);
                     break;
-                case Key.Z when _editor.IsKeyboardFocusWithin:
+                case Key.Z when EditorBodyHasFocus():
                     _viewModel.UndoCommand.Execute(null);
                     break;
-                case Key.X when _editor.IsKeyboardFocusWithin:
+                case Key.X when EditorBodyHasFocus():
                     _editor.Cut();
                     break;
-                case Key.C when _editor.IsKeyboardFocusWithin:
+                case Key.C when EditorBodyHasFocus():
                     _editor.Copy();
                     break;
-                case Key.V when _editor.IsKeyboardFocusWithin:
+                case Key.V when EditorBodyHasFocus():
                     _editor.Paste();
                     break;
-                case Key.A when _editor.IsKeyboardFocusWithin:
+                case Key.A when EditorBodyHasFocus():
                     _editor.SelectAll();
                     break;
                 default:
@@ -1155,10 +1176,15 @@ public sealed partial class MainWindow : Window
                 => new MacroStep { Kind = MacroStepKind.DeleteForward, Motion = MacroMotion.WordRight },
             Key.Enter or Key.Return => new MacroStep { Kind = MacroStepKind.InsertNewLine },
 
-            // Tab は、実際に文字が入るときだけ記録する。選択があるときは字下げ、
-            // AcceptsTab が切れているときはフォーカス移動になり、文字は入らない。
-            Key.Tab when !shift && _editor.Options.AcceptsTab && _editor.SelectionLength == 0
-                => new MacroStep { Kind = MacroStepKind.InsertText, Text = "\t" },
+            // Tab / Shift+Tab は、AcceptsTab が有効なときだけ記録する（切れているとフォーカス移動になる）。
+            // 再生時の設定（TAB か空白か、字下げ幅）に従わせるため、文字ではなく操作として記録する。
+            Key.Tab when args.KeyModifiers == KeyModifiers.None && _editor.Options.AcceptsTab
+                => new MacroStep
+                {
+                    Kind = _editor.SelectionLength == 0 ? MacroStepKind.InsertTab : MacroStepKind.Indent,
+                },
+            Key.Tab when args.KeyModifiers == KeyModifiers.Shift && _editor.Options.AcceptsTab
+                => new MacroStep { Kind = MacroStepKind.Unindent },
             _ => null,
         };
 

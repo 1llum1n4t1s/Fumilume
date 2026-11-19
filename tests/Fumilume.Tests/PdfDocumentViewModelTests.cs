@@ -172,8 +172,28 @@ public sealed class PdfDocumentViewModelTests(HeadlessAppFixture fixture)
         Assert.Equal(height, document.PageHeight);
     }
 
+    [Fact]
+    public async Task RenderFailureDoesNotLeaveThePreviousPageImageUnderTheError()
+    {
+        fixture.Run(() => { });
+        using var renderer = new StubPdfRenderer(pageCount: 2) { FailFromPageIndex = 1 };
+        using var document = new PdfDocumentViewModel(@"C:\tmp\guide.pdf", renderer, _ => Task.CompletedTask);
+        await document.RenderCurrentPageAsync();
+        Assert.NotNull(document.PageImage);
+        Assert.Null(document.ErrorMessage);
+
+        await document.NavigateAsync(2);
+
+        Assert.Equal(2, document.CurrentPage);
+        Assert.NotNull(document.ErrorMessage);
+        Assert.Null(document.PageImage);
+    }
+
     internal sealed class StubPdfRenderer(int pageCount) : IPdfRenderer
     {
+        /// <summary>このページ番号（0 始まり）以降の描画を失敗させる。</summary>
+        public int? FailFromPageIndex { get; init; }
+
         public int PageCount { get; } = pageCount;
 
         public Avalonia.Size GetPageSize(int pageIndex) => pageIndex == 0 ? new(600, 800) : new(800, 600);
@@ -184,6 +204,11 @@ public sealed class PdfDocumentViewModelTests(HeadlessAppFixture fixture)
         public Task<Bitmap> RenderAsync(int pageIndex, double zoom, CancellationToken cancellationToken = default)
         {
             Renders.Add((pageIndex, zoom));
+            if (FailFromPageIndex is { } failFrom && pageIndex >= failFrom)
+            {
+                throw new InvalidOperationException("描画に失敗しました");
+            }
+
             using var stream = new MemoryStream(
             [
                 137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
