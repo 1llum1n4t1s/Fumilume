@@ -134,7 +134,9 @@ done < <(find "$publish" -mindepth 1 -maxdepth 1 -print0)
 test -f "$prepared_bundle/Contents/Resources/Assets/Fonts/LICENSE-FLUENT-SYSTEM-ICONS.txt"
 du -sk "$prepared_bundle" "$prepared_bundle/Contents/Resources"
 dotnet tool install vpk --version 1.2.161 --tool-path "$work_dir/tools"
-"$work_dir/tools/vpk" --verbose pack --packId Fumilume --packTitle Fumilume --packVersion "$version" \
+# vpk は .NET 10 向けのツールで、固定 SDK（.NET 11）だけを導入した環境には .NET 10 の実行環境がない。
+# 新しい主バージョンの実行環境で動かすため、vpk の起動にだけロールフォワードを許可する。
+DOTNET_ROLL_FORWARD=Major "$work_dir/tools/vpk" --verbose pack --packId Fumilume --packTitle Fumilume --packVersion "$version" \
   --mainExe Fumilume --packDir "$prepared_bundle" --outputDir "$artifacts" \
   --runtime osx-arm64 --channel osx-arm64 --icon "$work_dir/Fumilume.icns" \
   --plist "$work_dir/Info.plist" --signAppIdentity "$APPLE_SIGN_APP_IDENTITY" \
