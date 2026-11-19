@@ -136,8 +136,49 @@ public sealed class MarkdownPreview : UserControl
                 Height = 1,
                 Margin = new Thickness(0, 12),
             },
+            MarkdownBlockKind.Table when block.Table is not null => CreateTable(block.Table),
             _ => CreateText(block.Text, 14),
         };
+
+    private Control CreateTable(MarkdownTable table)
+    {
+        var columns = table.Alignments.Count;
+        var grid = new Grid();
+        for (var column = 0; column < columns; column++)
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition(1, GridUnitType.Star) { MinWidth = 60 });
+        }
+
+        for (var row = 0; row < table.Rows.Count; row++)
+        {
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            for (var column = 0; column < columns; column++)
+            {
+                var text = CreateText(
+                    table.Rows[row][column],
+                    14,
+                    row == 0 ? FontWeight.SemiBold : null);
+                text.TextAlignment = table.Alignments[column] switch
+                {
+                    MarkdownColumnAlignment.Center => TextAlignment.Center,
+                    MarkdownColumnAlignment.Right => TextAlignment.Right,
+                    _ => TextAlignment.Left,
+                };
+                var cell = new Border
+                {
+                    Classes = { row == 0 ? "markdowntableheader" : "markdowntablecell" },
+                    BorderThickness = new Thickness(column == 0 ? 1 : 0, row == 0 ? 1 : 0, 1, 1),
+                    Padding = new Thickness(10, 6),
+                    Child = text,
+                };
+                Grid.SetRow(cell, row);
+                Grid.SetColumn(cell, column);
+                grid.Children.Add(cell);
+            }
+        }
+
+        return grid;
+    }
 
     private SelectableTextBlock CreateText(
         string text,

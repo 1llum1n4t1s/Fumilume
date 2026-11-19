@@ -34,6 +34,44 @@ public sealed class MarkdownDocumentParserTests
     }
 
     [Fact]
+    public void PipeTableIsParsedWithAlignmentsAndEscapedPipes()
+    {
+        var blocks = MarkdownDocumentParser.Parse(
+            """
+            前置き
+
+            | 名前 | 数 | 備考 |
+            |:--|--:|:-:|
+            | **りんご** | 3 | a\|b |
+            | みかん | 5 |
+
+            後置き
+            """);
+
+        Assert.Equal(3, blocks.Count);
+        var table = blocks[1].Table;
+        Assert.Equal(MarkdownBlockKind.Table, blocks[1].Kind);
+        Assert.NotNull(table);
+        Assert.Equal(
+            [MarkdownColumnAlignment.Left, MarkdownColumnAlignment.Right, MarkdownColumnAlignment.Center],
+            table.Alignments);
+        Assert.Equal(3, table.Rows.Count);
+        Assert.Equal(["名前", "数", "備考"], table.Rows[0]);
+        Assert.Equal(["りんご", "3", "a|b"], table.Rows[1]);
+        Assert.Equal(["みかん", "5", ""], table.Rows[2]);
+        Assert.Equal(MarkdownBlockKind.Paragraph, blocks[2].Kind);
+    }
+
+    [Fact]
+    public void PipeLineWithoutDelimiterRowStaysParagraph()
+    {
+        var blocks = MarkdownDocumentParser.Parse("a | b\nc | d");
+
+        var block = Assert.Single(blocks);
+        Assert.Equal(MarkdownBlockKind.Paragraph, block.Kind);
+    }
+
+    [Fact]
     public void CrOnlyMarkdownIsParsedAsSeparateBlocks()
     {
         var blocks = MarkdownDocumentParser.Parse("# 見出し\r\r本文");

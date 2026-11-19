@@ -12,9 +12,27 @@ public enum MarkdownBlockKind
     Quote,
     Code,
     Rule,
+    Table,
 }
 
-public sealed record MarkdownBlock(MarkdownBlockKind Kind, string Text, int Level = 0, int Number = 0);
+public enum MarkdownColumnAlignment
+{
+    Left,
+    Center,
+    Right,
+}
+
+/// <summary>表ブロック。先頭行が見出し行で、各行の列数は Alignments と同じ。</summary>
+public sealed record MarkdownTable(
+    IReadOnlyList<IReadOnlyList<string>> Rows,
+    IReadOnlyList<MarkdownColumnAlignment> Alignments);
+
+public sealed record MarkdownBlock(
+    MarkdownBlockKind Kind,
+    string Text,
+    int Level = 0,
+    int Number = 0,
+    MarkdownTable? Table = null);
 
 /// <summary>プレビュー用の軽量 Markdown ブロック解析。外部通信や HTML 実行は行わない。</summary>
 public static class MarkdownDocumentParser
@@ -26,8 +44,10 @@ public static class MarkdownDocumentParser
         var code = new StringBuilder();
         var codeFenceLength = 0;
 
-        foreach (var line in DocumentNewLines.EnumerateLines(markdown ?? string.Empty))
+        var lines = DocumentNewLines.EnumerateLines(markdown ?? string.Empty).ToList();
+        for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
         {
+            var line = lines[lineIndex];
             var trimmed = line.TrimStart();
             var markerLength = CountPrefix(trimmed, '`');
             if (markerLength >= 3 && (codeFenceLength == 0
@@ -58,6 +78,13 @@ public static class MarkdownDocumentParser
             if (string.IsNullOrWhiteSpace(line))
             {
                 FlushParagraph();
+                continue;
+            }
+
+            if (TryReadTable(lines, ref lineIndex, out var table))
+            {
+                FlushParagraph();
+                blocks.Add(new MarkdownBlock(MarkdownBlockKind.Table, string.Empty, Table: table));
                 continue;
             }
 
@@ -124,6 +151,110 @@ public static class MarkdownDocumentParser
             blocks.Add(new MarkdownBlock(MarkdownBlockKind.Paragraph, StripInlineMarkup(paragraph.ToString())));
             paragraph.Clear();
         }
+    }
+
+    private const int MaximumTableRows = 5000;
+
+    /// <summary>見出し行と区切り行（---|:--:）が揃った GFM のパイプ表だけを表として扱う。</summary>
+    private static bool TryReadTable(List<string> lines, ref int index, out MarkdownTable? table)
+    {
+        table = null;
+        if (index + 1 >= lines.Count || !lines[index].Contains('|'))
+        {
+            return false;
+        }
+
+        var header = SplitTableRow(lines[index]);
+        var delimiters = SplitTableRow(lines[index + 1]);
+        if (header.Count == 0 || header.Count != delimiters.Count
+            || !delimiters.All(IsDelimiterCell))
+        {
+            return false;
+        }
+
+        var alignments = delimiters.Select(cell =>
+        {
+            var left = cell.StartsWith(':');
+            var right = cell.EndsWith(':');
+            return left && right ? MarkdownColumnAlignment.Center
+                : right ? MarkdownColumnAlignment.Right
+                : MarkdownColumnAlignment.Left;
+        }).ToArray();
+
+        var rows = new List<IReadOnlyList<string>> { NormalizeRow(header, alignments.Length) };
+        var next = index + 2;
+        while (next < lines.Count && rows.Count < MaximumTableRows
+            && !string.IsNullOrWhiteSpace(lines[next]) && lines[next].Contains('|'))
+        {
+            rows.Add(NormalizeRow(SplitTableRow(lines[next]), alignments.Length));
+            next++;
+        }
+
+        index = next - 1;
+        table = new MarkdownTable(rows, alignments);
+        return true;
+    }
+
+    private static IReadOnlyList<string> NormalizeRow(List<string> cells, int count)
+    {
+        var row = new string[count];
+        for (var column = 0; column < count; column++)
+        {
+            row[column] = column < cells.Count ? StripInlineMarkup(cells[column]) : string.Empty;
+        }
+
+        return row;
+    }
+
+    private static bool IsDelimiterCell(string cell)
+    {
+        var body = cell.Trim(':');
+        return body.Length >= 1 && body.All(character => character == '-');
+    }
+
+    private static List<string> SplitTableRow(string line)
+    {
+        var text = line.Trim();
+        var cells = new List<string>();
+        var cell = new StringBuilder();
+        var inCode = false;
+        for (var position = 0; position < text.Length; position++)
+        {
+            var character = text[position];
+            if (character == '\\' && position + 1 < text.Length && text[position + 1] == '|')
+            {
+                cell.Append('|');
+                position++;
+            }
+            else if (character == '`')
+            {
+                inCode = !inCode;
+                cell.Append(character);
+            }
+            else if (character == '|' && !inCode)
+            {
+                cells.Add(cell.ToString().Trim());
+                cell.Clear();
+            }
+            else
+            {
+                cell.Append(character);
+            }
+        }
+
+        cells.Add(cell.ToString().Trim());
+        // 行頭・行末の区切りが作る空セルを除く。
+        if (text.StartsWith('|') && cells.Count > 0)
+        {
+            cells.RemoveAt(0);
+        }
+
+        if (text.EndsWith('|') && !text.EndsWith("\\|", StringComparison.Ordinal) && cells.Count > 0)
+        {
+            cells.RemoveAt(cells.Count - 1);
+        }
+
+        return cells;
     }
 
     internal static string StripInlineMarkup(string text)
