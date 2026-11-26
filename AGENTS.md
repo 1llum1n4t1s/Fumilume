@@ -1,106 +1,27 @@
 # Fumilume 作業ガイド
 
-このファイルは、Fumilume を変更するエージェント向けのリポジトリ固有規約です。現在の構造と設計判断は [DESIGN.md](DESIGN.md)、利用者向けの説明は [README.md](README.md) を参照してください。
+Fumilume を変更するエージェント向けのリポジトリ固有規約。構造と設計判断は [DESIGN.md](DESIGN.md)、利用者向け説明は [README.md](README.md)、変更履歴は [CHANGELOG.md](CHANGELOG.md)。
 
-## 対象と構成
+## 構成
 
 - `src/Fumilume/`: WindowsとApple Silicon macOS向けAvaloniaデスクトップアプリ
-- `tests/Fumilume.Tests/`: xUnit v3 と Avalonia.Headless による単体・統合テスト
-- `tests/Fumilume.MacE2E/`: Apple Silicon Macで実Avalonia・Core Graphicsと更新パッケージを検証するE2E実行アプリ
-- `scripts/release-local.ps1`: x64 / ARM64 の Native AOT、署名、Velopack パッケージ化、R2 配布、固定URLのキャッシュパージ
-- `scripts/build-macos-arm64.sh`: Apple Silicon Mac上でNative AOT・Developer ID署名・公証済みPKG/ZIPと更新パッケージを作成
-- `../vps-web/lp/fumilume/`: `fumilume.kagayoi.com` のVPS配信のランディングページ
+- `tests/Fumilume.Tests/`: xUnit v3 と Avalonia.Headless のテスト
+- `tests/Fumilume.MacE2E/`: Apple Silicon Macの実アプリE2E
+- `scripts/`: リリース・配布スクリプト（`release-local.ps1`、`build-macos-arm64.sh` など）
 - `Directory.Build.props`: 対象フレームワーク、版番号、対応プラットフォーム、警告・lock file 方針の正本
+- `../vps-web/lp/fumilume/`: 製品ページ。配信先と手順は [DESIGN.md の配信先](DESIGN.md#製品ページの配信先)、配信は `../vps-web/deploy/deploy-lp.ps1`
 
-## 実装規約
+## 共通ルール
 
 - C# は nullable と暗黙 using を有効にし、ビルド警告をエラーとして解消する。
-- UI は Avalonia の compiled bindings を維持する。ViewModel の公開プロパティ名を変更するときは、AXAML の binding と Headless 統合テストも同時に更新する。
-- UI 状態と操作は `ViewModels/`、ファイル・設定・更新・関連付けなどの外部処理は `Services/` に置く。OS API やダイアログはサービス境界で隔離し、テストでは差し替え可能にする。
-- テキスト保存では、利用者がステータスバーから変更しない限り、読込時の文字コードと改行コードを維持する。対応形式や変換操作を増やす場合は `TextDocumentContent`、`DocumentFileService`、README、テストを同じ変更で揃える。
-- 設定は Windows では `%LocalAppData%\Fumilume\settings.json`、macOS では `~/Library/Application Support/Fumilume/settings.json` を正本とし、既存プロパティ名との互換性、範囲補正、破損時の既定値フォールバック、原子的な保存を維持する。
-- 起動・セッション経路を変更するときは、同じユーザーの通常起動を単一プロセスへ集約し、後続起動のファイル引数を初回セッション復元後に開く順序を維持する。相対パスは送信側プロセスで絶対化する。
-- ワークスペースには文書・PDF・検索結果・設定を `WorkspaceTabViewModel` 派生型として載せる。設定タブは1個だけで末尾に置き、文書・PDF・検索結果が0件になると空文書を補う。
-- ファイルを開く経路は直列化し、大文字・小文字を区別しない絶対パスごとに文書・PDFタブを1個だけ保つ。既に開いている場合は同じファイルを読み直さず、そのタブを選択する。
-- フォルダ横断検索は `IDocumentFileService` 経由で読み、文字コード判定を文書と一致させる。読めないファイルと上限超過は数えて飛ばし、検索全体を止めない。検索結果タブは中央に出し、左サイドパネルへ移さない。
-- 機能を足すときの入口は `EditorCommandCatalog` とコマンドパレット（`MainWindowViewModel.EnumeratePaletteEntries`）にする。常時出すツールバーのボタンを増やさない。
-- 左サイドパネルは `SidePanelKind` を 1 つだけ表示する。面を足すときは列挙体・切り替えボタン・XAML の `IsVisible` を同じ変更で揃え、開いていない面を引き直さない構造（`_outlineStale` / `_bookmarksStale`）を維持する。
-- アウトラインは `OutlineService` が対応を宣言した拡張子だけを解析し、判定できない形式では空を返す。宣言でない行を拾わないことを、拾えることより優先する。
-- キーボードマクロは操作（`MacroStep`）を記録し、キー入力そのものを溜めない。再生は `DocumentViewModel` へ当て直す経路だけにし、View の状態（`SearchPanel` など）へ依存させない。手を増やすときは `MacroStepKind`、View 側の翻訳、`ApplyAsync` の分岐、`MacroTests` を同じ変更で揃える。
-- マクロへ記録できないコマンド（入力ダイアログを開くもの）を足したときは `NotRecordable` へ加える。再生側で読み飛ばす作りにしない。
-- 設定画面へまとまりを足すときは `HeaderedContentControl Classes="settingscard"` で囲う。検索の索引はこの目印で作るので、付け忘れると検索から漏れる。OSなどの表示条件はカードの親へ置き、検索によって非表示の項目が再表示されたり件数に含まれたりしないことを `SettingsSearchTests` で確認する。
-- 構文ハイライトは [DESIGN.md の「構文ハイライト」](DESIGN.md#構文ハイライト) に定めた One Dark / One Light の意味別配色と、入れ子のルールセットまで辿る挙動を維持する。AvaloniaEdit 同梱の定義を個別に使い、テーマ切替では元色から再計算する。
-- PDF は Windows では `Windows.Data.Pdf`、macOS では Core Graphics による読み取り専用表示として扱う。テキスト文書向けの保存・編集コマンドをPDF選択中に有効化しない。
-- Markdown プレビューは `.md` 文書だけに提供し、編集元テキストを正本とする。プレビューは Avalonia コントロールで構築し、外部ブラウザ実行環境へ依存させない。
-- CSV プレビューは `.csv` 文書を表で表示し、Markdownと共通の切り替え操作を使う。セル値の修正は元テキストの対象範囲だけを置換し、Undo/Redo・文字コード・行区切りを維持する。先頭行もデータとして扱い、型変換・数式実行をせず、編集元テキストを正本とする。
-- CSV の行列編集・コピーでは表示上限外のデータも対象に含める。列操作は全行へ適用し、コピーは引用符付きTSVとして生成する。列幅・行高はタブごとの表示状態とし、CSV本文を書き換えない。
-- エディタ用フォント候補は等幅フォントに限定する。UIフォントとエディタフォントの設定・プレビューを分離し、VS Code形式のフォントフォールバックを維持する。
-- ログは `SuperLightLogger` を `AppLogger` 経由で使用し、更新UIは `VelopackUpdateDialog.Avalonia` を `UpdateService` 経由で使用する。各ライブラリをViewから直接呼び出さない。
-- ファイル関連付けの追加・変更では、インストール後、更新後、アンインストール前のVelopackコールバックと関連付けテストを確認する。
-- README はアプリ利用者向けに保ち、開発・配布の詳細はこのファイルと `DESIGN.md` に記載する。
+- 通常のコード変更は `dotnet restore Fumilume.slnx --locked-mode` と `dotnet test --solution Fumilume.slnx -c Release --no-restore` で検証する。
+- 秘密値をコード、ログ、fixture、Git差分へ出力しない。
 
-## 必須検証
+## 詳細（変更前に読む）
 
-`global.json` が指定する .NET SDK を用意します。SDK は `rollForward: disable` で固定されているため、指定版で検証します。通常のコード変更では、リポジトリルートから次を順番に実行します。
-
-```powershell
-dotnet restore Fumilume.slnx --locked-mode
-dotnet test --solution Fumilume.slnx -c Release --no-restore
-```
-
-- UI、binding、テーマ、タブ状態を変更した場合は `MainWindowIntegrationTests` を含む全テストを実行する。
-- R2 中核・入口の変更時は `pwsh -NoProfile -File tests/R2Transfer/Run.ps1 -WorkRoot <未使用の外部絶対パス>` を新しい pwsh で実行する。SDK・外部サービスを使わず、mock transport と外向き接続を転送しない loopback proxy で公開入口・条件付き転送・manifest・相対path・秘密のマスクを検証する。
-- macOS 向けの変更では `dotnet restore src/Fumilume/Fumilume.csproj -p:FumilumeTargetMac=true -r osx-arm64 --locked-mode` を通す。Apple Silicon Mac で `bash scripts/build-macos-arm64.sh` を実行し、文書の開く・保存・再起動後の復元・PDFの通常ページと回転ページを実機確認する。Windows では macOS Native AOT の発行と実機確認を完了扱いにしない。
-- ファイルのドロップ経路を変更するときは、[DESIGN.md の入力境界](DESIGN.md#ファイルのドロップ)を維持し、`MainWindowIntegrationTests` で未知の拡張子・拡張子なし・重複ドロップ・フォルダ除外・文字ドラッグ設定の両状態を確認する。
-- ファイルI/O、設定永続化、文字変換、Markdown、PDFを変更した場合は、実際の経路を通る E2E テストで正常系と境界条件を確認し、再現可能な成果物を残す。
-- NuGet依存関係を変更した場合は、影響するWindows・macOS両方のlockfileを更新する。対象は `src/Fumilume/packages.lock.json`、`src/Fumilume/packages.macos.lock.json`、`tests/Fumilume.Tests/packages.lock.json`、`tests/Fumilume.MacE2E/packages.lock.json`。通常の検証とmacOS向けrestoreに加え、`dotnet restore tests/Fumilume.MacE2E/Fumilume.MacE2E.csproj -p:FumilumeTargetMac=true --locked-mode` を通す。
-- Native AOT、RID依存API、配布物へ影響する変更では、リリース前に両アーキテクチャを検証する。直接発行する場合は `win-x64` に `PlatformTarget=x64`、`win-arm64` に `PlatformTarget=ARM64` を対応させる。
-
-## リリース
-
-- リリースは既存の `$vava` ワークフローに従い、版番号を一度だけ決定する。
-- 外部状態を変えない事前確認は次で行う。
-
-```powershell
-pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
-```
-
-- 署名付きローカル成果物までの確認には `-SkipUpload` を使う。完全なリリースは main の commit に付けた軽量タグ `v<版>` の push で CI の `release.yml` が `scripts/release-all.ps1` を実行して行い、同じHEADのMac CI成功確認、Windows x64/ARM64とMac arm64の署名検証・アップロードを完走させる。事前確認と本実行には同じ外部の `-WorkRoot` と `-RecordRoot` を明示し、再開も同じ値を使う。
-- Windowsのpack・署名後は `release-local.ps1` が `scripts/verify-windows-package.ps1` を自動実行する。`-SkipUpload` でもこの検証を通し、失敗時は公開へ進めない。検証対象と記録は [DESIGN.md の配布物検証](DESIGN.md#更新と配布)を参照し、静的検証の成功を配布物の起動・画面操作の確認として扱わない。
-- 作業出力は既定でOSの一時フォルダー配下の`Fumilume/<task-id>`、最小限の再開・清掃記録は`TaskArtifacts/Fumilume/<task-id>` を使う（`-WorkRoot` / `-RecordRoot` で変更でき、CIはランナーの一時領域を指定する）。配布物は `WorkRoot/packages/`、ツールは `WorkRoot/tools/` に置き、今回の不要な配布物・検証環境・ツールは対象を確認してPrunlet CLIをCMDから直接呼び、ファイル単位で清掃する。`build-*` 内の `bin` / `obj` とその親ディレクトリは保持する。既存の旧出力・共有ツールは今回の清掃に含めない。
-- リリーススクリプトが読む証明書・Cloudflare認証情報はリポジトリ外の正本を使う。秘密値をコード、ログ、fixture、Git差分へ出力しない。
-- 通常の公開は GitHub Actions の `.github/workflows/release.yml`（軽量タグ `v<版>` の push で起動・Environment `release`、承認待ちなし。`guard` ジョブがタグ・commit・版を検査する）が `scripts/release-all.ps1` を実行して行い、手元から重ねて配信しない。Windows の署名は Sigilune（`scripts/Sigilune.Common.ps1`）で、CI は `SIGILUNE_EMAIL` / `SIGILUNE_TOTP_URI` / `CLOUDFLARE_API_TOKEN` を Environment の Secrets から受け取る。ローカル実行は検証と再開に使う。
-- 通常の検証は `.github/workflows/dependency-validation.yml`（main への push・全 PR・Dependabot・手動）が GitHub 提供ランナーで行い、Windows の単体テスト（`dotnet test --solution Fumilume.slnx`）とmacOS向けE2Eプロジェクトのビルドを走らせる。配信の `release.yml` も、署名・配信より前に同じ単体テストを実行し、失敗したら配信しない。実アプリ経路のMac E2E（有効なディスプレイが必要）と署名・公証は `macos-release.yml` が配信時に行う。macOS の job も GitHub 提供の `macos-latest`（Apple Silicon）で動き、署名・公証の証明書は Secrets から一時キーチェーンへ取り込む。
-- Windowsは `scripts/release-local.ps1` の署名・配布物検証、Macは `.github/workflows/macos-release.yml` のNative AOT・署名・公証・E2E成功とR2アップロード成功を出荷判定にする。
-
-## 変更時の確認先
-
-- アーキテクチャ、不変条件、主要データフロー: [DESIGN.md](DESIGN.md)
-- 利用者向け機能、インストール、設定、トラブルシュート: [README.md](README.md)
-- 利用者向け変更履歴: [CHANGELOG.md](CHANGELOG.md)
-
-## 製品ページの配信先
-
-[DESIGN.md の配信先](DESIGN.md#製品ページの配信先)を参照し、公開URLと既存のR2・ライセンス通信を維持する。製品ページの配信には `../vps-web/deploy/deploy-lp.ps1` を使う。
-
-### ローカルリリースの実行
-
-R2 配布は PowerShell 7.2 以降と同梱の `scripts/R2Distribution.Common.ps1` を使う。配布に Node.js・pnpm・Wrangler は不要（製品の JS ビルド要件は別途維持）。署名・転送・検証の正本は同梱の `scripts/R2Transfer.Core.cs` とし、PS helper は公開関数の互換入口とする。更新時は中核と使用する入口を同じディレクトリへ同梱する。固定名は `no-cache, must-revalidate`、バージョン付き成果物は不変として 1 年キャッシュし、payload を先、assets・RELEASES・releases を最後に送信する。
-
-公開依頼時は、`/vava` が main を push したあと、その commit に軽量タグ `v<version>` を付けて push すると、CI の `release.yml` が自動で始まる。承認待ちはない。`/vava` が監視する workflow は `release.yml` だけで、`macos-release.yml` は `release-all.ps1` が同じタグを `--ref` にして内部で起動・待機する依存である。GitHub Release は作らない。
-
-`release.yml` の再実行は、同じタグ `v<version>` を指定して行う。
-
-```powershell
-gh workflow run release.yml --repo 1llum1n4t1s/Fumilume --ref v<version>
-```
-
-- Mac CI が失敗した場合: `Get-MacRun` は同じ SHA・同じタグ名の最新 run を取り、それが失敗だと止まるため、`release.yml` の再実行だけでは直らない。一時的な失敗は Mac の run を `gh run rerun <id>` で成功させてから、`release.yml` を `v<version>` で dispatch する。コード修正が要るときは `vava` の復旧手順に従い、修正を含む新しい版（patch を上げた新タグ）で配信し直す。
-- 注意: Windows の配信後に `release.yml` を再実行すると、同じ版を作り直して配信し直す。タグ以外（main など）を指定した dispatch は `guard` ジョブに拒否される。`skip_upload` の確認も `v<version>` タグから実行する。
-
-ローカルで検証・再開するときは、リポジトリルートで事前確認（Sigilune のクラウドログインを含む）を行い、失敗時は「リリースの事前確認に失敗しました。Sigilune の登録（sigilune status）、ネットワーク、Cloudflare 認証の状態を確認してください」と案内し、ログインを自動再試行しない。
-
-```powershell
-pwsh -NoProfile -File scripts/release-local.ps1 -PreflightOnly
-if ($LASTEXITCODE -eq 0) { pwsh -NoProfile -File scripts/release-local.ps1 -SkipUpload } else { throw 'リリースの事前確認に失敗しました。Sigilune の登録（sigilune status）、ネットワーク、Cloudflare 認証の状態を確認してください' }
-```
+- 画面・設定・サービス・起動・ログ・コマンド入口・設定画面を変更する前に [implementation-rules.md](docs/agents/implementation-rules.md) を読む。
+- タブ・ファイルを開く経路・検索・サイドパネル・アウトライン・マクロ・ドロップを変更する前に [workspace-rules.md](docs/agents/workspace-rules.md) を読む。
+- 保存形式・構文ハイライト・PDF・Markdown/CSV プレビュー・フォントを変更する前に [document-formats.md](docs/agents/document-formats.md) を読む。
+- 検証の範囲を決める前（UI、R2、macOS、NuGet lockfile、Native AOT の変更時）に [validation-commands.md](docs/agents/validation-commands.md) を読む。
+- GitHub Actions、Dependabot、NuGet キャッシュ、自動マージを変更する前に [ci-workflows.md](docs/agents/ci-workflows.md) を読む。
+- リリース、署名、R2 配布、再実行・復旧を扱う前に [release-process.md](docs/agents/release-process.md) を読む。通常の公開は `$vava` に従い、軽量タグ `v<版>` の push で CI が配信する。
