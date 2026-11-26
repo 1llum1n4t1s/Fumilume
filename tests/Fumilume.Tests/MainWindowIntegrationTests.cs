@@ -856,6 +856,60 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.False(editor.Options.EnableHyperlinks);
     });
 
+    [Theory]
+    [InlineData(@"C:\tmp\memo", "a\u3000b")]
+    [InlineData(@"C:\tmp\Sample.cs", "var s = \"\u3000\"; // \u3000")]
+    public void HidingFullWidthSpacesOnlyMakesTheirForegroundTransparent(string path, string source) => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        scope.Window.RequestedThemeVariant = ThemeVariant.Light;
+        var document = scope.ViewModel.SelectedDocument!;
+        document.Load(
+            path,
+            new TextDocumentContent(source, DocumentEncoding.Utf8, DocumentNewLines.Lf));
+        var editor = scope.Window.FindControl<TextEditor>("Editor")!;
+        var options = scope.ViewModel.Options;
+        // 選択範囲の前景指定があっても、透明が勝つことを確かめる。
+        editor.TextArea.SelectionForeground = Brushes.Red;
+        scope.Window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
+        AssertVisibility(visible: true);
+
+        options.ShowFullWidthSpaces = false;
+        Dispatcher.UIThread.RunJobs();
+        AssertVisibility(visible: false);
+
+        editor.SelectAll();
+        Dispatcher.UIThread.RunJobs();
+        AssertVisibility(visible: false);
+
+        scope.Window.RequestedThemeVariant = ThemeVariant.Dark;
+        Dispatcher.UIThread.RunJobs();
+        AssertVisibility(visible: false);
+
+        options.EnableSyntaxHighlighting = false;
+        Dispatcher.UIThread.RunJobs();
+        AssertVisibility(visible: false);
+
+        options.ShowFullWidthSpaces = true;
+        Dispatcher.UIThread.RunJobs();
+        AssertVisibility(visible: true);
+        Assert.Equal(source, document.Text);
+
+        void AssertVisibility(bool visible)
+        {
+            for (var offset = 0; offset < source.Length; offset++)
+            {
+                if (source[offset] == '\u3000')
+                {
+                    Assert.Equal(visible, ReadForegroundColor(editor, offset).A != 0);
+                }
+            }
+
+            Assert.NotEqual(0, ReadForegroundColor(editor, 0).A);
+        }
+    });
+
     [Fact]
     public void TurningAcrylicOffShowsTheOpaqueFallbackLayer() => fixture.Run(() =>
     {
@@ -1089,13 +1143,13 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         scope.Window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(Color.Parse("#4078F2"), ReadBracketColor(editor, document.Text.IndexOf('(')));
+        Assert.Equal(Color.Parse("#4078F2"), ReadForegroundColor(editor, document.Text.IndexOf('(')));
 
         editor.Document.Insert(0, "{");
         Dispatcher.UIThread.RunJobs();
         scope.Window.UpdateLayout();
 
-        Assert.Equal(Color.Parse("#C18401"), ReadBracketColor(editor, document.Text.IndexOf('(')));
+        Assert.Equal(Color.Parse("#C18401"), ReadForegroundColor(editor, document.Text.IndexOf('(')));
     });
 
     [Fact]
@@ -2590,7 +2644,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         return drawing;
     }
 
-    private static Color ReadBracketColor(TextEditor editor, int offset)
+    private static Color ReadForegroundColor(TextEditor editor, int offset)
     {
         var line = editor.Document.GetLineByOffset(offset);
         var visualLine = editor.TextArea.TextView.GetOrConstructVisualLine(line);

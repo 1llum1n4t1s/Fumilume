@@ -83,6 +83,10 @@
                                 <StackPanel Classes="settingsfields">
                                     <CheckBox Content="半角空白を表示"
                                               IsChecked="{Binding Options.ShowSpaces, Mode=TwoWay}" />
+                                    <CheckBox Content="全角空白を表示"
+                                              IsChecked="{Binding Options.ShowFullWidthSpaces, Mode=TwoWay}" />
+                                    <TextBlock Classes="settingscaption" Margin="28,0,0,0" TextWrapping="Wrap"
+                                               Text="記号の形はエディタのフォントによります。記号を持たないフォントでは空白のまま表示します。" />
                                     <CheckBox Content="タブを表示"
                                               IsChecked="{Binding Options.ShowTabs, Mode=TwoWay}" />
                                     <CheckBox Content="改行を表示"

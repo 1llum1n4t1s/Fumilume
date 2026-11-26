@@ -43,6 +43,7 @@ public sealed partial class MainWindow : Window
     private readonly TextEditor _editor;
     private readonly SearchPanel _searchPanel;
     private readonly BracketHighlighter _bracketHighlighter;
+    private readonly FullWidthSpaceHider _fullWidthSpaceHider = new();
     private readonly ColumnDefinition _sidePanelColumn;
     private DocumentViewModel? _boundDocument;
     private PdfDocumentViewModel? _boundPdf;
@@ -97,6 +98,8 @@ public sealed partial class MainWindow : Window
         _ = new EditorInputMethod(_editor);
         _editor.TextArea.TextView.BackgroundRenderers.Add(new BookmarkRenderer(() => _boundDocument));
         _bracketHighlighter = new BracketHighlighter(_editor);
+        // AvaloniaEdit の選択用 colorizer より後ろに置き、選択中も透明の前景を保つ。
+        _editor.TextArea.TextView.LineTransformers.Add(_fullWidthSpaceHider);
         ApplyUiFontOptions();
         ApplyEditorOptions();
         ApplyTabHeight();
@@ -325,6 +328,9 @@ public sealed partial class MainWindow : Window
         _editor.Options.ShowTabs = _options.ShowTabs;
         _editor.Options.ShowEndOfLine = _options.ShowEndOfLine;
         _editor.Options.ShowBoxForControlCharacters = _options.ShowControlCharacters;
+        // 全角空白はフォントのグリフとして描かれるため、AvaloniaEdit の設定ではなく前景色で隠す。
+        _fullWidthSpaceHider.IsEnabled = !_options.ShowFullWidthSpaces;
+        _editor.TextArea.TextView.Redraw();
 
         // 編集
         _editor.Options.IndentationSize = _options.IndentationSize;

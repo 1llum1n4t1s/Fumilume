@@ -86,6 +86,12 @@ public sealed class AppOptionsViewModel : ObservableObject
         set => SetOption(_settings.ShowSpaces, value, v => _settings.ShowSpaces = v);
     }
 
+    public bool ShowFullWidthSpaces
+    {
+        get => _settings.ShowFullWidthSpaces;
+        set => SetOption(_settings.ShowFullWidthSpaces, value, v => _settings.ShowFullWidthSpaces = v);
+    }
+
     public bool ShowTabs
     {
         get => _settings.ShowTabs;

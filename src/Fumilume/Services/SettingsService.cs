@@ -30,6 +30,9 @@ public sealed class AppSettings
     // ===== 記号の表示（sakura のタイプ別設定『スクリーン』相当。sakura と同じく種類ごとに切る） =====
     public bool ShowSpaces { get; set; }
 
+    /// <summary>全角空白の記号（フォントが持つグリフ）を見せる。キーの無い既存設定は表示のままにする。</summary>
+    public bool ShowFullWidthSpaces { get; set; } = true;
+
     public bool ShowTabs { get; set; }
 
     public bool ShowEndOfLine { get; set; }

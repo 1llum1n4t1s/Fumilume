@@ -50,6 +50,19 @@ public sealed class SettingsServiceTests
     }
 
     [Fact]
+    public void ExistingSettingsKeepShowingFullWidthSpaces()
+    {
+        using var storage = new TemporaryStorage();
+        File.WriteAllText(
+            Path.Combine(storage.Path, "settings.json"),
+            """{"ShowSpaces":false}""");
+
+        var loaded = SettingsService.Load();
+
+        Assert.True(loaded.ShowFullWidthSpaces);
+    }
+
+    [Fact]
     public void ExistingEditorFontSettingsGainUiFontDefaults()
     {
         using var storage = new TemporaryStorage();
