@@ -214,8 +214,8 @@
       },
       "SuperLightLogger": {
         "type": "Transitive",
-        "resolved": "1.0.22",
-        "contentHash": "zX7QQzDeFTa1cgppgAtHTnl119qKTyGWzALHutIzv+XE7BWPaBJzxVZAstcHpd7jK9UY7QxVObULQrMWGk3Bmw==",
+        "resolved": "1.0.23",
+        "contentHash": "G+NZ2bWONp9K9/82AF6JnAW7JGUV2nuhcVPUV73vX4jRFd0Bo332mCd6uFPqqNNgucs1N/WutqcjYW7CJmY5kg==",
         "dependencies": {
           "Microsoft.Extensions.Logging": "11.0.0"
         }
@@ -232,8 +232,8 @@
       },
       "VelopackUpdateDialog.Avalonia": {
         "type": "Transitive",
-        "resolved": "1.0.22",
-        "contentHash": "seAmSHKNcmQM8No0Oh1t+dAXjNlerLB2foejp2zVXU9L6nRlqvzqQ0Uwwpjp0al+v0I69wTlu5YL8XkTbK36vg==",
+        "resolved": "1.0.24",
+        "contentHash": "F1XHZoDa58igk4w41v5EQsXckqQJ1tpIO4/WV2Q5aSVgi9pK/ceNbseggzZe/iCZkiUAr9zjc7GzZ+tPsNSPhQ==",
         "dependencies": {
           "Avalonia": "12.1.6",
           "CommunityToolkit.Mvvm": "8.4.2",
@@ -249,9 +249,9 @@
           "Avalonia.Themes.Fluent": "[12.1.6, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )",
           "PdfPig": "[0.1.16, )",
-          "SuperLightLogger": "[1.0.22, )",
+          "SuperLightLogger": "[1.0.23, )",
           "Velopack": "[1.2.161, )",
-          "VelopackUpdateDialog.Avalonia": "[1.0.22, )"
+          "VelopackUpdateDialog.Avalonia": "[1.0.24, )"
         }
       }
     },
