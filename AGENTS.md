@@ -25,3 +25,6 @@ Fumilume を変更するエージェント向けのリポジトリ固有規約�
 - 検証の範囲を決める前（UI、R2、macOS、NuGet lockfile、Native AOT の変更時）に [validation-commands.md](docs/agents/validation-commands.md) を読む。
 - GitHub Actions、Dependabot、NuGet キャッシュ、自動マージを変更する前に [ci-workflows.md](docs/agents/ci-workflows.md) を読む。
 - リリース、署名、R2 配布、再実行・復旧を扱う前に [release-process.md](docs/agents/release-process.md) を読む。通常の公開は `$vava` に従い、軽量タグ `v<版>` の push で CI が配信する。
+- R2 の署名・転送・manifest・path 検証を変更する前に [r2-transfer-core.md](docs/agents/r2-transfer-core.md) を読む。
+- 配布スクリプトの作業先・再開記録・清掃を変更する前に [release-workspace.md](docs/agents/release-workspace.md) を読む。
+- Windows 配布物の pack・署名後の検証を変更する前に [windows-package-verification.md](docs/agents/windows-package-verification.md) を読む。
