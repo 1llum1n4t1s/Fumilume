@@ -60,6 +60,8 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
     private bool _textDenied;
     private string? _textDeniedMessage;
     private Size _available;
+    // 1 DIP あたりのデバイス画素数。View が表示領域と一緒に渡すまでは 1 とする。
+    private double _renderScaling = 1;
     private double _viewportWidth;
     private double _viewportHeight;
     private double _offsetX;
@@ -89,7 +91,7 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
             _tallestPage = Math.Max(_tallestPage, _pageSizes[index].Height);
         }
 
-        _layout = new PdfPageLayout(_pageSizes, _zoom, 0);
+        _layout = new PdfPageLayout(_pageSizes, _zoom, 0, _renderScaling);
         _contentWidth = _layout.ContentWidth;
         _contentHeight = _layout.ContentHeight;
     }
@@ -383,9 +385,10 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
     /// <summary>
     /// 表示領域（ページを囲む余白を除いた大きさ）を受け取り、フィット倍率と表示範囲を更新する。
-    /// 描画が落ち着くまで待つ。
+    /// <paramref name="renderScaling"/> は表示先の拡大率で、変わったら画像をその画素密度で描き直す。
+    /// 省略すると直前の値を保つ。描画が落ち着くまで待つ。
     /// </summary>
-    internal Task UpdateViewportAsync(Size available)
+    internal Task UpdateViewportAsync(Size available, double? renderScaling = null)
     {
         if (_disposed || !double.IsFinite(available.Width) || !double.IsFinite(available.Height)
             || available.Width <= 0 || available.Height <= 0)
@@ -395,7 +398,15 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
         var changed = Math.Abs(_available.Width - available.Width) > Epsilon
             || Math.Abs(_available.Height - available.Height) > Epsilon;
-        if (!changed && _scrollPlaced) return WhenIdleAsync();
+        var scaling = renderScaling is { } value && double.IsFinite(value) && value > 0 ? value : _renderScaling;
+        var scalingChanged = Math.Abs(_renderScaling - scaling) > Epsilon;
+        if (!changed && !scalingChanged && _scrollPlaced) return WhenIdleAsync();
+
+        if (scalingChanged)
+        {
+            _renderScaling = scaling;
+            BumpGeneration();
+        }
 
         _available = available;
         _viewportWidth = available.Width + 2 * PdfPageLayout.Margin;
@@ -405,6 +416,13 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         if (Math.Abs(fit - Zoom) > Epsilon)
         {
             ApplyZoom(fit, reference: 0);
+        }
+        else if (scalingChanged)
+        {
+            // ページ寸法の画素への丸めが変わるので、表示上端のページ位置を保って置き直す。
+            var (anchor, used) = CaptureReference(0);
+            RebuildLayout();
+            PlaceFromAnchor(anchor, used);
         }
         else
         {
@@ -522,7 +540,7 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
 
     private void RebuildLayout()
     {
-        _layout = new PdfPageLayout(_pageSizes, Zoom, _available.Width);
+        _layout = new PdfPageLayout(_pageSizes, Zoom, _available.Width, _renderScaling);
         ContentWidth = _layout.ContentWidth;
         ContentHeight = _layout.ContentHeight;
         foreach (var page in _pages.Values) ApplyGeometry(page);
@@ -536,7 +554,7 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         page.Height = _layout.Height(page.Index);
     }
 
-    /// <summary>倍率が変わったので、描いた画像を古い世代にして描き直す。進行中の描画は捨てる。</summary>
+    /// <summary>倍率か拡大率が変わったので、描いた画像を古い世代にして描き直す。進行中の描画は捨てる。</summary>
     private void BumpGeneration()
     {
         _generationCancellation.Cancel();
@@ -727,7 +745,8 @@ public sealed partial class PdfDocumentViewModel : WorkspaceTabViewModel, IDispo
         Avalonia.Media.Imaging.Bitmap? bitmap = null;
         try
         {
-            bitmap = await _renderer.RenderAsync(page.Index, Zoom, token);
+            // 表示は DIP、画像はデバイス画素。拡大率を掛けないと表示側で引き伸ばされてぼやける。
+            bitmap = await _renderer.RenderAsync(page.Index, Zoom * _renderScaling, token);
             if (!IsCurrent(page, generation, token)) return;
             var previous = page.Image;
             page.Image = bitmap;

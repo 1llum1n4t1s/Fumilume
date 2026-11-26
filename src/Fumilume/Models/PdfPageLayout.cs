@@ -20,12 +20,20 @@ public sealed class PdfPageLayout
     /// <summary>ページとページの間隔。</summary>
     public const double PageGap = 12;
 
+    /// <summary>描画する画像の 1 辺の画素数の上限。</summary>
+    public const int MaximumRenderDimension = 8192;
+
     private readonly double[] _tops;
     private readonly double[] _lefts;
     private readonly double[] _widths;
     private readonly double[] _heights;
 
-    public PdfPageLayout(IReadOnlyList<Size> pageSizes, double zoom, double availableWidth)
+    /// <summary>
+    /// <paramref name="renderScaling"/>（1 DIP あたりのデバイス画素数）を渡すと、ページの寸法を
+    /// デバイス画素の整数へ揃える。端数があると表示側の丸めで画像と 1 画素ずれ、全面が再サンプリングされる。
+    /// </summary>
+    public PdfPageLayout(
+        IReadOnlyList<Size> pageSizes, double zoom, double availableWidth, double? renderScaling = null)
     {
         ArgumentNullException.ThrowIfNull(pageSizes);
         PageCount = pageSizes.Count;
@@ -38,8 +46,8 @@ public sealed class PdfPageLayout
         var widest = 0.0;
         for (var index = 0; index < PageCount; index++)
         {
-            _widths[index] = Scale(pageSizes[index].Width, zoom);
-            _heights[index] = Scale(pageSizes[index].Height, zoom);
+            _widths[index] = Scale(pageSizes[index].Width, zoom, renderScaling);
+            _heights[index] = Scale(pageSizes[index].Height, zoom, renderScaling);
             widest = Math.Max(widest, _widths[index]);
         }
 
@@ -151,8 +159,29 @@ public sealed class PdfPageLayout
         return found;
     }
 
-    private static double Scale(double size, double zoom)
+    /// <summary>
+    /// 長さを画素数へ直す。表示領域に合わせた寸法がはみ出さないよう切り捨て、計算誤差だけは許容する。
+    /// </summary>
+    public static int DevicePixels(double length, double pixelsPerUnit)
     {
+        var value = Math.Floor(length * pixelsPerUnit + 0.000001);
+        return value >= 1 ? (int)Math.Min(value, int.MaxValue) : 1;
+    }
+
+    /// <summary>
+    /// ページを描く画像の画素寸法。<see cref="MaximumRenderDimension"/> を超えるときは、
+    /// 縦横の比率が崩れないよう共通の係数で縮める。
+    /// </summary>
+    public static PixelSize RenderPixels(Size page, double pixelsPerUnit)
+    {
+        var longest = Math.Max(page.Width, page.Height) * pixelsPerUnit;
+        if (longest > MaximumRenderDimension) pixelsPerUnit *= MaximumRenderDimension / longest;
+        return new PixelSize(DevicePixels(page.Width, pixelsPerUnit), DevicePixels(page.Height, pixelsPerUnit));
+    }
+
+    private static double Scale(double size, double zoom, double? renderScaling)
+    {
+        if (renderScaling is { } scaling) return DevicePixels(size, zoom * scaling) / scaling;
         var value = size * zoom;
         return double.IsFinite(value) && value > 0 ? value : 1;
     }

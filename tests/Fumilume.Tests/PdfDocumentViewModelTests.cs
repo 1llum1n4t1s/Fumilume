@@ -224,7 +224,8 @@ public sealed class PdfDocumentViewModelTests(HeadlessAppFixture fixture)
 
         Assert.Equal(PdfZoomMode.Manual, document.ZoomMode);
         Assert.Equal(0.46875, document.Zoom, precision: 10);
-        var layout = new PdfPageLayout([new(600, 800), .. Enumerable.Repeat(new Avalonia.Size(800, 600), 5)], 0.46875, 300);
+        // ViewModel はページ寸法をデバイス画素へ揃える（拡大率を渡していなければ 1）。
+        var layout = new PdfPageLayout([new(600, 800), .. Enumerable.Repeat(new Avalonia.Size(800, 600), 5)], 0.46875, 300, 1);
         var expected = layout.Top(1) + layout.Height(1) / 2 - 274;
         Assert.Equal(expected, document.ScrollRequest!.OffsetY, precision: 6);
         ApplyPendingScroll(document);

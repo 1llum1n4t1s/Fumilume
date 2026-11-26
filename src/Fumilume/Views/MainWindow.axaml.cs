@@ -136,6 +136,8 @@ public sealed partial class MainWindow : Window
 
         _fileChangeMonitor.FileChanged += OnExternalFileChanged;
         Opened += OnOpened;
+        // 拡大率の違うモニターへ移ると、表示領域の DIP 寸法が同じでも PDF の描き直しが要る。
+        ScalingChanged += (_, _) => Dispatcher.UIThread.Post(SyncPdfScroll, DispatcherPriority.Loaded);
         Activated += OnActivated;
         Closing += OnClosing;
         Closed += OnClosed;
@@ -758,10 +760,10 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // ページを囲む余白を除いた大きさを渡す。余白の幅は配置計算と同じ定数を使う。
+        // ページを囲む余白を除いた大きさと表示の拡大率を渡す。余白の幅は配置計算と同じ定数を使う。
         _ = pdf.UpdateViewportAsync(new Size(
             viewer.Viewport.Width - 2 * Models.PdfPageLayout.Margin,
-            viewer.Viewport.Height - 2 * Models.PdfPageLayout.Margin));
+            viewer.Viewport.Height - 2 * Models.PdfPageLayout.Margin), RenderScaling);
     }
 
     private void OnEditorCaretPositionChanged(object? sender, EventArgs args)

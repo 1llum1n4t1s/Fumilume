@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Fumilume.Models;
 
 namespace Fumilume.Services;
 
@@ -19,7 +20,6 @@ public interface IPdfRenderer : IDisposable
 public sealed partial class MacPdfRenderer : IPdfRenderer
 {
     private const string CoreGraphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
-    private const uint MaximumDimension = 8192;
     private const uint BitmapByteOrder32Little = 2U << 12;
     private const uint ImageAlphaPremultipliedFirst = 2;
     private readonly object _sync = new();
@@ -126,15 +126,9 @@ public sealed partial class MacPdfRenderer : IPdfRenderer
 
             var page = GetPage(_document, pageIndex);
             var pageSize = _pageSizes[pageIndex];
-            var safeZoom = Math.Clamp(zoom, 0.001, 4.0);
-            var width = checked((int)Math.Clamp(
-                Math.Round(pageSize.Width * safeZoom),
-                1,
-                MaximumDimension));
-            var height = checked((int)Math.Clamp(
-                Math.Round(pageSize.Height * safeZoom),
-                1,
-                MaximumDimension));
+            var pixels = PdfPageLayout.RenderPixels(pageSize, Math.Max(zoom, 0.001));
+            var width = pixels.Width;
+            var height = pixels.Height;
             var bitmap = new WriteableBitmap(
                 new PixelSize(width, height),
                 new Vector(96, 96),
@@ -170,11 +164,13 @@ public sealed partial class MacPdfRenderer : IPdfRenderer
                     CGContextSetRGBFillColor(context, 1, 1, 1, 1);
                     CGContextFillRect(context, destination);
                     // ビットマップコンテキストには画面用の上下反転を加えず、
-                    // PDF の回転と出力サイズへの変換を Core Graphics に任せる。
+                    // PDF の回転と表示寸法への変換を Core Graphics に任せる。
+                    // CGPDFPageGetDrawingTransform は拡大しないため、等倍の矩形へ変換し、出力画素への拡大は先に重ねる。
+                    CGContextScaleCTM(context, width / pageSize.Width, height / pageSize.Height);
                     var transform = CGPDFPageGetDrawingTransform(
                         page,
                         CGPDFBox.Crop,
-                        destination,
+                        new CGRect(0, 0, pageSize.Width, pageSize.Height),
                         0,
                         true);
                     CGContextConcatCTM(context, transform);
@@ -372,6 +368,9 @@ public sealed partial class MacPdfRenderer : IPdfRenderer
 
     [LibraryImport(CoreGraphics)]
     private static partial void CGContextConcatCTM(nint context, CGAffineTransform transform);
+
+    [LibraryImport(CoreGraphics)]
+    private static partial void CGContextScaleCTM(nint context, double scaleX, double scaleY);
 
     [LibraryImport(CoreGraphics)]
     private static partial void CGContextSetInterpolationQuality(nint context, int quality);

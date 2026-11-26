@@ -1,4 +1,5 @@
 using Avalonia.Media.Imaging;
+using Fumilume.Models;
 using Windows.Data.Pdf;
 using Windows.Storage;
 using Windows.Storage.Streams;
@@ -17,7 +18,6 @@ public interface IPdfRenderer : IDisposable
 /// <summary>Windows 標準の PDF レンダラーを使い、要求されたページを 1 枚ずつ画像化する。ページ寸法は開くときに読む。</summary>
 public sealed class WindowsPdfRenderer : IPdfRenderer
 {
-    private const uint MaximumDimension = 8192;
     private readonly PdfDocument _document;
     private readonly Avalonia.Size[] _pageSizes;
 
@@ -69,20 +69,12 @@ public sealed class WindowsPdfRenderer : IPdfRenderer
         // 画像化は表示範囲のページだけに限る。全ページを同時に画像化しない。
         using var page = _document.GetPage(checked((uint)pageIndex));
         using var randomAccessStream = new InMemoryRandomAccessStream();
-        // フィット表示では 25% 未満も必要になる。画像の確保量は従来の上限で抑える。
-        var safeZoom = Math.Clamp(zoom, 0.001, 4.0);
-        var destinationWidth = (uint)Math.Clamp(
-            Math.Round(page.Size.Width * safeZoom),
-            1,
-            MaximumDimension);
-        var destinationHeight = (uint)Math.Clamp(
-            Math.Round(page.Size.Height * safeZoom),
-            1,
-            MaximumDimension);
+        // フィット表示では 25% 未満も、高 DPI では 400% 超も必要になる。画像の確保量は 1 辺の上限で抑える。
+        var pixels = PdfPageLayout.RenderPixels(_pageSizes[pageIndex], Math.Max(zoom, 0.001));
         var options = new PdfPageRenderOptions
         {
-            DestinationWidth = destinationWidth,
-            DestinationHeight = destinationHeight,
+            DestinationWidth = (uint)pixels.Width,
+            DestinationHeight = (uint)pixels.Height,
         };
 
         await page.RenderToStreamAsync(randomAccessStream, options);
