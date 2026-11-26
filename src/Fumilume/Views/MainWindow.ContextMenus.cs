@@ -137,6 +137,7 @@ public sealed partial class MainWindow
                 IsEnabled = entry.IsEnabled,
                 InputGesture = ParseGesture(PlatformGesture(entry.Gesture)),
             };
+            ShowEnterKeyName(item);
             if (entry.ToolTip is not null)
             {
                 ToolTip.SetTip(item, entry.ToolTip);
@@ -154,6 +155,27 @@ public sealed partial class MainWindow
 
             items.Add(item);
         }
+    }
+
+    /// <summary>
+    /// Enter と Return は同じキー値で、Avalonia の Windows 向け表示は Return になるため、表示だけを Enter にする。
+    /// 割り当て（InputGesture）は変えず、macOS は既定の記号表示（↩）のままにする。
+    /// </summary>
+    private static void ShowEnterKeyName(MenuItem item)
+    {
+        if (UsesMacPlatformConventions || item.InputGesture is not { Key: Key.Enter } gesture)
+        {
+            return;
+        }
+
+        var text = gesture.ToString("p", null).Replace(nameof(Key.Return), nameof(Key.Enter), StringComparison.Ordinal);
+        item.TemplateApplied += (_, args) =>
+        {
+            if (args.NameScope.Find<TextBlock>("PART_InputGestureText") is { } label)
+            {
+                label.Text = text;
+            }
+        };
     }
 
     /// <summary>ViewModel の Windows 表記（Ctrl+W）を、macOS では Command 表記へ読み替える。</summary>
