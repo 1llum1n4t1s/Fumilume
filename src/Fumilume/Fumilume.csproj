@@ -26,11 +26,13 @@
   <ItemGroup Condition="'$(FumilumeTargetMac)' == 'true'">
     <Compile Remove="Services\FileAssociationService.cs" />
     <Compile Remove="Services\WindowsPdfRenderer.cs" />
+    <Compile Remove="Services\Windows*.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(FumilumeTargetMac)' != 'true'">
     <Compile Remove="Services\MacFileAssociationService.cs" />
     <Compile Remove="Services\MacPdfRenderer.cs" />
+    <Compile Remove="Services\Mac*.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -29,6 +29,7 @@
         <KeyBinding Gesture="Ctrl+Shift+R" Command="{Binding ReloadCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+M" Command="{Binding TogglePreviewCommand}" />
         <KeyBinding Gesture="Ctrl+W" Command="{Binding CloseTabCommand}" CommandParameter="{Binding SelectedTab}" />
+        <KeyBinding Gesture="Ctrl+Shift+T" Command="{Binding ReopenLastClosedTabCommand}" />
         <KeyBinding Gesture="Ctrl+G" Command="{Binding GoToLineCommand}" />
         <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding OpenSettingsCommand}" />
 
@@ -155,7 +156,7 @@
                         <!-- 開いているもの。文書タブと設定タブが同じ一覧に並ぶ。項目の型は
                              WorkspaceTabViewModel で、表示に要る 3 つ（表題・アイコン・ツールチップ）
                              だけを基底が公開している。 -->
-                        <ListBox Classes="verticaltabs" IsVisible="{Binding SidePanel.IsTabsPanel}"
+                        <ListBox x:Name="TabList" Classes="verticaltabs" IsVisible="{Binding SidePanel.IsTabsPanel}"
                                  ItemsSource="{Binding Tabs}"
                                  SelectedItem="{Binding SelectedTab}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -170,17 +171,6 @@
                                          このメニューと Ctrl+W（Macでは ⌘W）・コマンドパレットで残している。 -->
                                     <Grid Height="{DynamicResource TabItemHeight}"
                                           ColumnDefinitions="36,*,Auto" Background="Transparent">
-                                        <Grid.ContextMenu>
-                                            <ContextMenu>
-                                                <!-- 文言は現在の状態に合わせて「タブをピン留め」「ピン留めを解除」に切り替わる。
-                                                     設定タブはピン留めできない（CanPin=false）ので項目ごと出さない。 -->
-                                                <MenuItem Header="{Binding PinTooltip}"
-                                                          Command="{Binding TogglePinCommand}"
-                                                          IsVisible="{Binding CanPin}" />
-                                                <MenuItem Header="タブを閉じる" Command="{Binding CloseTabCommand}" />
-                                            </ContextMenu>
-                                        </Grid.ContextMenu>
-
                                         <!-- 固定タブの目印。アクセント色ではなく、テーマ内の明暗差で示す。
                                              行全体へ半透明のベール（TabPinnedOverlay）を重ね、左端に太め（3px）のバーを
                                              出す。ベールが半透明なので、下の通常／ホバー／選択の背景色は透けて残る。

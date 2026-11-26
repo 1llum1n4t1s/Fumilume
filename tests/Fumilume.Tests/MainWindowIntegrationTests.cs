@@ -493,6 +493,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     /// ピン留めは常時表示のボタンではなく、行の右クリックメニュー（姉妹アプリ Kiriha と同じ作り）から行う。
     /// 固定タブは末尾が閉じるボタンの代わりにピンの目印（Path）になるので、
     /// 「未固定は閉じるボタン、固定はピンの目印」の切り替えまで実ツリーで確かめる。
+    /// 右クリックは実際のマウス入力で起こし、表示された MenuFlyout の項目を検査する。
     /// </summary>
     [Fact]
     public void TabRowsOfferPinAndCloseInTheContextMenuAndShowPinnedState() => fixture.Run(() =>
@@ -502,21 +503,18 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 
         var document = scope.ViewModel.SelectedDocument!;
         var row = FindTabRow(scope.Window, document);
-        var menu = Assert.IsType<ContextMenu>(row.ContextMenu);
-        // ContextMenu は開くまで DataContext を受け取らないので、実際に開いてからバインド結果を見る。
-        menu.Open(row);
-        Dispatcher.UIThread.RunJobs();
-        var items = menu.Items.OfType<MenuItem>().ToList();
-        Assert.Equal(2, items.Count);
+        var flyout = RightClick(scope.Window, row);
 
-        // 右クリックメニュー: 先頭がピン留め（状態で文言が変わる）、次が閉じる。
-        var pinItem = items[0];
-        var closeItem = items[1];
-        Assert.Same(document.TogglePinCommand, pinItem.Command);
-        Assert.Equal("タブをピン留め", pinItem.Header);
-        Assert.True(pinItem.IsVisible);
-        Assert.Same(document.CloseTabCommand, closeItem.Command);
-        Assert.Equal("タブを閉じる", closeItem.Header);
+        // 右クリックメニュー: 先頭が新しいタブ、続いて状態で文言が変わるピン留め、閉じる。
+        // 項目の順序・有効条件の全体は ContextMenuTests が確かめる。
+        var pinItem = MenuItemOf(flyout, "タブをピン留め");
+        var closeItem = MenuItemOf(flyout, "タブを閉じる");
+        Assert.Equal("新しいタブを下に開く", FlyoutLayout(flyout.Items)[0]);
+        Assert.Equal("-", FlyoutLayout(flyout.Items)[1]);
+        Assert.Equal("タブをピン留め", FlyoutLayout(flyout.Items)[2]);
+        Assert.True(pinItem.IsEnabled);
+        Assert.Equal(new KeyGesture(Key.W, KeyModifiers.Control), closeItem.InputGesture);
+        flyout.Hide();
 
         // 常時表示のピンボタンは持たない。未固定では閉じるボタンが出て、ピンの目印は出ない。
         Assert.DoesNotContain(scope.Window.GetVisualDescendants().OfType<Button>(),
@@ -528,12 +526,10 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.True(close.IsEffectivelyVisible);
         Assert.False(mark.IsEffectivelyVisible);
 
-        // メニューのコマンドで固定する。固定中は閉じるボタンが隠れ、ピンの目印が出る。
-        pinItem.Command!.Execute(null);
-        Dispatcher.UIThread.RunJobs();
+        // メニューの項目で固定する。固定中は閉じるボタンが隠れ、ピンの目印が出る。
+        ClickMenuItem(pinItem);
 
         Assert.True(document.IsPinned);
-        Assert.Equal("ピン留めを解除", pinItem.Header);
         Assert.False(close.IsEffectivelyVisible);
         Assert.True(mark.IsEffectivelyVisible);
         Assert.Equal("ピン留めを解除", ToolTip.GetTip(mark));
@@ -541,12 +537,12 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         Assert.Equal(2, row.Children.OfType<Border>().Count(
             border => border is { IsHitTestVisible: false, IsVisible: true }));
 
-        // もう一度で解除。閉じるボタンが戻る。
-        pinItem.Command.Execute(null);
-        Dispatcher.UIThread.RunJobs();
+        // もう一度右クリックすると文言が「ピン留めを解除」になり、選ぶと解除。閉じるボタンが戻る。
+        var pinnedFlyout = RightClick(scope.Window, row);
+        var unpinItem = MenuItemOf(pinnedFlyout, "ピン留めを解除");
+        ClickMenuItem(unpinItem);
 
         Assert.False(document.IsPinned);
-        Assert.Equal("タブをピン留め", pinItem.Header);
         Assert.True(close.IsEffectivelyVisible);
         Assert.False(mark.IsEffectivelyVisible);
         Assert.DoesNotContain(row.Children.OfType<Border>(), border => border.IsVisible);
@@ -561,19 +557,205 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
 
         var settings = scope.ViewModel.Tabs.Single(tab => tab.IsSettingsTab);
         var row = FindTabRow(scope.Window, settings);
-        var menu = Assert.IsType<ContextMenu>(row.ContextMenu);
-        menu.Open(row);
-        Dispatcher.UIThread.RunJobs();
-        var items = menu.Items.OfType<MenuItem>().ToList();
+        var flyout = RightClick(scope.Window, row);
 
-        // 設定タブはピン留めできない（CanPin=false）。項目は隠れ、閉じる手段は残る。
+        // 設定タブはピン留めできない（CanPin=false）。項目ごと出さず、閉じる手段は残る。
         Assert.False(settings.CanPin);
-        Assert.False(items[0].IsVisible);
-        Assert.False(items[0].Command!.CanExecute(null));
-        Assert.Same(settings.CloseTabCommand, items[1].Command);
+        Assert.DoesNotContain(flyout.Items.OfType<MenuItem>(), item => item.Header as string is "タブをピン留め" or "ピン留めを解除");
+        Assert.Contains(flyout.Items.OfType<MenuItem>(), item => item.Header as string == "タブを閉じる");
         var close = row.GetVisualDescendants().OfType<Button>().Single(button => button.Classes.Contains("tabclose"));
         Assert.True(close.IsEffectivelyVisible);
     });
+
+    /// <summary>
+    /// 行と余白の右クリック（実際のマウス入力）が、それぞれのメニューを出す。タブ一覧の余白は新しいタブと閉じたタブを開く。
+    /// </summary>
+    [Fact]
+    public void RightClickOnTabRowsAndBlankSpaceShowsTheirOwnMenus() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope(shell: new FakeShellFileService(Path.Combine(Path.GetTempPath(), "unused")));
+        var paths = WriteFiles(scope, "b.txt", "a.txt");
+        MainWindowE2ETestHelper.Pump(scope.ViewModel.OpenPathsAsync(paths));
+        scope.Window.UpdateLayout();
+        var tabList = TabList(scope.Window);
+
+        // 余白（行の下）。
+        var blank = RightClick(scope.Window, tabList, new Point(tabList.Bounds.Width / 2, tabList.Bounds.Height - 6));
+        Assert.Equal(["新しいタブ", "閉じたタブを開く"], FlyoutLayout(blank.Items));
+        Assert.Equal(new KeyGesture(Key.N, KeyModifiers.Control), MenuItemOf(blank, "新しいタブ").InputGesture);
+        Assert.Equal(
+            new KeyGesture(Key.T, KeyModifiers.Control | KeyModifiers.Shift), MenuItemOf(blank, "閉じたタブを開く").InputGesture);
+        var tabCount = scope.ViewModel.Tabs.Count;
+        ClickMenuItem(MenuItemOf(blank, "新しいタブ"));
+        Assert.Equal(tabCount + 1, scope.ViewModel.Tabs.Count);
+        blank.Hide();
+
+        // 行。ファイルのあるタブにはファイル操作が付く。
+        scope.Window.UpdateLayout();
+        var fileTab = scope.ViewModel.Documents.Single(document => document.FilePath == paths[0]);
+        var rowMenu = RightClick(scope.Window, FindTabRow(scope.Window, fileTab));
+        var layout = FlyoutLayout(rowMenu.Items);
+        Assert.Contains("切り取り", layout);
+        Assert.Contains("エクスプローラーで表示", layout);
+        var detail = MenuItemOf(rowMenu, "タブの詳細操作");
+        Assert.Equal(19, detail.Items.Count);
+        var recent = MenuItemOf(rowMenu, "最近閉じたタブ");
+        var none = Assert.IsType<MenuItem>(Assert.Single(recent.Items));
+        Assert.Equal("(なし)", none.Header);
+        Assert.False(none.IsEnabled);
+        rowMenu.Hide();
+    });
+
+    /// <summary>キーボード（メニューキー・Shift+F10）で起動したメニューは選択中のタブが対象。並べ替えても選択は保たれる。</summary>
+    [Fact]
+    public void KeyboardContextRequestTargetsTheSelectedTabAndSortingKeepsIt() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope(shell: new FakeShellFileService(Path.Combine(Path.GetTempPath(), "unused")));
+        var paths = WriteFiles(scope, "z.txt", "a.txt", "m.txt");
+        MainWindowE2ETestHelper.Pump(scope.ViewModel.OpenPathsAsync(paths));
+        scope.Window.UpdateLayout();
+        var tabList = TabList(scope.Window);
+        var last = scope.ViewModel.Documents.Single(document => document.FilePath == paths[2]);
+        scope.ViewModel.SelectedTab = last;
+        Dispatcher.UIThread.RunJobs();
+
+        var before = scope.Window.ShownContextFlyout;
+        tabList.RaiseEvent(new ContextRequestedEventArgs());
+        PumpUntilNew(scope.Window, before);
+        var flyout = scope.Window.ShownContextFlyout!;
+        // 最後のタブなので下側のタブを閉じる対象が無い。
+        Assert.False(MenuItemOf(flyout, "下側のタブを閉じる").IsEnabled);
+        Assert.True(MenuItemOf(flyout, "他のタブを閉じる").IsEnabled);
+
+        var sort = MenuItemOf(flyout, "タブの詳細操作").Items.OfType<MenuItem>().Single(item => item.Header as string == "名前順に並べ替え");
+        ClickMenuItem(sort);
+
+        Assert.Same(last, scope.ViewModel.SelectedTab);
+        Assert.Same(last, tabList.SelectedItem);
+        Assert.Equal(
+            [paths[1], paths[2], paths[0]],
+            scope.ViewModel.Documents.Select(document => document.FilePath));
+        flyout.Hide();
+    });
+
+    [Fact]
+    public void CtrlShiftTReopensTheLastClosedTab() => fixture.Run(() =>
+    {
+        using var scope = new WindowScope();
+        var paths = WriteFiles(scope, "a.txt", "b.txt");
+        MainWindowE2ETestHelper.Pump(scope.ViewModel.OpenPathsAsync(paths));
+        var closed = scope.ViewModel.Documents.Single(document => document.FilePath == paths[1]);
+        MainWindowE2ETestHelper.Pump(closed.CloseTabCommand.ExecuteAsync(null));
+        Assert.DoesNotContain(scope.ViewModel.Documents, document => document.FilePath == paths[1]);
+
+        scope.Window.KeyPress(Key.T, RawInputModifiers.Control | RawInputModifiers.Shift, default, null);
+        PumpUntil(() => scope.ViewModel.Documents.Any(document => document.FilePath == paths[1]));
+
+        Assert.Equal(paths[1], scope.ViewModel.SelectedDocument!.FilePath);
+        Assert.Empty(scope.ViewModel.RecentClosedTabPaths);
+    });
+
+    /// <summary>フォルダツリーの右クリックはそのノードを選ぶが、ファイルは開かない（一時タブも作らない）。</summary>
+    [Fact]
+    public void RightClickInTheFolderTreeSelectsTheNodeWithoutOpeningFilesAndShowsItsMenu() => fixture.Run(() =>
+    {
+        var shell = new FakeShellFileService(Path.Combine(Path.GetTempPath(), "unused"));
+        using var scope = new WindowScope(shell: shell);
+        var paths = WriteFiles(scope, "a.txt");
+        Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(paths[0])!, "sub"));
+        MainWindowE2ETestHelper.Pump(scope.ViewModel.OpenFolderPathAsync(Path.GetDirectoryName(paths[0])!));
+        scope.Window.UpdateLayout();
+        var tree = scope.Window.FindControl<TreeView>("FolderTree")!;
+        var file = scope.ViewModel.FolderRoots[0].Children.Single(node => !node.IsDirectory);
+        var tabsBefore = scope.ViewModel.Tabs.ToArray();
+
+        var item = tree.GetVisualDescendants().OfType<TreeViewItem>().First(candidate => ReferenceEquals(candidate.DataContext, file));
+        var flyout = RightClick(scope.Window, item.GetVisualDescendants().OfType<Grid>().First());
+
+        Assert.Same(file, scope.ViewModel.SelectedFolderNode);
+        Assert.Equal(tabsBefore, scope.ViewModel.Tabs.ToArray());
+        Assert.DoesNotContain(scope.ViewModel.Tabs, tab => tab.IsPreview);
+        Assert.Contains("開く", FlyoutLayout(flyout.Items));
+        Assert.Equal(new KeyGesture(Key.Enter), MenuItemOf(flyout, "開く").InputGesture);
+        flyout.Hide();
+
+        // 貼り付けは、クリップボードにファイルがあるときだけ有効（フォルダのノード）。
+        var sub = scope.ViewModel.FolderRoots[0].Children.Single(node => node.IsDirectory);
+        var subItem = tree.GetVisualDescendants().OfType<TreeViewItem>().First(candidate => ReferenceEquals(candidate.DataContext, sub));
+        var withoutClipboard = RightClick(scope.Window, subItem.GetVisualDescendants().OfType<Grid>().First());
+        Assert.False(MenuItemOf(withoutClipboard, "貼り付け").IsEnabled);
+        withoutClipboard.Hide();
+        MainWindowE2ETestHelper.Pump(shell.SetFileClipboardAsync([paths[0]], isCut: false));
+        var withClipboard = RightClick(scope.Window, subItem.GetVisualDescendants().OfType<Grid>().First());
+        Assert.True(MenuItemOf(withClipboard, "貼り付け").IsEnabled);
+        withClipboard.Hide();
+
+        // 余白は更新と折りたたみだけ。
+        var blank = RightClick(scope.Window, tree, new Point(tree.Bounds.Width / 2, tree.Bounds.Height - 6));
+        Assert.Equal(["最新の情報に更新", "すべて折りたたむ"], FlyoutLayout(blank.Items));
+        blank.Hide();
+        Assert.DoesNotContain(scope.ViewModel.Documents, document => document.FilePath is not null);
+    });
+
+    private static string[] WriteFiles(WindowScope scope, params string[] names)
+    {
+        var paths = names.Select(name => Path.Combine(scope.StoragePath, "docs", name)).ToArray();
+        Directory.CreateDirectory(Path.Combine(scope.StoragePath, "docs"));
+        foreach (var path in paths)
+        {
+            File.WriteAllText(path, "x");
+        }
+
+        return paths;
+    }
+
+    private static ListBox TabList(Window window)
+        => window.GetVisualDescendants().OfType<ListBox>().Single(list => list.Classes.Contains("verticaltabs"));
+
+    /// <summary>実際のマウスの右クリックを起こし、表示された右クリックメニューを返す。</summary>
+    private static MenuFlyout RightClick(MainWindow window, Control target, Point? at = null)
+    {
+        window.UpdateLayout();
+        var before = window.ShownContextFlyout;
+        var local = at ?? new Point(target.Bounds.Width / 2, target.Bounds.Height / 2);
+        var point = target.TranslatePoint(local, window)!.Value;
+        window.MouseDown(point, MouseButton.Right);
+        window.MouseUp(point, MouseButton.Right);
+        PumpUntilNew(window, before);
+        return window.ShownContextFlyout!;
+    }
+
+    private static void PumpUntilNew(MainWindow window, MenuFlyout? before)
+        => PumpUntil(() => window.ShownContextFlyout is { IsOpen: true } shown && !ReferenceEquals(shown, before));
+
+    private static void PumpUntil(Func<bool> condition)
+    {
+        var timeout = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && timeout.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(1);
+        }
+
+        Assert.True(condition(), "条件が10秒以内に満たされませんでした。");
+    }
+
+    private static MenuItem MenuItemOf(MenuFlyout flyout, string header)
+        => flyout.Items.OfType<MenuItem>().Single(item => item.Header as string == header);
+
+    private static string[] FlyoutLayout(ItemCollection items)
+        => [.. items.Select(item => item is MenuItem menuItem ? menuItem.Header as string ?? string.Empty : "-")];
+
+    /// <summary>メニュー項目を選ぶ（押された後の非同期処理まで流す）。</summary>
+    private static void ClickMenuItem(MenuItem item)
+    {
+        item.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+        for (var i = 0; i < 50; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(2);
+        }
+    }
 
     /// <summary>実描画で縦タブの配色（未固定・固定・選択・ホバー）を PNG に保存する目視用の E2E。</summary>
     [Fact(Skip = "実描画E2E: FUMILUME_E2E_RENDER=1 で個別実行",
@@ -652,7 +834,7 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
             .Single(list => list.Classes.Contains("verticaltabs"))
             .GetVisualDescendants()
             .OfType<Grid>()
-            .Single(grid => grid.ContextMenu is not null && ReferenceEquals(grid.DataContext, tab));
+            .First(grid => grid.ColumnDefinitions.Count == 3 && ReferenceEquals(grid.DataContext, tab));
 
     [Fact]
     public void EditorOptionsFollowTheSettings() => fixture.Run(() =>
@@ -1360,7 +1542,11 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
         using var scope = new WindowScope();
         var document = scope.ViewModel.Documents.Single();
         var source = string.Join('\n', Enumerable.Repeat("a,b", 40_000));
-        document.Load(@"C:\tmp\large-append.csv", new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
+        // 外部変更の監視は追加の非同期処理の最中に届くことがある。存在しないパスだと
+        // 「ディスク上から削除」の通知が状態表示を上書きするため、内容が同じ実在のファイルを使う。
+        var path = Path.Combine(scope.StoragePath, "large-append.csv");
+        File.WriteAllText(path, source);
+        document.Load(path, new TextDocumentContent(source, DocumentEncoding.Utf8, "\n"));
         var task = scope.ViewModel.RunEditorCommandCommand.ExecuteAsync(EditorCommandId.AppendCsvRow);
         Assert.False(task.IsCompleted);
         var uiResponded = false;
@@ -2682,10 +2868,13 @@ public sealed class MainWindowIntegrationTests(HeadlessAppFixture fixture)
     {
         private readonly TemporaryStorage _storage = new();
 
-        public WindowScope(double? width = null, double? height = null)
+        public WindowScope(double? width = null, double? height = null, IShellFileService? shell = null)
         {
             // 起動時の更新確認は外部通信になるためテストでは切る。
-            Window = new MainWindow(new AppSettings { CheckUpdatesOnStartup = false });
+            // 右クリックメニューの検査では、実機のクリップボードやシェルに触れないよう偽のシェル操作を渡す。
+            Window = new MainWindow(
+                new AppSettings { CheckUpdatesOnStartup = false },
+                shell ?? new FakeShellFileService(Path.Combine(Path.GetTempPath(), "unused")));
             ViewModel = (MainWindowViewModel)Window.DataContext!;
             if (width is not null)
             {

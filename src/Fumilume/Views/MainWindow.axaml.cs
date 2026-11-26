@@ -67,6 +67,12 @@ public sealed partial class MainWindow : Window
     /// <see cref="App"/> が起動時に読み込んだ設定。null のときは自分で読む。
     /// </param>
     public MainWindow(AppSettings? settings)
+        : this(settings, null)
+    {
+    }
+
+    /// <param name="shellFiles">ファイル操作の実装。null のときは実行中の OS の実装を使う（テストが差し替える）。</param>
+    internal MainWindow(AppSettings? settings, IShellFileService? shellFiles)
     {
         InitializeComponent();
 
@@ -77,7 +83,8 @@ public sealed partial class MainWindow : Window
             new DocumentFileService(),
             dialogs,
             settings,
-            fileChangeMonitor: _fileChangeMonitor);
+            fileChangeMonitor: _fileChangeMonitor,
+            shellFiles: shellFiles ?? CreatePlatformShellFiles());
         _options = _viewModel.Options;
         DataContext = _viewModel;
 
@@ -90,6 +97,7 @@ public sealed partial class MainWindow : Window
             AppSettingsDefaults.MinimumSidePanelWidth,
             AppSettingsDefaults.MaximumSidePanelWidth));
         InitializeFolderExplorer();
+        InitializeContextMenus();
 
         _editor = this.FindControl<TextEditor>("Editor")
             ?? throw new InvalidOperationException("エディタを初期化できませんでした。");
@@ -1239,6 +1247,9 @@ public sealed partial class MainWindow : Window
                     break;
                 case Key.P:
                     _viewModel.OpenCommandPaletteCommand.Execute(null);
+                    break;
+                case Key.T:
+                    _viewModel.ReopenLastClosedTabCommand.Execute(null);
                     break;
                 default:
                     // Command+Shift+F は下の検索処理で扱う。

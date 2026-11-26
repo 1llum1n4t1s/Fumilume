@@ -34,7 +34,8 @@ public sealed partial class MainWindowViewModel
             if (!permanent && previousPreview is { IsPreview: true, IsPinned: false }
                 && previousPreview is not DocumentViewModel { IsModified: true })
             {
-                await CloseTabCoreAsync(previousPreview);
+                // 変更のある文書は上の条件で除いており、確認は出ない（ゲート内から呼べる）。閉じた履歴にも残さない。
+                await CloseTabCoreAsync(previousPreview, recordClosed: false);
             }
         }
         finally

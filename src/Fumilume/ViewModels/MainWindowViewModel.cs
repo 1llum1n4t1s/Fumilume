@@ -40,10 +40,12 @@ public sealed partial class MainWindowViewModel : ObservableObject
         IEditorDialogService dialogs,
         AppSettings? settings = null,
         IGrepService? grep = null,
-        IExternalFileChangeMonitor? fileChangeMonitor = null)
+        IExternalFileChangeMonitor? fileChangeMonitor = null,
+        IShellFileService? shellFiles = null)
     {
         _files = files;
         _dialogs = dialogs;
+        ShellFiles = shellFiles ?? new UnavailableShellFileService();
         // 検索は読み込みの経路を文書と揃えたいので、既定では同じファイルサービスの上に組む。
         _grep = grep ?? new GrepService(files);
         _fileChangeMonitor = fileChangeMonitor;
@@ -54,6 +56,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         SidePanel.StatusChanged += message => StatusMessage = message;
         NewDocument();
     }
+
+    /// <summary>ファイル・フォルダへのシェル操作（改名・削除・クリップボード・表示・ターミナル）。</summary>
+    internal IShellFileService ShellFiles { get; }
 
     /// <summary>タブ一覧。文書タブと設定タブが同じ並びに入る。</summary>
     public ObservableCollection<WorkspaceTabViewModel> Tabs { get; } = [];
@@ -388,7 +393,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private async Task OpenPathsCoreAsync(IEnumerable<string> paths)
+    private async Task OpenPathsCoreAsync(IEnumerable<string> paths, bool skipLargeFileConfirm = false)
     {
         foreach (var path in paths.Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -403,7 +408,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             }
 
             var isPdf = string.Equals(Path.GetExtension(fullPath), ".pdf", StringComparison.OrdinalIgnoreCase);
-            if (!await ConfirmLargeFileAsync(fullPath, requireTextReader: !isPdf))
+            if (!skipLargeFileConfirm && !await ConfirmLargeFileAsync(fullPath, requireTextReader: !isPdf))
             {
                 continue;
             }
@@ -480,18 +485,24 @@ public sealed partial class MainWindowViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanReload))]
     private async Task ReloadAsync()
     {
-        var document = SelectedDocument;
-        if (document is null)
+        if (SelectedDocument is { } document)
         {
-            return;
+            await ReloadDocumentAsync(document);
         }
+    }
 
+    /// <summary>
+    /// 指定文書をディスクから読み直す。未保存の変更は確認してから破棄する。
+    /// 利用者が確認で「いいえ」を選んだときだけ false（読み込みの失敗やタブが無い場合は true）。
+    /// </summary>
+    private async Task<bool> ReloadDocumentAsync(DocumentViewModel document)
+    {
         await _openPathsGate.WaitAsync();
         try
         {
             if (!Tabs.Contains(document) || document.FilePath is not { } path)
             {
-                return;
+                return true;
             }
 
             var reloadState = DocumentEditState.Capture(document);
@@ -499,7 +510,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     "ファイルを開き直す",
                     $"{document.DisplayName} の未保存の変更を破棄して、ディスクから開き直しますか？"))
             {
-                return;
+                return false;
             }
 
             var caret = document.CaretIndex;
@@ -510,7 +521,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
                     || !reloadState.Matches(document))
                 {
                     StatusMessage = $"{document.DisplayName} の開き直しを中止しました（処理中の編集を保持しています）";
-                    return;
+                    return true;
                 }
                 document.Load(path, content);
                 document.CaretIndex = Math.Clamp(caret, 0, document.EditorDocument.TextLength);
@@ -528,6 +539,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 AppLogger.For<MainWindowViewModel>().Error($"ファイルを開き直せませんでした: {path}", ex);
                 await _dialogs.ShowErrorAsync("ファイルを開き直せません", $"{path}\n\n{ex.Message}");
             }
+
+            return true;
         }
         finally
         {
@@ -811,15 +824,42 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private async Task CloseTabCoreAsync(WorkspaceTabViewModel tab)
+    private Task CloseTabCoreAsync(WorkspaceTabViewModel tab) => CloseTabCoreAsync(tab, recordClosed: true);
+
+    /// <summary>
+    /// 未保存の確認（必要なら保存）を経て閉じる。確認で取り消されたら何もしない。
+    /// <paramref name="recordClosed"/> が true のとき、パス付きの文書・PDF を閉じた履歴へ残す。
+    /// 確認を出すので、<c>_openPathsGate</c> を保持したまま呼んではならない（保存がゲートを取り直す）。
+    /// </summary>
+    private async Task CloseTabCoreAsync(WorkspaceTabViewModel tab, bool recordClosed)
     {
+        if (tab is DocumentViewModel { IsModified: true } modified && !await ResolveUnsavedAsync(modified))
+        {
+            return;
+        }
+
+        if (recordClosed && Tabs.Contains(tab) && GetTabFilePath(tab) is { } closedPath)
+        {
+            RecordClosedTab(closedPath);
+        }
+
+        RemoveTabCore(tab);
+    }
+
+    /// <summary>
+    /// 確認なしでタブを外す。カーソル位置の控え・購読解除・破棄・選択の移動（隣へ）・
+    /// 表示できるタブが無くなったときの空文書の補充を行う。閉じた履歴には残さない。
+    /// 確認を出さないので、<c>_openPathsGate</c> を保持したまま呼んでよい。
+    /// </summary>
+    internal void RemoveTabCore(WorkspaceTabViewModel tab)
+    {
+        if (!Tabs.Contains(tab))
+        {
+            return;
+        }
+
         if (tab is DocumentViewModel document)
         {
-            if (document.IsModified && !await ResolveUnsavedAsync(document))
-            {
-                return;
-            }
-
             RememberCaretPosition(document);
             document.PropertyChanged -= OnDocumentPropertyChanged;
         }
@@ -894,6 +934,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
             if (!Tabs.Contains(document))
             {
                 return false;
+            }
+            // ゲート待ちの間にシェル操作で改名・移動されたかもしれないので、上書き保存は今のパスへ書く。
+            if (!saveAs && document.FilePath is { } currentPath)
+            {
+                path = currentPath;
             }
             path = Path.GetFullPath(path);
             if (FindOpenFileTab(path, document) is { } existing)

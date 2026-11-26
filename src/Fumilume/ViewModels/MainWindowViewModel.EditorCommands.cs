@@ -139,6 +139,30 @@ public sealed partial class MainWindowViewModel
         if (SelectedTab is { } tab)
         {
             yield return Entry(FileCategory, "このタブを閉じる", PrimaryShortcut("W"), () => CloseTabCoreAsync(tab));
+            if (CanCloseOtherTabs(tab))
+            {
+                yield return Entry(FileCategory, "他のタブを閉じる", null, () => CloseOtherTabsAsync(tab));
+            }
+
+            if (CanCloseTabsBelow(tab))
+            {
+                yield return Entry(FileCategory, "下側のタブを閉じる", null, () => CloseTabsBelowAsync(tab));
+            }
+
+            if (GetTabFilePath(tab) is not null)
+            {
+                yield return Entry(FileCategory, "パスのコピー", null, () => CopyTabFilePathAsync(tab));
+            }
+
+            if (CanOperateOnTabFile(tab))
+            {
+                yield return Entry(FileCategory, RevealHeader, null, () => RevealTabFileAsync(tab));
+            }
+        }
+
+        if (_closedTabPaths.Count > 0)
+        {
+            yield return Entry(FileCategory, "閉じたタブを開く", PrimaryShiftShortcut("T"), () => ReopenClosedTabAsync());
         }
 
         yield return Entry(SearchCategory, "フォルダから探す", PrimaryShiftShortcut("F"), () => GrepAsync());

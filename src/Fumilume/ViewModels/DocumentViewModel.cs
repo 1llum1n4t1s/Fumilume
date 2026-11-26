@@ -324,6 +324,13 @@ public sealed partial class DocumentViewModel : WorkspaceTabViewModel
             && content.Encoding == _savedEncoding
             && string.Equals(content.Text, _savedText, StringComparison.Ordinal);
 
+    /// <summary>
+    /// ファイルの改名・移動に合わせて保存先のパスだけを付け替える。本文・未保存状態・保存基準・Undo・
+    /// <see cref="RestoredDiskStamp"/>・ディスク消失の状態は変えない（読み直しや保存とは別の経路）。
+    /// 表示名などの派生プロパティは <see cref="FilePath"/> の変更通知で更新され、外部変更の監視先も追随する。
+    /// </summary>
+    internal void Relocate(string newPath) => FilePath = Path.GetFullPath(newPath);
+
     /// <summary>外部削除後の本文を、閉じる確認とセッション保存の対象として保持する。</summary>
     internal void MarkMissingOnDisk()
     {
